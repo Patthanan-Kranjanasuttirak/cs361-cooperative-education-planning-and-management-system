@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "name": "บริษัท เทคโนโลยี จำกัด",
+    "description": "รายละเอียดสถานประกอบการและบริการพัฒนาซอฟต์แวร์",
+    "location": "กรุงเทพมหานคร",
+    "stipend": "12,000 - 15,000 บาท/เดือน",
+    "positions": "Frontend Developer, Backend Developer"
+  },
+  {
+    "id": 2,
+    "name": "บริษัท นวัตกรรมดิจิทัล จำกัด",
+    "description": "รายละเอียดสถานประกอบการด้าน Cloud และระบบโครงสร้างพื้นฐาน",
+    "location": "นนทบุรี",
+    "stipend": "15,000 บาท/เดือน",
+    "positions": "Data Analyst, Cloud Support"
+  }
+]
