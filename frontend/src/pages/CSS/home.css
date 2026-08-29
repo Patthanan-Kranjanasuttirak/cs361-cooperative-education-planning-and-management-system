@@ -108,6 +108,7 @@ body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
   margin-top: -3rem;
   transform: translateY(0);
+  border: 2px solid #ffffff;
 }
 
 .home-info-banner-inner {
@@ -283,7 +284,6 @@ body {
 }
 
 .company-logo-card {
-  background-color: #f3f4f6;
   border: 1px solid transparent;
   width: 5rem;
   height: 5rem;
@@ -291,7 +291,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0.6rem;
   box-sizing: border-box;
   transition: all 0.2s ease;
   cursor: pointer;

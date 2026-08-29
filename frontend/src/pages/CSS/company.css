@@ -1,13 +1,19 @@
 /* Container & Layout */
 .company-page-container {
-  min-height: 100vh;
   background-color: #f9fafb;
-  padding: 2.5rem 1rem;
+  padding-top: 12rem;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
-
+.company-container {
+  width: 100%;
+  max-width: 48rem;
+  margin: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
 /* Header Section */
 .company-header {
   width: 100%;

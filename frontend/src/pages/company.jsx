@@ -4,6 +4,8 @@ import companiesData from '../data/mockfile.json';
 import locationIcon from '../assets/location.png';
 import searchIcon from '../assets/search.png';
 import CompanyDetailModal from '../components/CompanyDetailModal';
+import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
 import './CSS/company.css';
 
 export default function Company() {
@@ -21,6 +23,8 @@ export default function Company() {
   return (
     <div className="company-page-container">
       {/* Header Container */}
+      <Navbar />
+      <div className="company-container">
       <header className="company-header">
         <div>
           <button
@@ -100,5 +104,7 @@ export default function Company() {
         />
       )}
     </div>
+    <Footer />
+  </div>
   );
 }
