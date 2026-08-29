@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getImageUrl } from '../utils/image';
 import companiesData from '../data/mockfile.json';
 import locationIcon from '../assets/location.png';
 import searchIcon from '../assets/search.png';
@@ -59,7 +60,7 @@ export default function company() {
               {/* Logo Box */}
               <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center overflow-hidden border border-gray-100 flex-shrink-0">
                 {company.logo ? (
-                  <img src={company.logo} alt={company.name} className="w-full h-full object-contain" />
+                  <img src={getImageUrl(company.logo)} alt={company.name} className="w-full h-full object-contain" />
                 ) : (
                   <span className="text-2xl">🏢</span>
                 )}

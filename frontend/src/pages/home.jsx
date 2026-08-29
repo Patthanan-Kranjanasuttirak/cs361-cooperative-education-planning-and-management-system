@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { getImageUrl } from '../utils/image';
 import companiesData from '../data/mockfile.json';
 import CompanyDetailModal from '../components/CompanyDetailModal';
 
@@ -102,7 +103,7 @@ export default function home() {
             >
               {company.logo ? (
                 <img
-                  src={company.logo}
+                  src={getImageUrl(company.logo)}
                   alt={company.name}
                   className="w-full h-full object-contain rounded-lg"
                 />
