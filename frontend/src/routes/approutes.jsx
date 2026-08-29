@@ -1,13 +1,14 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Home from '../pages/home';
-import Detail from '../pages/detail';
+import Company from '../pages/company';
 
 export default function approutes() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/detail/:id" element={<Detail />} />
+        <Route path="/detail/:id" element={<Home />} />
+        <Route path="/company" element={<Company />} />
       </Routes>
     </BrowserRouter>
   );

@@ -1,18 +1,18 @@
 [
   {
     "id": 1,
-    "name": "บริษัท เทคโนโลยี จำกัด",
-    "description": "รายละเอียดสถานประกอบการและบริการพัฒนาซอฟต์แวร์",
-    "location": "กรุงเทพมหานคร",
-    "stipend": "12,000 - 15,000 บาท/เดือน",
-    "positions": "Frontend Developer, Backend Developer"
+    "name": "บริษัท ซีดีจี กรุ๊ป จำกัด",
+    "logo": "https://api.dicebear.com/7.x/initials/svg?seed=Tech&backgroundColor=2563eb",
+    "description": "เป็นผู้ให้บริการด้านเทคโนโลยีสารสนเทศ (IT) และการให้คำปรึกษาแบบครบวงจรในประเทศไทย ที่ดำเนินธุรกิจมานานกว่า 50 ปี",
+    "province": "กรุงเทพมหานคร",
+    "location": "202 ถนนนางลิ้นจี่ แขวงช่องนนทรี เขตยานนาวา กรุงเทพมหานคร 10120"
   },
   {
     "id": 2,
-    "name": "บริษัท นวัตกรรมดิจิทัล จำกัด",
-    "description": "รายละเอียดสถานประกอบการด้าน Cloud และระบบโครงสร้างพื้นฐาน",
-    "location": "นนทบุรี",
-    "stipend": "15,000 บาท/เดือน",
-    "positions": "Data Analyst, Cloud Support"
+    "name": "ศูนย์เทคโนโลยีอิเล็กทรอนิกส์และคอมพิวเตอร์แห่งชาติ (NECTEC)",
+    "logo": "https://api.dicebear.com/7.x/initials/svg?seed=Digital&backgroundColor=4f46e5",
+    "description": "หน่วยงานวิจัยและพัฒนาเทคโนโลยีของรัฐ",
+    "province": "ปทุมธานี",
+    "location": "ศูนย์เทคโนโลยีอิเล็กทรอนิกส์และคอมพิวเตอร์แห่งชาติ (NECTEC) 112 ถนนพหลโยธิน"
   }
 ]
