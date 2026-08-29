@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import companiesData from '../data/mockfile.json';
 import CompanyDetailModal from '../components/CompanyDetailModal';
 import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
 import bannerImage from '../assets/DomeBuilding.JPG';
 import rightArrow from '../assets/right-arrow.png';
 import searchIcon from '../assets/search.png';
@@ -155,6 +156,8 @@ export default function Home() {
           onClose={handleCloseModal}
         />
       )}
+
+      <Footer />
     </div>
   );
 }

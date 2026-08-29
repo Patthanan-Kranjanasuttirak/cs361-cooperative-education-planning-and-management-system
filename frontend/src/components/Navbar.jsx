@@ -1,6 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
 import logo from '../assets/CSTU-LOGO.png';
-import wLogo from '../assets/W-CSTU-LOGO.png';
 import './CSS/Navbar.css';
 
 export default function Navbar() {
