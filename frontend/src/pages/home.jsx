@@ -142,7 +142,7 @@ export default function Home() {
             className="view-more-btn"
           >
             คลิกเพื่อดูเพิ่มเติม
-            <img src={rightArrow} alt="→" style={{ width: '14px', height: '14px', filter: 'brightness(0)' }} />
+            <img src={rightArrow} alt="→" style={{ width: '18px', height: '18px'}} />
           </button>
         </section>
 
