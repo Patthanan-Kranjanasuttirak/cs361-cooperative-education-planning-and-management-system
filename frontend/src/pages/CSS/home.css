@@ -1,0 +1,272 @@
+/* Layout & Container */
+.home-container {
+  min-height: 100vh;
+  background-color: #f9fafb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.5rem 1rem;
+}
+
+/* Header Section */
+.home-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.home-title {
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+  font-weight: 800;
+  color: #1f2937;
+  letter-spacing: -0.025em;
+}
+
+.home-subtitle {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+/* Search Bar Section */
+.home-search-bar {
+  width: 100%;
+  max-width: 42rem;
+  background-color: #ffffff;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e7eb;
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+}
+
+.home-search-icon {
+  color: #9ca3af;
+  padding: 0 0.75rem;
+  user-select: none;
+}
+
+.home-search-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.home-search-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Criteria Section (เกณฑ์การประเมิน) */
+.criteria-section {
+  width: 100%;
+  max-width: 56rem;
+  background-color: #ffffff;
+  padding: 1.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e7eb;
+  margin-bottom: 2rem;
+}
+
+.criteria-header {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-bottom: 1px solid #f3f4f6;
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+  gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .criteria-header {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.criteria-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.criteria-more-link {
+  font-size: 0.75rem;
+  color: #2563eb;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.criteria-more-link:hover {
+  text-decoration: underline;
+}
+
+.criteria-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: #4b5563;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .criteria-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.criteria-item {
+  background-color: rgba(249, 250, 251, 0.7);
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #f3f4f6;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+}
+
+.criteria-check {
+  color: #22c55e;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* MOU Section (MOU สถานประกอบการ) */
+.mou-section {
+  width: 100%;
+  max-width: 56rem;
+  background-color: #ffffff;
+  padding: 1.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e7eb;
+  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+@media (min-width: 640px) {
+  .mou-section {
+    padding: 2rem;
+  }
+}
+
+.mou-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.mou-subtitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.mou-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin-top: 0.125rem;
+}
+
+.company-logo-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.company-logo-card {
+  background-color: #f3f4f6;
+  border: 1px solid transparent;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+@media (min-width: 640px) {
+  .company-logo-card {
+    width: 6rem;
+    height: 6rem;
+  }
+}
+
+.company-logo-card:hover {
+  border-color: #e5e7eb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.company-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0.5rem;
+}
+
+.company-logo-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.placeholder-icon {
+  font-size: 1.25rem;
+}
+
+.placeholder-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b7280;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.view-more-btn {
+  font-size: 0.75rem;
+  color: #2563eb;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.view-more-btn:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.view-more-btn:active {
+  transform: scale(0.95);
+}
+

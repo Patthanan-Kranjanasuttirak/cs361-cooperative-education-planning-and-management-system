@@ -1,8 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import companiesData from '../data/mockfile.json';
+import './CSS/detail.css';
 
-
-export default function detail() {
+export default function Detail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -10,11 +10,11 @@ export default function detail() {
 
   if (!company) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <p className="text-gray-600 mb-4">ไม่พบข้อมูลสถานประกอบการ</p>
+      <div className="detail-not-found-container">
+        <p className="detail-not-found-text">ไม่พบข้อมูลสถานประกอบการ</p>
         <button
           onClick={() => navigate('/')}
-          className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition"
+          className="detail-not-found-btn"
         >
           กลับหน้าหลัก
         </button>
@@ -23,40 +23,40 @@ export default function detail() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-xl bg-white rounded-2xl p-6 sm:p-8 shadow-lg border border-gray-200 relative animate-fadeIn">
+    <div className="detail-page-container">
+      <div className="detail-card">
 
         {/* ปุ่มย้อนกลับ */}
         <button
           onClick={() => navigate('/')}
-          className="mb-4 text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
+          className="detail-back-btn"
         >
           ← กลับหน้าหลัก
         </button>
 
         {/* แบนเนอร์จำลอง */}
-        <div className="w-full h-36 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl mb-6 flex items-center justify-center text-white font-semibold text-lg shadow-inner">
+        <div className="detail-banner">
           {company.name}
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-800 mb-1">{company.name}</h1>
-        <p className="text-xs text-gray-400 mb-6 uppercase tracking-wider">รายละเอียดสถานประกอบการ</p>
+        <h1 className="detail-title">{company.name}</h1>
+        <p className="detail-subtitle">รายละเอียดสถานประกอบการ</p>
 
-        <div className="space-y-3 text-sm text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100 mb-6">
-          <p className="flex justify-between border-b pb-2">
-            <strong className="text-gray-500">รายละเอียด :</strong>
-            <span className="text-right text-gray-800">{company.description}</span>
+        <div className="detail-info-box">
+          <p className="detail-info-row">
+            <strong className="detail-info-label">รายละเอียด :</strong>
+            <span className="detail-info-value">{company.description}</span>
           </p>
-          <p className="flex justify-between border-b pb-2">
-            <strong className="text-gray-500">สถานที่ฝึกงาน :</strong>
-            <span className="text-right text-gray-800">{company.location}</span>
+          <p className="detail-info-row">
+            <strong className="detail-info-label">สถานที่ฝึกงาน :</strong>
+            <span className="detail-info-value">{company.location}</span>
           </p>
         </div>
 
-        <div className="flex justify-end">
+        <div className="detail-actions">
           <button
             onClick={() => navigate('/')}
-            className="bg-gray-800 text-white px-5 py-2.5 rounded-xl hover:bg-gray-700 text-sm font-medium transition shadow-sm"
+            className="detail-close-btn"
           >
             ปิด / ย้อนกลับ
           </button>
