@@ -65,7 +65,7 @@ export default function Company() {
               {/* Logo Box */}
               <div className="company-card-logo-box">
                 {company.logo ? (
-                  <img src={company.logo} alt={company.name} className="company-card-logo-img" />
+                  <img src={getImageUrl(company.logo)} alt={company.name} className="company-card-logo-img" />
                 ) : (
                   <span className="company-card-logo-emoji">🏢</span>
                 )}

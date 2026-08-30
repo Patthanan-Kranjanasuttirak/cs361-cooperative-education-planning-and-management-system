@@ -124,7 +124,7 @@ export default function Home() {
               >
                 {company.logo ? (
                   <img
-                    src={company.logo}
+                    src={getImageUrl(company.logo)}
                     alt={company.name}
                     className="company-logo-img"
                   />
