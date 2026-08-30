@@ -3,7 +3,7 @@ import './CSS/Footer.css';
 
 export default function Footer() {
     return (
-        <footer className="footer">
+        <footer id="footer" className="footer">
             <div className="footer-container">
                 <div className="footer-logo-section">
                     <img src={wLogo} alt="CSTU Logo" className="footer-logo-img" />

@@ -5,12 +5,22 @@ import './CSS/Navbar.css';
 export default function Navbar() {
     const location = useLocation();
 
+    const handleContactClick = (e) => {
+        e.preventDefault();
+        const footerElement = document.getElementById('footer');
+        if (footerElement) {
+            footerElement.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }
+    };
+
     const navLinks = [
         { name: 'หน้าแรก', href: '/' },
         { name: 'เกี่ยวกับ', href: '#' },
         { name: 'คู่มือนักศึกษา', href: '#' },
         { name: 'คู่มือสหกิจศึกษา', href: '#' },
-        { name: 'ติดต่อ', href: '#' },
+        { name: 'ติดต่อ', href: '#footer', onClick: handleContactClick },
     ];
 
     return (
@@ -35,6 +45,7 @@ export default function Navbar() {
                         <Link
                             key={link.name}
                             to={link.href}
+                            onClick={link.onClick ? link.onClick : undefined}
                             className={`nav-item${location.pathname === link.href ? ' nav-item--active' : ''}`}
                         >
                             {link.name}
