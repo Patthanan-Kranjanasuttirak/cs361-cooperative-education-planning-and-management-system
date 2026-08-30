@@ -18,7 +18,7 @@ export default function Navbar() {
     const navLinks = [
         { name: 'หน้าแรก', href: '/' },
         { name: 'เกี่ยวกับ', href: '#' },
-        { name: 'คู่มือนักศึกษา', href: '#' },
+        { name: 'คู่มือนักศึกษา', href: '/student-handbook' },
         { name: 'คู่มือสหกิจศึกษา', href: '#' },
         { name: 'ติดต่อ', href: '#footer', onClick: handleContactClick },
     ];
