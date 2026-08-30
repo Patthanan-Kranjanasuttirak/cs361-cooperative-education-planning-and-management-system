@@ -87,3 +87,5 @@ export default function CompanyDetailModal({ company, onClose }) {
     </div>
   );
 }
+
+

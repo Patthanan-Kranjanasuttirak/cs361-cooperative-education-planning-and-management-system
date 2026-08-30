@@ -59,7 +59,7 @@ export default function Home() {
             <span className="home-search-icon"><img src={searchIcon} alt="Search" /></span>
             <input
               type="text"
-              placeholder="Search"
+              placeholder="ค้นหา"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="home-search-input"
@@ -144,7 +144,7 @@ export default function Home() {
             className="view-more-btn"
           >
             คลิกเพื่อดูเพิ่มเติม
-            <img src={rightArrow} alt="→" style={{ width: '18px', height: '18px'}} />
+            <img src={rightArrow} alt="→" style={{ width: '18px', height: '18px' }} />
           </button>
         </section>
 
