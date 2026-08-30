@@ -5,8 +5,11 @@ import companiesData from '../data/mockfile.json';
 import locationIcon from '../assets/location.png';
 import searchIcon from '../assets/search.png';
 import CompanyDetailModal from '../components/CompanyDetailModal';
+import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
+import './CSS/company.css';
 
-export default function company() {
+export default function Company() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
@@ -19,71 +22,78 @@ export default function company() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10 px-4 flex flex-col items-center">
+    <div className="company-page-container">
       {/* Header Container */}
-      <header className="w-full max-w-3xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+      <Navbar />
+      <div className="company-container">
+      <header className="company-header">
         <div>
           <button
             onClick={() => navigate('/')}
-            className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1.5 cursor-pointer mb-2"
+            className="back-link-btn"
           >
             ← กลับหน้าหลัก
           </button>
-          <h1 className="text-2xl font-black text-gray-800 tracking-tight">
+          <h1 className="company-title">
             รายชื่อสถานประกอบการ
           </h1>
-          <p className="text-xs text-gray-400 mt-0.5">รายชื่อและรายละเอียดข้อมูลสถานประกอบการสำหรับสหกิจศึกษา</p>
+          <p className="company-subtitle">รายชื่อและรายละเอียดข้อมูลสถานประกอบการสำหรับสหกิจศึกษา</p>
         </div>
 
         {/* Search Bar for Company Page */}
-        <div className="bg-white p-2.5 px-4 rounded-xl shadow-xs border border-gray-200 flex items-center w-full sm:max-w-xs">
-          <span className="text-gray-400 text-sm mr-2">🔍</span>
+        <div className="company-search-bar">
+          <span className="company-search-icon">🔍</span>
           <input
             type="text"
             placeholder="ค้นหาในหน้านี้..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-transparent outline-none text-gray-700 text-xs"
+            className="company-search-input"
           />
         </div>
       </header>
 
       {/* List Container */}
-      <div className="w-full max-w-3xl space-y-4">
+      <div className="company-list-container">
         {filteredCompanies.length > 0 ? (
           filteredCompanies.map((company) => (
             <div
               key={company.id}
               onClick={() => setSelectedCompany(company)}
-              className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center gap-5 hover:shadow-md hover:border-gray-300 transition-all duration-200 cursor-pointer"
+              className="company-card-item"
             >
               {/* Logo Box */}
-              <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center overflow-hidden border border-gray-100 flex-shrink-0">
+              <div className="company-card-logo-box">
                 {company.logo ? (
-                  <img src={getImageUrl(company.logo)} alt={company.name} className="w-full h-full object-contain" />
+                  <img src={company.logo} alt={company.name} className="company-card-logo-img" />
                 ) : (
-                  <span className="text-2xl">🏢</span>
+                  <span className="company-card-logo-emoji">🏢</span>
                 )}
               </div>
 
               {/* Details Column */}
-              <div className="flex-1 space-y-2.5">
+              <div className="company-card-details">
                 <div>
-                  <h2 className="text-base font-bold text-gray-800">{company.name}</h2>
-                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">{company.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
+                  <h2 className="company-card-name">{company.name}</h2>
+                  <p className="company-card-desc">{company.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
                 </div>
 
                 {/* Meta details */}
-                <div className="flex flex-wrap gap-x-5 gap-y-1.5 pt-1.5 border-t border-gray-50 text-xs font-semibold text-gray-500">
-                  <span className="flex items-center gap-1"> <img src={locationIcon} alt="pin" className="w-4 h-4 object-contain" /> {company.location || 'ไม่ระบุ'}</span>
+                <div className="company-card-meta">
+                  <span className="company-meta-item">
+                    <img src={locationIcon} alt="pin" className="company-meta-icon" />
+                    {company.location || 'ไม่ระบุ'}
+                  </span>
                 </div>
               </div>
             </div>
           ))
         ) : (
-          <div className="text-center py-16 bg-white rounded-2xl border border-gray-200 shadow-xs">
-            <span className="text-4xl"><img src={searchIcon} alt="search" className="w-4 h-4 object-contain" /></span>
-            <p className="text-sm text-gray-400 mt-3 font-semibold">ไม่พบข้อมูลที่ค้นหา</p>
+          <div className="company-empty-state">
+            <div>
+              <img src={searchIcon} alt="search" className="company-empty-icon" />
+            </div>
+            <p className="company-empty-text">ไม่พบข้อมูลที่ค้นหา</p>
           </div>
         )}
       </div>
@@ -95,5 +105,7 @@ export default function company() {
         />
       )}
     </div>
+    <Footer />
+  </div>
   );
 }

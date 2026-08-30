@@ -3,8 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { getImageUrl } from '../utils/image';
 import companiesData from '../data/mockfile.json';
 import CompanyDetailModal from '../components/CompanyDetailModal';
+import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
+import bannerImage from '../assets/DomeBuilding.JPG';
+import rightArrow from '../assets/right-arrow.png';
+import searchIcon from '../assets/search.png';
+import './CSS/home.css';
 
-export default function home() {
+export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
 
@@ -38,93 +44,111 @@ export default function home() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center py-10 px-4">
-      {/* Header ระบบ */}
-      <header className="text-center mb-8">
-        <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">
-          ระบบจัดการแผนสหกิจศึกษา
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Cooperative Education Planning & Management System
-        </p>
-      </header>
+    <div className="home-container">
 
-      {/* Search Bar */}
-      <div className="w-full max-w-2xl bg-white p-3 rounded-xl shadow-sm border border-gray-200 mb-8 flex items-center">
-        <span className="text-gray-400 px-3">🔍</span>
-        <input
-          type="text"
-          placeholder="ค้นหาสถานประกอบการ หรือชื่อบริษัท..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-transparent outline-none text-gray-700 text-sm"
-        />
+      <Navbar />
+
+      {/* Hero Banner */}
+      <div className="home-banner">
+        <img src={bannerImage} alt="Banner" className="home-banner-image" />
+        <div className="home-banner-overlay">
+          <h1 className="home-banner-title">
+            สาขาวิชาวิทยาการคอมพิวเตอร์<br />มหาวิทยาลัยธรรมศาสตร์
+          </h1>
+          <div className="home-search-bar">
+            <span className="home-search-icon"><img src={searchIcon} alt="Search" /></span>
+            <input
+              type="text"
+              placeholder="Search"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="home-search-input"
+            />
+          </div>
+        </div>
       </div>
 
-      {/* เกณฑ์การประเมิน Section */}
-      <section className="w-full max-w-4xl bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mb-8">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-gray-100 pb-3 mb-4 gap-2">
-          <h2 className="font-bold text-gray-800 text-base flex items-center gap-2">
-            📋 เกณฑ์การประเมินสหกิจศึกษา
-          </h2>
-          <span className="text-xs text-blue-600 hover:underline cursor-pointer font-medium">รายละเอียดเพิ่มเติม</span>
+      {/* Info Banner สีส้ม */}
+      <div className="home-info-banner">
+        <div className="home-info-banner-inner">
+          <p className="home-info-banner-title">
+            ศูนย์รวมข้อมูลสำหรับนักศึกษา อาจารย์ และสถานประกอบการเกี่ยวกับการแผนสหกิจศึกษา
+          </p>
+          <p className="home-info-banner-desc">
+            หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ มหาวิทยาลัยธรรมศาสตร์ พ.ศ. 2561 และ 2566
+          </p>
         </div>
-        <ul className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-gray-600">
-          <li className="bg-gray-50/70 p-4 rounded-xl border border-gray-100 flex items-start gap-2.5">
-            <span className="text-green-500 font-bold">✓</span>
-            <span>ผ่านการอบรมเตรียมความพร้อมสหกิจศึกษา</span>
-          </li>
-          <li className="bg-gray-50/70 p-4 rounded-xl border border-gray-100 flex items-start gap-2.5">
-            <span className="text-green-500 font-bold">✓</span>
-            <span>หน่วยกิตสะสมไม่น้อยกว่า 90 หน่วยกิต</span>
-          </li>
-          <li className="bg-gray-50/70 p-4 rounded-xl border border-gray-100 flex items-start gap-2.5">
-            <span className="text-green-500 font-bold">✓</span>
-            <span>เกรดเฉลี่ยสะสม (GPAX) ผ่านตามเกณฑ์คณะ</span>
-          </li>
-        </ul>
-      </section>
+      </div>
 
-      {/* MOU สถานประกอบการ Section */}
-      <section className="w-full max-w-4xl bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-200 mb-8 flex flex-col items-center">
-        {/* Header */}
-        <div className="text-center mb-6">
-          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">MOU</h2>
-          <h3 className="text-lg font-bold text-gray-800 mt-0.5">สถานประกอบการ</h3>
-        </div>
+      {/* Main Content */}
+      <div className="home-content">
 
-        {/* Logos Flex Container */}
-        <div className="flex flex-wrap justify-center gap-4 w-full">
-          {filteredCompanies.slice(0, 6).map((company) => (
-            <div
-              key={company.id}
-              className="bg-gray-100 border border-transparent w-20 h-20 sm:w-24 sm:h-24 rounded-2xl shadow-2xs flex items-center justify-center p-3"
-              title={company.name}
-            >
-              {company.logo ? (
-                <img
-                  src={getImageUrl(company.logo)}
-                  alt={company.name}
-                  className="w-full h-full object-contain rounded-lg"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-xl">🏢</span>
-                  <span className="text-[10px] font-semibold text-gray-500 line-clamp-1">{company.name}</span>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+        {/* เกณฑ์การประเมิน Section */}
+        <section className="criteria-section">
+          <div className="criteria-header">
+            <h2 className="criteria-title">
+              เกณฑ์
+            </h2>
+            <span className="criteria-more-link">รายละเอียดเพิ่มเติม</span>
+          </div>
+          <ul className="criteria-list">
+            <li className="criteria-item">
+              <span className="criteria-check">✓</span>
+              <span>ผ่านการอบรมเตรียมความพร้อมสหกิจศึกษา</span>
+            </li>
+            <li className="criteria-item">
+              <span className="criteria-check">✓</span>
+              <span>หน่วยกิตสะสมไม่น้อยกว่า 90 หน่วยกิต</span>
+            </li>
+            <li className="criteria-item">
+              <span className="criteria-check">✓</span>
+              <span>เกรดเฉลี่ยสะสม (GPAX) ผ่านตามเกณฑ์คณะ</span>
+            </li>
+          </ul>
+        </section>
 
-        {/* Footer Subtitle Link */}
-        <button
-          onClick={() => navigate('/company')}
-          className="text-xs text-blue-600 hover:text-blue-700 hover:underline font-semibold mt-6 cursor-pointer active:scale-95 transition-all duration-150"
-        >
-          คลิกเพื่อดูเพิ่มเติม
-        </button>
-      </section>
+        {/* MOU สถานประกอบการ Section */}
+        <section className="mou-section">
+          {/* Header */}
+          <div className="mou-header">
+            <h3 className="mou-title">สถานประกอบการ</h3>
+          </div>
+
+          {/* Logos Grid */}
+          <div className="company-logo-grid">
+            {filteredCompanies.slice(0, 8).map((company) => (
+              <div
+                key={company.id}
+                className="company-logo-card"
+                title={company.name}
+              >
+                {company.logo ? (
+                  <img
+                    src={company.logo}
+                    alt={company.name}
+                    className="company-logo-img"
+                  />
+                ) : (
+                  <div className="company-logo-placeholder">
+                    <span className="placeholder-icon">🏢</span>
+                    <span className="placeholder-name">{company.name}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* ปุ่มดูเพิ่มเติม */}
+          <button
+            onClick={() => navigate('/company')}
+            className="view-more-btn"
+          >
+            คลิกเพื่อดูเพิ่มเติม
+            <img src={rightArrow} alt="→" style={{ width: '18px', height: '18px'}} />
+          </button>
+        </section>
+
+      </div>
 
       {/* Company Detail Modal */}
       {selectedCompany && (
@@ -133,6 +157,8 @@ export default function home() {
           onClose={handleCloseModal}
         />
       )}
+
+      <Footer />
     </div>
   );
 }

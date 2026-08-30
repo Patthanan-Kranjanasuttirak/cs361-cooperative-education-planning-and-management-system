@@ -1,0 +1,362 @@
+/* ==============================
+   HOME PAGE
+============================== */
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800&display=swap');
+body {
+  font-family: 'Sarabun', sans-serif;
+}
+
+/* Container หลัก */
+.home-container {
+  min-height: 100vh;
+  background-color: #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  padding-top: 150px;
+}
+
+/* ==============================
+   HERO BANNER
+============================== */
+.home-banner {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-banner-image {
+  width: 100%;
+  height: 500px;
+  object-fit: cover;
+  object-position: center 30%;
+  filter: brightness(0.55);
+  display: block;
+}
+
+.home-banner-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rem;
+  padding: 1rem;
+}
+
+.home-banner-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: center;
+  line-height: 1.6;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+@media (min-width: 640px) {
+  .home-banner-title {
+    font-size: 2.5rem;
+  }
+}
+
+/* Search Bar บน Banner */
+.home-search-bar {
+  width: 100%;
+  max-width: 40rem;
+  background-color: #ffffff;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.home-search-bar span img {
+  width: 1rem;
+  object-fit: contain;
+}
+.home-search-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #374151;
+  font-size: 16px;
+  font-weight: 300;
+}
+
+.home-search-input::placeholder {
+  color: #9ca3af;
+}
+
+/* ==============================
+   INFO BANNER
+============================== */
+.home-info-banner {
+  position: relative;
+  z-index: 10;
+  width: 900px;
+  max-width: calc(100% - 2rem);
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  padding: 1.5rem 1.5rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  margin-top: -3rem;
+  transform: translateY(0);
+  border: 2px solid #ffffff;
+}
+
+.home-info-banner-inner {
+  width: 100%;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.home-info-banner-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 0.2rem;
+}
+
+.home-info-banner-desc {
+  font-size: 17px;
+  font-weight: 300;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ==============================
+   MAIN CONTENT AREA
+============================== */
+.home-content {
+  width: 100%;
+  padding: 2rem 0rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+
+/* ==============================
+   CRITERIA SECTION (เกณฑ์)
+============================== */
+.criteria-section {
+  width: 100%;
+  height: 500px;
+  max-width: 56rem;
+  background-color: #ffffff;
+  padding: 1.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e7eb;
+}
+
+.criteria-header {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-bottom: 1px solid #f3f4f6;
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+  gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .criteria-header {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.criteria-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.criteria-more-link {
+  font-size: 0.75rem;
+  color: #2563eb;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.criteria-more-link:hover {
+  text-decoration: underline;
+}
+
+.criteria-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: #4b5563;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .criteria-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.criteria-item {
+  background-color: rgba(249, 250, 251, 0.8);
+  padding: 0.875rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #f3f4f6;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+}
+
+.criteria-check {
+  color: #22c55e;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ==============================
+   MOU SECTION (สถานประกอบการ)
+============================== */
+.mou-section {
+  width: 100%;
+  background-color: #ffffff;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-top: 1px solid #222A4B;
+  border-bottom: 1px solid #222A4B;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+@media (min-width: 640px) {
+  .mou-section {
+    padding: 3rem;
+  }
+}
+
+.mou-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.mou-subtitle {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
+
+.mou-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0.2rem 0 0;
+}
+
+.company-logo-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.company-logo-card {
+  border: 1px solid transparent;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+@media (min-width: 640px) {
+  .company-logo-card {
+    width: 6rem;
+    height: 6rem;
+  }
+}
+
+.company-logo-card:hover {
+  border-color: #d1d5db;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.company-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0.5rem;
+}
+
+.company-logo-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.placeholder-icon {
+  font-size: 1.25rem;
+}
+
+.placeholder-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+/* ปุ่ม "คลิกเพื่อดูเพิ่มเติม" */
+.view-more-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding: 0.5rem 1.5rem;
+  background-color: #f59e0b;
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.view-more-btn:hover {
+  background-color: #d97706;
+}
+
+.view-more-btn:active {
+  transform: scale(0.97);
+}

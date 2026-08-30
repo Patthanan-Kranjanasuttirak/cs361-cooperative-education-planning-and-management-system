@@ -1,0 +1,101 @@
+/* ==============================
+   NAVBAR
+============================== */
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800&display=swap');
+
+body {
+    font-family: 'Sarabun', sans-serif;
+}
+
+/* Wrapper ทั้ง navbar */
+.navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+}
+
+/* Row บน: Logo + ชื่อระบบ */
+.navbar-top {
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.navbar-top-inner {
+    position: relative;
+    padding: 0.5rem 1.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    height: 120px;
+}
+
+.navbar-logo {
+    position: absolute;
+    left: 1.5rem;
+    display: flex;
+    align-items: center;
+}
+
+.navbar-logo-image {
+    height: 90px;
+    width: auto;
+    padding-left: 2.5rem;
+    padding-bottom: 1rem;
+}
+
+.navbar-title-group {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.navbar-title-th {
+    font-size: 32px;
+    font-weight: 600;
+    color: #222A4B;
+    line-height: 1.3;
+}
+
+.navbar-title-en {
+    font-size: 16px;
+    color: #222A4B;
+    line-height: 1.3;
+}
+
+.navbar-menu {
+    background-color: #222A4B;
+}
+
+.navbar-links {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-item {
+    color: #cbd5e1;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 400;
+    padding: 0.8rem 2.5rem;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s ease, border-color 0.2s ease;
+    white-space: nowrap;
+}
+
+.nav-item:hover {
+    color: #ffffff;
+}
+
+.nav-item--active {
+    color: #ffffff;
+    font-weight: 500;
+    border-bottom: 3px solid #f59e0b;
+}
