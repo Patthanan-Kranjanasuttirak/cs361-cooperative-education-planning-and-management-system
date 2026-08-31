@@ -1,0 +1,476 @@
+/* ==============================
+   STUDENT HANDBOOK PAGE
+============================== */
+.handbook-section-content1 p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #4b5563;
+    line-height: 1.5;
+}
+.handbook-page-container {
+  min-height: 100vh;
+  background-color: #f9fafb;
+  display: flex;
+  flex-direction: column;
+  padding-top: 170px;
+}
+
+/* HERO BANNER */
+.handbook-banner {
+  position: relative;
+  width: 100%;
+  height: 350px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.handbook-banner-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 10%;
+  filter: brightness(0.5);
+}
+
+.handbook-banner-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.5rem;
+}
+
+.handbook-banner-content {
+  width: 100%;
+  max-width: 1100px;
+  align-items: center;
+  gap: 1.5rem;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.handbook-banner-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-left: 150px;
+}
+
+.handbook-banner-icon {
+  width: 110px;
+  height: 110px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.handbook-banner-text {
+  color: #ffffff;
+  align-items: center;
+  text-align: center;
+}
+
+.handbook-banner-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.handbook-banner-subtitle {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+.handbook-update-info {
+  background-color: rgba(203, 212, 236, 0.65);
+  color: #222A4B;
+  padding: 0.75rem 1.5rem;
+  border-radius: 24px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(4px);
+}
+
+.handbook-update-info:hover {
+  background-color: #ffffff;
+  color: #1e293b;
+}
+
+.update-icon {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+/* MAIN CONTENT LAYOUT */
+.handbook-content-wrapper {
+  width: 100%;
+  max-width: 1500px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 2rem;
+  flex: 1;
+}
+
+/* SIDEBAR */
+.handbook-sidebar {
+  max-width: 300px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 180px;
+  background-color: #f7f7f7;
+  border-radius: 24px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.handbook-sidebar-header {
+  background-color: #222A4B;
+  color: #ffffff;
+  padding: 1rem 1.25rem;
+}
+
+.handbook-sidebar-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.handbook-sidebar-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.handbook-sidebar-list li {
+  display: flex;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-radius: 24px;
+    background-color: #ffffff;
+  color: #222A4B;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  margin: 10px;
+}
+
+.handbook-sidebar-list li:last-child {
+  border-bottom: none;
+}
+
+.handbook-sidebar-list li:hover {
+  background-color: #f8fafc;
+}
+
+.handbook-sidebar-list li.active {
+  background-color: #F08700;
+  color: #ffffff;
+  border-radius: 24px;
+}
+
+.handbook-sidebar-number {
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-right: 0.5rem;
+  background-color: #CBD4EC;
+  color: #222A4B;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.handbook-sidebar-list li.active .handbook-sidebar-number {
+  background-color: #ffffff;
+  color: #F08700;
+  border-radius: 24px;
+}
+/* MAIN CONTENT DETAILS */
+.handbook-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  position: relative;
+}
+
+.handbook-section-card {
+  background-color: #F7F7F7;
+  border-radius: 24px;
+  border: 1px solid #e5e7eb;
+  padding: 2.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.handbook-section-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #222A4B;
+  margin: 0 0 0.5rem 12px;
+}
+
+.handbook-section-desc {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0 0 0 12px;
+}
+
+.handbook-section-content1 {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  background-color: #ffffff;
+  border-radius: 24px;
+  border: 1px solid #e5e7eb;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-top: 2rem;
+}
+
+.handbook-section-h2 {
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+
+/* Info Boxes */
+.handbook-info-box-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.handbook-info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background-color: #CBD4EC;
+  padding: 1.25rem;
+  border-radius: 24px;
+}
+
+.info-box-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.info-box-text strong {
+  display: block;
+  font-size: 0.925rem;
+  color: #1f2937;
+  margin-bottom: 0.25rem;
+}
+
+.info-box-text p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #4b5563;
+  line-height: 1.5;
+}
+
+/* Step List */
+.handbook-steps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: relative;
+  margin-top: 2rem;
+}
+
+.handbook-steps-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 1.15rem;
+  width: 2px;
+  background-color: #F2672A;
+  z-index: 0;
+}
+
+.handbook-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  position: relative;
+  z-index: 1;
+}
+
+.handbook-step-number {
+  width: 2.5rem;
+  height: 2.5rem;
+  background-color: #F2672A;
+  color: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+  margin-top: 25px;
+}
+
+.handbook-step-content {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  padding: 1rem 1.25rem;
+  border-radius: 24px;
+  flex: 1;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.handbook-step-content strong {
+  display: block;
+  font-size: 0.925rem;
+  color: #1f2937;
+  margin-bottom: 0.35rem;
+}
+
+.handbook-step-content p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #4b5563;
+  line-height: 1.5;
+}
+.step-skill-group {
+  margin-top: 1rem;
+}
+
+.step-skill-group strong {
+  display: block;
+  font-size: 0.875rem;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+}
+
+/* จัดแต่ง Bullet Points ให้อ่านง่ายแบบในรูป */
+.step-skill-group ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style-type: disc;
+}
+
+.step-skill-group ul li {
+  font-size: 0.875rem;
+  color: #4b5563;
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.step-skill-group ul li strong {
+  display: inline; /* ให้ตัวหนาอยู่ในบรรทัดเดียวกับข้อความ */
+  color: #1f2937;
+  margin-bottom: 0;
+}
+/* Document List */
+
+.handbook-document-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.handbook-document-item {
+  display: flex;
+  align-items: flex-start; /* จัดให้อยู่ชิดบน เพื่อรองรับข้อความหลายบรรทัด */
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.handbook-document-item:hover {
+  border-color: #cbd5e1;
+}
+
+.doc-item-left {
+  display: flex;
+  flex-direction: column; /* เปลี่ยนให้ Tag รหัส กับ ชื่อฟอร์ม ซ้อนกันบน-ล่าง */
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+/* รหัสฟอร์ม (ทรงแคปซูล) */
+.doc-item-id {
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  display: inline-block;
+}
+
+/* สีของ Tag รหัสฟอร์ม */
+.tag-orange {
+  background-color: #ffedd5;
+  color: #ea580c;
+}
+
+.tag-green {
+  background-color: #d1fae5;
+  color: #059669;
+}
+
+.tag-gray {
+  background-color: #e5e7eb;
+  color: #4b5563;
+}
+
+.doc-item-name {
+  font-size: 0.875rem;
+  color: #1e293b;
+  font-weight: 500;
+  line-height: 1.5; /* เพิ่มระยะห่างบรรทัดให้อ่านง่าย */
+}
+
+.doc-item-btn {
+  align-self: center; /* ให้ปุ่มอยู่ตรงกลางเสมอ */
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #f59e0b;
+  color: #ffffff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  white-space: nowrap;
+}
+
+.doc-item-btn:hover {
+  background-color: #d97706;
+}
+
+/* หัวข้อย่อย เช่น แบบฟอร์มอื่นๆ */
+.handbook-sub-section-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+}

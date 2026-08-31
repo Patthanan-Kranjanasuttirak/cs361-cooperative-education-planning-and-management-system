@@ -1,0 +1,503 @@
+/* ==============================
+   HOME PAGE
+============================== */
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800&display=swap');
+
+body {
+  font-family: 'Sarabun', sans-serif;
+}
+
+/* Container หลัก */
+.home-container {
+  min-height: 100vh;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  padding-top: 150px;
+}
+
+/* ==============================
+   HERO BANNER
+============================== */
+.home-banner {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-banner-image {
+  width: 100%;
+  height: 500px;
+  object-fit: cover;
+  object-position: center 30%;
+  filter: brightness(0.55);
+  display: block;
+}
+
+.home-banner-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rem;
+  padding: 1rem;
+}
+
+.home-banner-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: center;
+  line-height: 1.6;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+@media (min-width: 640px) {
+  .home-banner-title {
+    font-size: 2.5rem;
+  }
+}
+
+/* Search Bar บน Banner */
+.home-search-bar {
+  width: 100%;
+  max-width: 40rem;
+  background-color: #ffffff;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.home-search-bar span img {
+  width: 1rem;
+  object-fit: contain;
+}
+
+.home-search-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #374151;
+  font-size: 16px;
+  font-weight: 300;
+}
+
+.home-search-input::placeholder {
+  color: #9ca3af;
+}
+
+/* ==============================
+   INFO BANNER
+============================== */
+.home-info-banner {
+  position: relative;
+  z-index: 10;
+  width: 900px;
+  max-width: calc(100% - 2rem);
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  padding: 1.5rem 1.5rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  margin-top: -3rem;
+  transform: translateY(0);
+  border: 2px solid #ffffff;
+}
+
+.home-info-banner-inner {
+  width: 100%;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.home-info-banner-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 0.2rem;
+}
+
+.home-info-banner-desc {
+  font-size: 17px;
+  font-weight: 300;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ==============================
+   MAIN CONTENT AREA
+============================== */
+.home-content {
+  width: 100%;
+  padding: 2rem 0rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+
+/* ==============================
+   CRITERIA SECTION (เกณฑ์รับสมัครเข้าแผนสหกิจศึกษา)
+============================== */
+.criteria-section {
+  width: 100%;
+  max-width: 56rem;
+  height: auto;
+  background-color: #f2f2f2;
+  padding: 2.5rem 2rem;
+  border-radius: 1.25rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border: 1px solid #eaeaea;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.criteria-main-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.criteria-main-title {
+  font-size: 1.65rem;
+  font-weight: 600;
+  color: #222A4B;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.criteria-highlight {
+  color: #F2672A;
+}
+
+.criteria-academic-year {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #222A4B;
+  margin-top: 0.1rem;
+}
+
+.criteria-subtitle {
+  font-size: 0.95rem;
+  color: #4b5563;
+  font-weight: 400;
+  margin: 0.1rem 0 0;
+}
+
+/* คุณสมบัติพื้นฐาน Box */
+.criteria-box {
+  background-color: #ffffff;
+  border: 1px solid #dedede;
+  border-radius: 0.875rem;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.base-qualification-box {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.criteria-icon {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.base-qual-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.base-qual-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.base-qual-desc {
+  font-size: 0.925rem;
+  color: #334155;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Curriculum Grid */
+.curriculum-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .curriculum-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.curriculum-card {
+  background-color: #ffffff;
+  border: 1px solid #e6e6e6;
+  border-radius: 0.875rem;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.curriculum-badge {
+  display: inline-block;
+  padding: 0.45rem 1.4rem;
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.badge-61 {
+  background-color: #5bb884;
+}
+
+.badge-66 {
+  background-color: #5982c4;
+}
+
+.curriculum-body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.curriculum-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.curriculum-group-title {
+  font-size: 0.925rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.title-sub {
+  font-weight: 500;
+  color: #475569;
+}
+
+.curriculum-courses {
+  font-size: 0.875rem;
+  color: #334155;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.prereq-tags {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+}
+
+.prereq-tag {
+  display: inline-block;
+  padding: 0.2rem 0.875rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.tag-61 {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border-color: #a5d6a7;
+}
+
+.tag-66 {
+  background-color: #e3f2fd;
+  color: #1565c0;
+  border-color: #90caf9;
+}
+
+/* Important Conditions Box */
+.important-conditions-box {
+  background-color: #ffffff;
+  border: 1px solid #e6e6e6;
+  border-radius: 0.875rem;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.conditions-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.conditions-desc {
+  font-size: 0.875rem;
+  color: #475569;
+  line-height: 1.65;
+  max-width: 48rem;
+  margin: 0;
+}
+
+/* ==============================
+   MOU SECTION (สถานประกอบการ)
+============================== */
+.mou-section {
+  width: 100%;
+  background-color: #ffffff;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-top: 1px solid #222A4B;
+  border-bottom: 1px solid #222A4B;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+@media (min-width: 640px) {
+  .mou-section {
+    padding: 3rem;
+  }
+}
+
+.mou-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.mou-subtitle {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
+
+.mou-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0.2rem 0 0;
+}
+
+.company-logo-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.company-logo-card {
+  border: 1px solid transparent;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+@media (min-width: 640px) {
+  .company-logo-card {
+    width: 6rem;
+    height: 6rem;
+  }
+}
+
+.company-logo-card:hover {
+  border-color: #d1d5db;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.company-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0.5rem;
+}
+
+.company-logo-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.placeholder-icon {
+  font-size: 1.25rem;
+}
+
+.placeholder-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+/* ปุ่ม "คลิกเพื่อดูเพิ่มเติม" */
+.view-more-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding: 0.5rem 1.5rem;
+  background-color: #f59e0b;
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.view-more-btn:hover {
+  background-color: #d97706;
+}
+
+.view-more-btn:active {
+  transform: scale(0.97);
+}
