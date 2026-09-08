@@ -260,4 +260,41 @@
   }
 }
 
+/* =======================
+   FILTER SEARCH SECTION
+   ======================= */
 
+.company-search-bar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  box-sizing: border-box;
+}
+
+.company-search-bar .company-search-input {
+  flex: 1;
+}
+
+.company-search-bar .company-search-select {
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  outline: none;
+  cursor: pointer;
+  background-color: #ffffff;
+  font-size: 0.875rem;
+  color: #334155;
+  font-family: 'Sarabun', sans-serif;
+  transition: border-color 0.2s ease;
+  min-width: 130px;
+}
+
+.company-search-bar .company-search-select:focus {
+  border-color: #f59e0b;
+}
+
+.company-search-bar .company-search-select option {
+  background-color: #ffffff;
+  color: #334155;
+  padding: 8px;
+}

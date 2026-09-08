@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getImageUrl } from '../utils/image';
-import companiesData from '../data/mockfile.json';
 import CompanyDetailModal from '../components/CompanyDetailModal';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -11,17 +10,55 @@ import searchIcon from '../assets/search.png';
 import PiechartIcon from '../assets/pie-chart 1.png';
 import './CSS/home.css';
 
-export default function Home() {
+export default function home() {
+  const [companies, setCompanies] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [provinces, setProvinces] = useState([]);
+  const [selectedProvince, setSelectedProvince] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
 
   const navigate = useNavigate();
   const { id } = useParams();
 
-  // Watch for id in URL to open modal
+  // ดึงรายชื่อจังหวัดทั้งหมดจาก Backend
   useEffect(() => {
-    if (id) {
-      const company = companiesData.find((c) => c.id === parseInt(id));
+    const fetchProvinces = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/provinces');
+        const result = await response.json();
+        if (result.status === 'success') {
+          setProvinces(result.data);
+        }
+      } catch (error) {
+        console.error('Error fetching provinces:', error);
+      }
+    };
+
+    fetchProvinces();
+  }, []);
+
+  // ดึงรายการบริษัทจากการค้นหาและจังหวัดผ่าน Backend API
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        const response = await fetch(
+          `http://localhost:5000/api/companies?search=${encodeURIComponent(searchTerm)}&province=${encodeURIComponent(selectedProvince)}`
+        );
+        const result = await response.json();
+        if (result.status === 'success') {
+          setCompanies(result.data);
+        }
+      } catch (error) {
+        console.error('Error fetching companies:', error);
+      }
+    };
+
+    fetchCompanies();
+  }, [searchTerm, selectedProvince]);
+
+  useEffect(() => {
+    if (id && companies.length > 0) {
+      const company = companies.find((c) => c.id === parseInt(id));
       if (company) {
         setSelectedCompany(company);
       } else {
@@ -31,7 +68,7 @@ export default function Home() {
     } else {
       setSelectedCompany(null);
     }
-  }, [id, navigate]);
+  }, [id, navigate, companies]);
 
   const handleCloseModal = () => {
     setSelectedCompany(null);
@@ -40,13 +77,8 @@ export default function Home() {
     }
   };
 
-  const filteredCompanies = companiesData.filter((company) =>
-    company.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
     <div className="home-container">
-
       <Navbar />
 
       {/* Hero Banner */}
@@ -65,6 +97,18 @@ export default function Home() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="home-search-input"
             />
+            <select
+              value={selectedProvince}
+              onChange={(e) => setSelectedProvince(e.target.value)}
+              className="home-search-select"
+            >
+              <option value="">ทุกพื้นที่</option>
+              {provinces.map((province, index) => (
+                <option key={index} value={province}>
+                  {province}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -83,8 +127,6 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="home-content">
-
-        {/* เกณฑ์รับสมัครเข้าแผนสหกิจศึกษา Section */}
         <section className="criteria-section">
           <div className="criteria-main-header">
             <h2 className="criteria-main-title">
@@ -96,21 +138,18 @@ export default function Home() {
             </p>
           </div>
 
-          {/* คุณสมบัติพื้นฐาน */}
           <div className="criteria-box base-qualification-box">
             <img src={PiechartIcon} alt="PiechartIcon" className="criteria-icon" />
             <div className="base-qual-content">
               <p className="base-qual-title">คุณสมบัติพื้นฐาน</p>
               <p className="base-qual-desc">
                 GPAX สะสม : ไม่ต่ำกว่า <strong>2.75</strong> (คำนวณเมื่อสิ้นภาคการศึกษาฤดูร้อน)
-                <br></br> พฤติกรรม : มีความประพฤติดี ไม่เคยถูกลงโทษทางวินัยนักศึกษา
+                <br /> พฤติกรรม : มีความประพฤติดี ไม่เคยถูกลงโทษทางวินัยนักศึกษา
               </p>
             </div>
           </div>
 
-          {/* หลักสูตร Grid */}
           <div className="curriculum-grid">
-            {/* หลักสูตร 61 */}
             <div className="curriculum-card card-61">
               <div className="curriculum-badge badge-61">หลักสูตร 61</div>
               <div className="curriculum-body">
@@ -122,14 +161,12 @@ export default function Home() {
                     คพ.100, คพ.111,(คพ.213 หรือ 216), คพ.251, คพ.264
                   </p>
                 </div>
-
                 <div className="curriculum-group">
                   <h4 className="curriculum-group-title">วิชาเลือก/หมวดวิชา</h4>
                   <p className="curriculum-courses">
                     คพ.384 และ (คพ.266 หรือ 322 หรือ 348)
                   </p>
                 </div>
-
                 <div className="curriculum-group">
                   <h4 className="curriculum-group-title">วิชาที่ต้องสอบได้ก่อนปฏิบัติงานจริง</h4>
                   <div className="prereq-tags">
@@ -139,7 +176,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* หลักสูตร 66 */}
             <div className="curriculum-card card-66">
               <div className="curriculum-badge badge-66">หลักสูตร 66</div>
               <div className="curriculum-body">
@@ -151,14 +187,12 @@ export default function Home() {
                     คพ.100, คพ.101, คพ.102, คพ.111,(คพ.213 หรือ 216), คพ.251, คพ.261
                   </p>
                 </div>
-
                 <div className="curriculum-group">
                   <h4 className="curriculum-group-title">วิชาเลือก/หมวดวิชา</h4>
                   <p className="curriculum-courses">
                     คพ.180 และ (คพ.362 หรือ 333 หรือ 380)
                   </p>
                 </div>
-
                 <div className="curriculum-group">
                   <h4 className="curriculum-group-title">วิชาที่ต้องสอบได้ก่อนปฏิบัติงานจริง</h4>
                   <div className="prereq-tags">
@@ -169,7 +203,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* เงื่อนไขและข้อกำหนดสำคัญ */}
           <div className="important-conditions-box">
             <h3 className="conditions-title">เงื่อนไขและข้อกำหนดสำคัญ</h3>
             <p className="conditions-desc">
@@ -180,14 +213,12 @@ export default function Home() {
 
         {/* MOU สถานประกอบการ Section */}
         <section className="mou-section">
-          {/* Header */}
           <div className="mou-header">
             <h3 className="mou-title">สถานประกอบการ</h3>
           </div>
 
-          {/* Logos Grid */}
           <div className="company-logo-grid">
-            {filteredCompanies.slice(0, 8).map((company) => (
+            {companies.slice(0, 8).map((company) => (
               <div
                 key={company.id}
                 className="company-logo-card"
@@ -209,7 +240,6 @@ export default function Home() {
             ))}
           </div>
 
-          {/* ปุ่มดูเพิ่มเติม */}
           <button
             onClick={() => navigate('/company')}
             className="view-more-btn"
@@ -218,10 +248,8 @@ export default function Home() {
             <img src={rightArrow} alt="→" style={{ width: '18px', height: '18px' }} />
           </button>
         </section>
-
       </div>
 
-      {/* Company Detail Modal */}
       {selectedCompany && (
         <CompanyDetailModal
           company={selectedCompany}
