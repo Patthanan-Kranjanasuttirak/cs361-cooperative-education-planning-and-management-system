@@ -13,14 +13,36 @@ export default function Company() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
+  const [selectedProvince, setSelectedProvince] = useState('');
 
-  const filteredCompanies = companiesData.filter((company) =>
-    company.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (company.description && company.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (company.location && company.location.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (company.province && company.province.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (company.positions && company.positions.toLowerCase().includes(searchTerm.toLowerCase()))
+  // รายชื่อจังหวัดทั้งหมด เรียงตามจำนวนบริษัทมากไปน้อย
+  const provinceCounts = companiesData.reduce((counts, company) => {
+    const province = company.province?.trim() || 'ไม่ระบุ';
+    counts[province] = (counts[province] || 0) + 1;
+    return counts;
+  }, {});
+  const provinces = Object.keys(provinceCounts).sort(
+    (a, b) => provinceCounts[b] - provinceCounts[a] || a.localeCompare(b, 'th')
   );
+
+  const filteredCompanies = companiesData.filter((company) => {
+    const term = searchTerm.toLowerCase();
+    const matchesSearch =
+      company.name.toLowerCase().includes(term) ||
+      (company.description && company.description.toLowerCase().includes(term)) ||
+      (company.location && company.location.toLowerCase().includes(term)) ||
+      (company.province && company.province.toLowerCase().includes(term)) ||
+      (company.positions && company.positions.toLowerCase().includes(term));
+    const matchesProvince =
+      !selectedProvince || (company.province?.trim() || 'ไม่ระบุ') === selectedProvince;
+    return matchesSearch && matchesProvince;
+  });
+
+  const isFiltering = searchTerm !== '' || selectedProvince !== '';
+  const clearFilters = () => {
+    setSearchTerm('');
+    setSelectedProvince('');
+  };
 
   const getDisplayLocation = (company) => {
     if (company.province && company.province.trim()) {
@@ -59,18 +81,45 @@ export default function Company() {
             <p className="company-subtitle">รายชื่อและรายละเอียดข้อมูลสถานประกอบการสำหรับสหกิจศึกษา</p>
           </div>
 
-          {/* Search Bar for Company Page */}
-          <div className="company-search-bar">
-            <img src={searchIcon} alt="search" className="company-search-icon" />
-            <input
-              type="text"
-              placeholder="ค้นหาสถานประกอบการ"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="company-search-input"
-            />
+          <div className="company-filter-group">
+            {/* Province Filter */}
+            <select
+              value={selectedProvince}
+              onChange={(e) => setSelectedProvince(e.target.value)}
+              className="company-filter-select"
+              aria-label="กรองตามจังหวัด"
+            >
+              <option value="">ทุกจังหวัด</option>
+              {provinces.map((province) => (
+                <option key={province} value={province}>
+                  {province}
+                </option>
+              ))}
+            </select>
+
+            {/* Search Bar for Company Page */}
+            <div className="company-search-bar">
+              <img src={searchIcon} alt="search" className="company-search-icon" />
+              <input
+                type="text"
+                placeholder="ค้นหาสถานประกอบการ"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="company-search-input"
+              />
+            </div>
           </div>
         </header>
+
+        {/* Result count */}
+        <div className="company-result-bar">
+          <span>พบ {filteredCompanies.length} จาก {companiesData.length} สถานประกอบการ</span>
+          {isFiltering && (
+            <button onClick={clearFilters} className="company-clear-filter-btn">
+              ล้างตัวกรอง
+            </button>
+          )}
+        </div>
 
         {/* List Grid Container */}
         <div className="company-list-container">
@@ -86,7 +135,7 @@ export default function Company() {
                   {company.logo ? (
                     <img src={getImageUrl(company.logo)} alt={company.name} className="company-card-logo-img" />
                   ) : (
-                    <span className="company-card-logo-emoji">🏢</span>
+                    <span className="company-card-logo-empty">ไม่พบรูปภาพ</span>
                   )}
                 </div>
 
