@@ -3,15 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "main": "src/app.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "node --watch src/app.js"
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "pg": "^8.16.0",
+    "serverless-http": "^4.0.0",
     "swagger-ui-express": "^5.0.1"
   }
 }

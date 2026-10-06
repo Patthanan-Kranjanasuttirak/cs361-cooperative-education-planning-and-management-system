@@ -13,6 +13,7 @@ export const swaggerSpec = {
   tags: [
     { name: "System", description: "ตรวจสอบสถานะระบบ" },
     { name: "Users", description: "ข้อมูลผู้ใช้" },
+    { name: "Companies", description: "ข้อมูลสถานประกอบการ" },
   ],
   paths: {
     "/api/health": {
@@ -77,6 +78,74 @@ export const swaggerSpec = {
         },
       },
     },
+    "/api/companies": {
+      get: {
+        tags: ["Companies"],
+        summary: "ค้นหาและกรองสถานประกอบการ",
+        description: "ไม่ส่ง parameter = ได้ทุกบริษัท",
+        parameters: [
+          {
+            name: "search",
+            in: "query",
+            description: "คำค้นใน name, description, location, province",
+            schema: { type: "string" },
+          },
+          {
+            name: "province",
+            in: "query",
+            description: "ชื่อจังหวัด (ตรงทั้งคำ)",
+            schema: { type: "string", example: "นนทบุรี" },
+          },
+        ],
+        responses: {
+          200: {
+            description: "รายชื่อสถานประกอบการ",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Company" },
+                    },
+                    total: { type: "integer", example: 102 },
+                  },
+                },
+              },
+            },
+          },
+          500: { description: "เกิดข้อผิดพลาดที่ server" },
+        },
+      },
+    },
+    "/api/companies/{id}": {
+      get: {
+        tags: ["Companies"],
+        summary: "ดึงรายละเอียดสถานประกอบการ",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "integer", example: 4 },
+          },
+        ],
+        responses: {
+          200: {
+            description: "รายละเอียดสถานประกอบการ",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Company" },
+              },
+            },
+          },
+          400: { description: "id ไม่ถูกต้อง" },
+          404: { description: "ไม่พบสถานประกอบการ" },
+          500: { description: "เกิดข้อผิดพลาดที่ server" },
+        },
+      },
+    },
   },
   components: {
     schemas: {
@@ -87,6 +156,17 @@ export const swaggerSpec = {
           name: { type: "string", example: "Alice" },
           email: { type: "string", example: "alice@example.com" },
           created_at: { type: "string", format: "date-time" },
+        },
+      },
+      Company: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 4 },
+          name: { type: "string", example: "ธนาคารกรุงเทพ จำกัด (มหาชน)" },
+          logo: { type: "string", nullable: true, example: "C04.jpg" },
+          description: { type: "string", nullable: true },
+          province: { type: "string", example: "กรุงเทพมหานคร" },
+          location: { type: "string", nullable: true },
         },
       },
     },
