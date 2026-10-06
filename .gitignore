@@ -7,9 +7,9 @@
 # Environment Variables & Secrets (สำคัญมาก)
 .env
 .env.*
-!.env.example
 **/.env
 **/.env.*
+!**/.env.example
 
 # Logs & Temporary Files
 *.log
