@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getImageUrl } from '../utils/image';
-import companiesData from '../data/mockfile.json';
+import { fetchCompanies, fetchCompany } from '../services/companyApi';
 import CompanyDetailModal from '../components/CompanyDetailModal';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -14,24 +14,51 @@ import './CSS/home.css';
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
+  const [companies, setCompanies] = useState([]);
 
   const navigate = useNavigate();
   const { id } = useParams();
 
-  // Watch for id in URL to open modal
+  // Watch for id in URL to open modal (ดึงรายละเอียดจาก GET /companies/{id})
   useEffect(() => {
-    if (id) {
-      const company = companiesData.find((c) => c.id === parseInt(id));
-      if (company) {
-        setSelectedCompany(company);
-      } else {
-        setSelectedCompany(null);
-        navigate('/', { replace: true });
-      }
-    } else {
+    if (!id) {
       setSelectedCompany(null);
+      return;
     }
+
+    const controller = new AbortController();
+    fetchCompany(id, controller.signal)
+      .then((company) => {
+        if (company) {
+          setSelectedCompany(company);
+        } else {
+          setSelectedCompany(null);
+          navigate('/', { replace: true });
+        }
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') console.error('Error fetching company:', error);
+      });
+
+    return () => controller.abort();
   }, [id, navigate]);
+
+  // ค้นหาสถานประกอบการผ่าน API (รอให้หยุดพิมพ์ 300ms ก่อนค่อยเรียก)
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetchCompanies({ search: searchTerm }, controller.signal)
+        .then(setCompanies)
+        .catch((error) => {
+          if (error.name !== 'AbortError') console.error('Error fetching companies:', error);
+        });
+    }, searchTerm ? 300 : 0);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchTerm]);
 
   const handleCloseModal = () => {
     setSelectedCompany(null);
@@ -39,10 +66,6 @@ export default function Home() {
       navigate('/');
     }
   };
-
-  const filteredCompanies = companiesData.filter((company) =>
-    company.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="home-container">
@@ -187,7 +210,7 @@ export default function Home() {
 
           {/* Logos Grid */}
           <div className="company-logo-grid">
-            {filteredCompanies.slice(0, 8).map((company) => (
+            {companies.slice(0, 8).map((company) => (
               <div
                 key={company.id}
                 className="company-logo-card"

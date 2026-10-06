@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getImageUrl } from '../utils/image';
-import companiesData from '../data/mockfile.json';
+import { fetchCompanies } from '../services/companyApi';
 import locationIcon from '../assets/location.png';
 import searchIcon from '../assets/search.png';
 import CompanyDetailModal from '../components/CompanyDetailModal';
@@ -14,29 +14,44 @@ export default function Company() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [selectedProvince, setSelectedProvince] = useState('');
+  const [companies, setCompanies] = useState([]);
+  const [provinces, setProvinces] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
-  // รายชื่อจังหวัดทั้งหมด เรียงตามจำนวนบริษัทมากไปน้อย
-  const provinceCounts = companiesData.reduce((counts, company) => {
-    const province = company.province?.trim() || 'ไม่ระบุ';
-    counts[province] = (counts[province] || 0) + 1;
-    return counts;
-  }, {});
-  const provinces = Object.keys(provinceCounts).sort(
-    (a, b) => provinceCounts[b] - provinceCounts[a] || a.localeCompare(b, 'th')
-  );
+  // ค้นหา/กรองผ่าน API (รอให้หยุดพิมพ์ 300ms ก่อนค่อยเรียก)
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const data = await fetchCompanies(
+          { search: searchTerm, province: selectedProvince },
+          controller.signal
+        );
+        setCompanies(data);
+        setLoadError(null);
 
-  const filteredCompanies = companiesData.filter((company) => {
-    const term = searchTerm.toLowerCase();
-    const matchesSearch =
-      company.name.toLowerCase().includes(term) ||
-      (company.description && company.description.toLowerCase().includes(term)) ||
-      (company.location && company.location.toLowerCase().includes(term)) ||
-      (company.province && company.province.toLowerCase().includes(term)) ||
-      (company.positions && company.positions.toLowerCase().includes(term));
-    const matchesProvince =
-      !selectedProvince || (company.province?.trim() || 'ไม่ระบุ') === selectedProvince;
-    return matchesSearch && matchesProvince;
-  });
+        // ผลลัพธ์แบบไม่กรองคือข้อมูลทั้งหมด ใช้สร้างรายชื่อจังหวัดและจำนวนรวม
+        if (!searchTerm.trim() && !selectedProvince) {
+          setTotalCount(data.length);
+          setProvinces(getProvinces(data));
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        console.error('Error fetching companies:', error);
+        setLoadError(error);
+        setCompanies([]);
+      }
+      setIsLoading(false);
+    }, searchTerm ? 300 : 0);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchTerm, selectedProvince]);
 
   const isFiltering = searchTerm !== '' || selectedProvince !== '';
   const clearFilters = () => {
@@ -113,7 +128,11 @@ export default function Company() {
 
         {/* Result count */}
         <div className="company-result-bar">
-          <span>พบ {filteredCompanies.length} จาก {companiesData.length} สถานประกอบการ</span>
+          <span>
+            {isLoading
+              ? 'กำลังโหลดข้อมูล…'
+              : `พบ ${companies.length} จาก ${totalCount} สถานประกอบการ`}
+          </span>
           {isFiltering && (
             <button onClick={clearFilters} className="company-clear-filter-btn">
               ล้างตัวกรอง
@@ -123,8 +142,8 @@ export default function Company() {
 
         {/* List Grid Container */}
         <div className="company-list-container">
-          {filteredCompanies.length > 0 ? (
-            filteredCompanies.map((company) => (
+          {companies.length > 0 ? (
+            companies.map((company) => (
               <div
                 key={company.id}
                 onClick={() => setSelectedCompany(company)}
@@ -157,7 +176,13 @@ export default function Company() {
               <div>
                 <img src={searchIcon} alt="search" className="company-empty-icon" />
               </div>
-              <p className="company-empty-text">ไม่พบข้อมูลที่ค้นหา</p>
+              <p className="company-empty-text">
+                {isLoading
+                  ? 'กำลังโหลดข้อมูล…'
+                  : loadError
+                    ? 'ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
+                    : 'ไม่พบข้อมูลที่ค้นหา'}
+              </p>
             </div>
           )}
         </div>
@@ -175,3 +200,14 @@ export default function Company() {
   );
 }
 
+// รายชื่อจังหวัดทั้งหมด เรียงตามจำนวนบริษัทมากไปน้อย
+function getProvinces(companies) {
+  const provinceCounts = companies.reduce((counts, company) => {
+    const province = company.province?.trim();
+    if (province) counts[province] = (counts[province] || 0) + 1;
+    return counts;
+  }, {});
+  return Object.keys(provinceCounts).sort(
+    (a, b) => provinceCounts[b] - provinceCounts[a] || a.localeCompare(b, 'th')
+  );
+}
