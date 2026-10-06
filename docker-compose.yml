@@ -30,6 +30,7 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+      DB_SSL: "false"        # Postgres ใน Docker ไม่ได้เปิด SSL (RDS ต้องเปิด)
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     ports:
       - "${BACKEND_PORT:-5000}:5000"
@@ -47,7 +48,7 @@ services:
     container_name: CS361_frontend
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:${BACKEND_PORT:-5000}
+      VITE_API_URL: http://localhost:${BACKEND_PORT:-5000}/api
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     volumes:

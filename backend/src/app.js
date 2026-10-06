@@ -1,18 +1,14 @@
 import express from "express";
 import cors from "cors";
-import pg from "pg";
+import { query } from "./config/db.js";
 import { setupSwagger } from "./config/swagger.js";
+import companiesRouter from "./routes/companies.js";
+import { notFound, errorHandler } from "./middlewares/errorHandler.js";
 
+// รวม Middleware และ Routes ของระบบ (ไม่มี app.listen ที่นี่)
+// - รันในเครื่อง: src/server.js
+// - รันบน AWS Lambda: src/lambda.js
 const app = express();
-const port = process.env.PORT || 5000;
-
-const pool = new pg.Pool({
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT) || 5432,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-});
 
 app.use(cors({ origin: process.env.CORS_ORIGIN }));
 app.use(express.json());
@@ -25,7 +21,7 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/db-check", async (_req, res) => {
   try {
-    const { rows } = await pool.query("SELECT NOW() AS now");
+    const { rows } = await query("SELECT NOW() AS now");
     res.json({ database: "connected", now: rows[0].now });
   } catch (err) {
     console.error(err);
@@ -35,7 +31,7 @@ app.get("/api/db-check", async (_req, res) => {
 
 app.get("/api/users", async (_req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM users ORDER BY id");
+    const { rows } = await query("SELECT * FROM users ORDER BY id");
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -43,6 +39,9 @@ app.get("/api/users", async (_req, res) => {
   }
 });
 
-app.listen(port, "0.0.0.0", () => {
-  console.log(`Backend listening on port ${port}`);
-});
+app.use("/api/companies", companiesRouter);
+
+app.use(notFound);
+app.use(errorHandler);
+
+export default app;
