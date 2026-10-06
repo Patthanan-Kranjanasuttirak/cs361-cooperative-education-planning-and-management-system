@@ -76,6 +76,58 @@
   margin: 0;
 }
 
+/* Filter Group */
+.company-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.company-filter-select {
+  background-color: #ffffff;
+  padding: 0.65rem 2.25rem 0.65rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  color: #334155;
+  font-size: 0.875rem;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+}
+
+.company-filter-select:focus {
+  border-color: #f59e0b;
+}
+
+.company-result-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: #64748b;
+  margin-top: -1rem;
+}
+
+.company-clear-filter-btn {
+  background: none;
+  border: none;
+  color: #d97706;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.company-clear-filter-btn:hover {
+  text-decoration: underline;
+}
+
 /* Search Bar */
 .company-search-bar {
   background-color: #ffffff;
@@ -85,7 +137,7 @@
   border: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
-  width: 420px;
+  width: 360px;
   flex-shrink: 0;
 }
 
@@ -161,8 +213,11 @@
   object-fit: contain;
 }
 
-.company-card-logo-emoji {
-  font-size: 1.5rem;
+.company-card-logo-empty {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-align: center;
 }
 
 .company-card-details {
@@ -252,8 +307,14 @@
     align-items: flex-start;
     gap: 1rem;
   }
+  .company-filter-group {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
   .company-search-bar {
     width: 100%;
+    box-sizing: border-box;
   }
   .company-list-container {
     grid-template-columns: 1fr;

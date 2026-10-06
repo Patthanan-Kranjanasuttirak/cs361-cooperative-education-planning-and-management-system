@@ -201,7 +201,7 @@ export default function Home() {
                   />
                 ) : (
                   <div className="company-logo-placeholder">
-                    <span className="placeholder-icon">🏢</span>
+                    <span className="placeholder-empty">ไม่พบรูปภาพ</span>
                     <span className="placeholder-name">{company.name}</span>
                   </div>
                 )}

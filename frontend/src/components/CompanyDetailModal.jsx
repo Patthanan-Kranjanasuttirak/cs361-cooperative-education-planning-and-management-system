@@ -36,6 +36,12 @@ export default function CompanyDetailModal({ company, onClose }) {
     return 'ไม่ระบุ';
   };
 
+  // ถ้าบริษัทมีเว็บไซต์ (ฟิลด์ website) ให้ลิงก์ไปเว็บไซต์ ถ้าไม่มีให้ค้นหาชื่อบริษัทใน Google แทน
+  const hasWebsite = Boolean(company.website && company.website.trim());
+  const companyLink = hasWebsite
+    ? company.website.trim()
+    : `https://www.google.com/search?q=${encodeURIComponent(company.name)}`;
+
   return (
     <div className="modal-overlay">
       <div
@@ -59,7 +65,7 @@ export default function CompanyDetailModal({ company, onClose }) {
               {company.logo ? (
                 <img src={getImageUrl(company.logo)} alt={company.name} className="modal-logo-img" />
               ) : (
-                <span className="modal-logo-emoji">🏢</span>
+                <span className="modal-logo-empty">ไม่พบรูปภาพ</span>
               )}
             </div>
             <h2 className="modal-company-name">{company.name}</h2>
@@ -92,6 +98,15 @@ export default function CompanyDetailModal({ company, onClose }) {
               {company.location || 'ไม่ระบุ'}
             </span>
           </div>
+
+          <a
+            href={companyLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="modal-website-btn"
+          >
+            {hasWebsite ? 'เยี่ยมชมเว็บไซต์บริษัท' : 'ค้นหาข้อมูลบริษัทใน Google'} ↗
+          </a>
         </div>
 
       </div>
