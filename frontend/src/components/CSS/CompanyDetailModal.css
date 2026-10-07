@@ -183,6 +183,67 @@
   line-height: 1.45;
 }
 
+/* Application Period */
+.modal-period-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+/* Positions */
+.modal-positions-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modal-position-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.modal-position-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.875rem;
+  padding: 0.9rem 1.1rem;
+  background-color: #f8fafc;
+}
+
+.modal-position-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.modal-position-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.modal-position-quota {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #b45309;
+  background-color: #fef3c7;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+}
+
+.modal-position-desc {
+  margin: 0.35rem 0 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+  line-height: 1.55;
+}
+
 /* Website Link */
 .modal-website-btn {
   margin-top: auto;

@@ -87,7 +87,7 @@ export const swaggerSpec = {
           {
             name: "search",
             in: "query",
-            description: "คำค้นใน name, description, location, province",
+            description: "คำค้นใน name, description, location, province และชื่อตำแหน่งงาน",
             schema: { type: "string" },
           },
           {
@@ -95,6 +95,18 @@ export const swaggerSpec = {
             in: "query",
             description: "ชื่อจังหวัด (ตรงทั้งคำ)",
             schema: { type: "string", example: "นนทบุรี" },
+          },
+          {
+            name: "position",
+            in: "query",
+            description: "ชื่อตำแหน่งงาน (ตรงทั้งคำ)",
+            schema: { type: "string", example: "Data Analyst Intern" },
+          },
+          {
+            name: "status",
+            in: "query",
+            description: "สถานะการรับสมัคร ณ วันนี้ (เวลาประเทศไทย)",
+            schema: { type: "string", enum: ["open", "upcoming", "closed"] },
           },
         ],
         responses: {
@@ -115,6 +127,7 @@ export const swaggerSpec = {
               },
             },
           },
+          400: { description: "status ไม่ถูกต้อง" },
           500: { description: "เกิดข้อผิดพลาดที่ server" },
         },
       },
@@ -167,6 +180,20 @@ export const swaggerSpec = {
           description: { type: "string", nullable: true },
           province: { type: "string", example: "กรุงเทพมหานคร" },
           location: { type: "string", nullable: true },
+          application_start: { type: "string", format: "date", nullable: true, example: "2026-10-01" },
+          application_end: { type: "string", format: "date", nullable: true, example: "2026-12-31" },
+          positions: {
+            type: "array",
+            items: { $ref: "#/components/schemas/Position" },
+          },
+        },
+      },
+      Position: {
+        type: "object",
+        properties: {
+          name: { type: "string", example: "Software Developer Intern" },
+          description: { type: "string", nullable: true },
+          quota: { type: "integer", nullable: true, example: 2 },
         },
       },
     },

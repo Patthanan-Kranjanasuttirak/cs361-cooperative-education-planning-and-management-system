@@ -3,10 +3,22 @@ import { HttpError } from "../utils/httpError.js";
 
 // Business logic ของสถานประกอบการ
 
-export async function listCompanies({ search, province }) {
+const APPLICATION_STATUSES = ["open", "upcoming", "closed"];
+
+// query parameter ต้องเป็นข้อความ (ถ้าส่งมาซ้ำหลายค่า เช่น ?province=a&province=b จะถือว่าไม่ได้กรอง)
+const asText = (value) => (typeof value === "string" ? value.trim() : "");
+
+export async function listCompanies({ search, province, position, status }) {
+  const statusText = asText(status);
+  if (statusText && !APPLICATION_STATUSES.includes(statusText)) {
+    throw new HttpError(400, `Invalid status (use ${APPLICATION_STATUSES.join(", ")})`);
+  }
+
   const data = await companyModel.findAll({
-    search: typeof search === "string" ? search.trim() : "",
-    province: typeof province === "string" ? province.trim() : "",
+    search: asText(search),
+    province: asText(province),
+    position: asText(position),
+    status: statusText,
   });
   return { data, total: data.length };
 }

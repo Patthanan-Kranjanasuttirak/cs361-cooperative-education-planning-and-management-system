@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
 import { getImageUrl } from '../utils/image';
 import locationIcon from '../assets/location.png';
+import calendarIcon from '../assets/calendar.png';
+import briefcaseIcon from '../assets/briefcase.png';
+import ApplicationBadge from './ApplicationBadge';
+import { formatApplicationPeriod } from '../utils/applicationPeriod';
 import './CSS/CompanyDetailModal.css';
 
 export default function CompanyDetailModal({ company, onClose }) {
@@ -97,6 +101,43 @@ export default function CompanyDetailModal({ company, onClose }) {
             <span className="modal-info-value modal-location-value">
               {company.location || 'ไม่ระบุ'}
             </span>
+          </div>
+
+          <div className="modal-info-row">
+            <span className="modal-info-label">
+              <img src={calendarIcon} alt="period" className="modal-info-icon" />
+              ช่วงเวลาเปิดรับสมัคร
+            </span>
+            <span className="modal-info-value modal-period-value">
+              {formatApplicationPeriod(company)}
+              <ApplicationBadge company={company} />
+            </span>
+          </div>
+
+          <div className="modal-section">
+            <span className="modal-section-title modal-positions-title">
+              <img src={briefcaseIcon} alt="positions" className="modal-info-icon" />
+              ตำแหน่งที่เปิดรับ
+            </span>
+            {company.positions?.length > 0 ? (
+              <ul className="modal-position-list">
+                {company.positions.map((position) => (
+                  <li key={position.name} className="modal-position-item">
+                    <div className="modal-position-header">
+                      <span className="modal-position-name">{position.name}</span>
+                      {position.quota != null && (
+                        <span className="modal-position-quota">รับ {position.quota} คน</span>
+                      )}
+                    </div>
+                    {position.description && (
+                      <p className="modal-position-desc">{position.description}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="modal-description-text">ยังไม่มีข้อมูลตำแหน่งที่เปิดรับ</p>
+            )}
           </div>
 
           <a

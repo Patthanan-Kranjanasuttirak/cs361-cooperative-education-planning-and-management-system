@@ -50,7 +50,7 @@
   width: 100%;
   display: flex;
   flex-direction: row;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 1.5rem;
   margin-bottom: 1rem;
@@ -77,14 +77,32 @@
 }
 
 /* Filter Group */
+/* อยู่ด้านขวาของหัวข้อ: ช่องค้นหาอยู่บรรทัดเดียวกับหัวข้อ ยาวเท่าแถวตัวกรอง
+   ตัวกรองอยู่ใต้ช่องค้นหา ชิดซ้าย */
 .company-filter-group {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 0.75rem;
+  width: fit-content;
+  max-width: 100%;
   flex-shrink: 0;
 }
 
+.company-filter-group .company-search-bar {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.company-filter-selects {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.75rem;
+}
+
 .company-filter-select {
+  flex: 0 0 auto;
+  min-width: 180px;
   background-color: #ffffff;
   padding: 0.65rem 2.25rem 0.65rem 1rem;
   border-radius: 0.75rem;
@@ -238,10 +256,44 @@
 .company-card-desc {
   font-size: 0.8rem;
   color: #64748b;
-  margin: 0 0 1.5rem 0;
+  margin: 0 0 1rem 0;
   line-height: 1.5;
   overflow: hidden;
 }
+
+.company-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.company-card-positions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.position-chip {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.4rem;
+  border: 1px solid transparent;
+  line-height: 1.4;
+}
+
+.position-chip--blue { background-color: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.position-chip--purple { background-color: #faf5ff; color: #7e22ce; border-color: #e9d5ff; }
+.position-chip--teal { background-color: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
+.position-chip--pink { background-color: #fdf2f8; color: #be185d; border-color: #fbcfe8; }
+.position-chip--orange { background-color: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+.position-chip--red { background-color: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.position-chip--indigo { background-color: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
+.position-chip--yellow { background-color: #fefce8; color: #a16207; border-color: #fde68a; }
+.position-chip--gray { background-color: #f8fafc; color: #475569; border-color: #e2e8f0; }
 
 .company-card-meta {
   display: flex;
@@ -290,6 +342,15 @@
   .company-list-container {
     grid-template-columns: repeat(3, 1fr);
   }
+  /* หัวข้อกับตัวกรองไม่พอในแถวเดียว ให้ตัวกรองลงไปอยู่ใต้หัวข้อ เต็มความกว้าง */
+  .company-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  .company-filter-group {
+    width: 100%;
+  }
 }
 
 @media (max-width: 850px) {
@@ -302,19 +363,9 @@
 }
 
 @media (max-width: 600px) {
-  .company-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-  }
-  .company-filter-group {
-    width: 100%;
+  .company-filter-selects {
     flex-direction: column;
     align-items: stretch;
-  }
-  .company-search-bar {
-    width: 100%;
-    box-sizing: border-box;
   }
   .company-list-container {
     grid-template-columns: 1fr;
