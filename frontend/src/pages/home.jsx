@@ -14,7 +14,12 @@ import './CSS/home.css';
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
-  const [companies, setCompanies] = useState([]);
+  // รายชื่อทั้งหมด (ใช้แสดงโลโก้และเก็บรายชื่อจังหวัด) — null = ยังโหลดไม่เสร็จ
+  const [allCompanies, setAllCompanies] = useState(null);
+  const [allError, setAllError] = useState(null);
+  // ผลค้นหาล่าสุด พร้อมคำค้นที่ใช้ (ถ้าคำค้นตอนนี้ไม่ตรงกับ term แปลว่ากำลังค้นหา)
+  const [search, setSearch] = useState({ term: '', companies: [], error: null });
+  const [reloadKey, setReloadKey] = useState(0);
 
   const navigate = useNavigate();
   const { id } = useParams();
@@ -43,22 +48,67 @@ export default function Home() {
     return () => controller.abort();
   }, [id, navigate]);
 
-  // ค้นหาสถานประกอบการผ่าน API (รอให้หยุดพิมพ์ 300ms ก่อนค่อยเรียก)
+  // โหลดรายชื่อทั้งหมดครั้งแรก (และเมื่อกด "ลองใหม่")
   useEffect(() => {
     const controller = new AbortController();
+    fetchCompanies({}, controller.signal)
+      .then((data) => {
+        setAllCompanies(data);
+        setAllError(null);
+      })
+      .catch((error) => {
+        if (error.name === 'AbortError') return;
+        console.error('Error fetching companies:', error);
+        setAllError(error);
+      });
+
+    return () => controller.abort();
+  }, [reloadKey]);
+
+  // ค้นหาสถานประกอบการผ่าน API (รอให้หยุดพิมพ์ 300ms ก่อนค่อยเรียก)
+  const term = searchTerm.trim();
+  useEffect(() => {
+    if (!term) return;
+
+    const controller = new AbortController();
     const timer = setTimeout(() => {
-      fetchCompanies({ search: searchTerm }, controller.signal)
-        .then(setCompanies)
+      fetchCompanies({ search: term }, controller.signal)
+        .then((data) => setSearch({ term, companies: data, error: null }))
         .catch((error) => {
-          if (error.name !== 'AbortError') console.error('Error fetching companies:', error);
+          if (error.name === 'AbortError') return;
+          console.error('Error searching companies:', error);
+          setSearch({ term, companies: [], error });
         });
-    }, searchTerm ? 300 : 0);
+    }, 300);
 
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [searchTerm]);
+  }, [term, reloadKey]);
+
+  const isSearching = term !== '' && search.term !== term;
+  const searchError = !isSearching ? search.error : null;
+  const retry = () => {
+    setAllError(null);
+    setSearch((prev) => ({ ...prev, term: '' }));
+    setReloadKey((key) => key + 1);
+  };
+
+  // ถ้าคำค้นตรงกับต้นชื่อจังหวัด (เช่น "ปทุม") ให้แสดงเฉพาะบริษัทในจังหวัดนั้น
+  // หรือที่ชื่อ/ตำแหน่งตรง ตัดผลที่เจอแค่ในที่อยู่ออก (เช่น "เขตปทุมวัน" ของกรุงเทพฯ)
+  const keyword = term.toLowerCase();
+  const provinces = [...new Set((allCompanies ?? []).map((c) => c.province).filter(Boolean))];
+  const isProvinceSearch = keyword !== '' && provinces.some((p) => p.startsWith(keyword));
+  const companies = search.companies;
+  const searchResults = isProvinceSearch
+    ? companies.filter(
+        (c) =>
+          c.province?.startsWith(keyword) ||
+          c.name?.toLowerCase().includes(keyword) ||
+          (c.positions ?? []).some((p) => p.name?.toLowerCase().includes(keyword))
+      )
+    : companies;
 
   const handleCloseModal = () => {
     setSelectedCompany(null);
@@ -83,11 +133,68 @@ export default function Home() {
             <span className="home-search-icon"><img src={searchIcon} alt="Search" /></span>
             <input
               type="text"
-              placeholder="ค้นหา"
+              placeholder="ค้นหาชื่อสถานประกอบการ จังหวัด หรือตำแหน่งงาน"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && term && !isSearching && searchResults.length > 0) {
+                  navigate(`/company/${searchResults[0].id}`);
+                }
+              }}
               className="home-search-input"
             />
+
+            {/* ผลการค้นหา: กดชื่อเพื่อไปดูรายละเอียดที่หน้าสถานประกอบการ */}
+            {term && (
+              <ul className="home-search-results" aria-live="polite" aria-busy={isSearching}>
+                {isSearching ? (
+                  <li className="home-search-result-status">
+                    <span className="home-spinner" aria-hidden="true" />
+                    กำลังค้นหา…
+                  </li>
+                ) : searchError ? (
+                  <li className="home-search-result-status home-search-result-status--error">
+                    ค้นหาไม่สำเร็จ กรุณาลองใหม่อีกครั้ง
+                    <button type="button" className="home-retry-btn" onClick={retry}>
+                      ลองใหม่
+                    </button>
+                  </li>
+                ) : searchResults.length > 0 ? (
+                  searchResults.map((company) => {
+                    // ตำแหน่งที่ตรงกับคำค้น แสดงใต้ชื่อให้รู้ว่าเจอเพราะอะไร
+                    const matchedPositions = (company.positions ?? [])
+                      .map((p) => p.name)
+                      .filter((name) => name?.toLowerCase().includes(keyword));
+
+                    return (
+                      <li key={company.id}>
+                        <button
+                          type="button"
+                          className="home-search-result-item"
+                          onClick={() => navigate(`/company/${company.id}`)}
+                        >
+                          <span className="home-search-result-text">
+                            <span className="home-search-result-name">{company.name}</span>
+                            {matchedPositions.length > 0 && (
+                              <span className="home-search-result-positions">
+                                {matchedPositions.join(', ')}
+                              </span>
+                            )}
+                          </span>
+                          {company.province && (
+                            <span className="home-search-result-province">{company.province}</span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })
+                ) : (
+                  <li className="home-search-result-status">
+                    ไม่พบสถานประกอบการที่ตรงกับ “{term}”
+                  </li>
+                )}
+              </ul>
+            )}
           </div>
         </div>
       </div>
@@ -209,28 +316,50 @@ export default function Home() {
           </div>
 
           {/* Logos Grid */}
-          <div className="company-logo-grid">
-            {companies.slice(0, 8).map((company) => (
-              <div
-                key={company.id}
-                className="company-logo-card"
-                title={company.name}
-              >
-                {company.logo ? (
-                  <img
-                    src={getImageUrl(company.logo)}
-                    alt={company.name}
-                    className="company-logo-img"
-                  />
-                ) : (
-                  <div className="company-logo-placeholder">
-                    <span className="placeholder-empty">ไม่พบรูปภาพ</span>
-                    <span className="placeholder-name">{company.name}</span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          {allError ? (
+            <div className="home-state-box home-state-box--error">
+              <p>ไม่สามารถโหลดข้อมูลสถานประกอบการได้</p>
+              <button type="button" className="home-retry-btn" onClick={retry}>
+                ลองใหม่
+              </button>
+            </div>
+          ) : allCompanies && allCompanies.length === 0 ? (
+            <div className="home-state-box">
+              <p>ยังไม่มีข้อมูลสถานประกอบการ</p>
+            </div>
+          ) : (
+            <div className="company-logo-grid" aria-busy={!allCompanies}>
+              {!allCompanies && Array.from({ length: 8 }, (_, i) => (
+                <div key={i} className="company-logo-card company-logo-skeleton" aria-hidden="true" />
+              ))}
+              {(allCompanies ?? []).slice(0, 8).map((company) => (
+                <div
+                  key={company.id}
+                  className="company-logo-card"
+                  title={company.name}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => navigate(`/company/${company.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') navigate(`/company/${company.id}`);
+                  }}
+                >
+                  {company.logo ? (
+                    <img
+                      src={getImageUrl(company.logo)}
+                      alt={company.name}
+                      className="company-logo-img"
+                    />
+                  ) : (
+                    <div className="company-logo-placeholder">
+                      <span className="placeholder-empty">ไม่พบรูปภาพ</span>
+                      <span className="placeholder-name">{company.name}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* ปุ่มดูเพิ่มเติม */}
           <button

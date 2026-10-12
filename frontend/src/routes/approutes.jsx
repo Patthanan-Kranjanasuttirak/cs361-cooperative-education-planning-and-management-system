@@ -10,6 +10,7 @@ export default function approutes() {
         <Route path="/" element={<Home />} />
         <Route path="/detail/:id" element={<Home />} />
         <Route path="/company" element={<Company />} />
+        <Route path="/company/:id" element={<Company />} />
         <Route path="/student-handbook" element={<Studenthandbook />} />
       </Routes>
     </BrowserRouter>

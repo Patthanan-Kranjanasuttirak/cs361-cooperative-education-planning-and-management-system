@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { getImageUrl } from '../utils/image';
-import { fetchCompanies } from '../services/companyApi';
+import { fetchCompanies, fetchCompany } from '../services/companyApi';
 import ApplicationBadge from '../components/ApplicationBadge';
 import { APPLICATION_STATUSES } from '../utils/applicationPeriod';
 import locationIcon from '../assets/location.png';
@@ -13,6 +13,7 @@ import './CSS/company.css';
 
 export default function Company() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [selectedProvince, setSelectedProvince] = useState('');
@@ -24,6 +25,31 @@ export default function Company() {
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // เปิดรายละเอียดตาม id ใน URL (/company/:id) ดึงจาก GET /companies/{id}
+  useEffect(() => {
+    if (!id) {
+      setSelectedCompany(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    fetchCompany(id, controller.signal)
+      .then((company) => {
+        if (company) {
+          setSelectedCompany(company);
+        } else {
+          setSelectedCompany(null);
+          navigate('/company', { replace: true });
+        }
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') console.error('Error fetching company:', error);
+      });
+
+    return () => controller.abort();
+  }, [id, navigate]);
 
   // ค้นหา/กรองผ่าน API (รอให้หยุดพิมพ์ 300ms ก่อนค่อยเรียก)
   useEffect(() => {
@@ -64,10 +90,11 @@ export default function Company() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [searchTerm, selectedProvince, selectedPosition, selectedStatus]);
+  }, [searchTerm, selectedProvince, selectedPosition, selectedStatus, reloadKey]);
 
   const isFiltering =
     searchTerm !== '' || selectedProvince !== '' || selectedPosition !== '' || selectedStatus !== '';
+  const retry = () => setReloadKey((key) => key + 1);
   const clearFilters = () => {
     setSearchTerm('');
     setSelectedProvince('');
@@ -174,10 +201,12 @@ export default function Company() {
 
         {/* Result count */}
         <div className="company-result-bar">
-          <span>
+          <span aria-live="polite">
             {isLoading
               ? 'กำลังโหลดข้อมูล…'
-              : `พบ ${companies.length} จาก ${totalCount} สถานประกอบการ`}
+              : loadError
+                ? 'โหลดข้อมูลไม่สำเร็จ'
+                : `พบ ${companies.length} จาก ${totalCount} สถานประกอบการ`}
           </span>
           {isFiltering && (
             <button onClick={clearFilters} className="company-clear-filter-btn">
@@ -187,12 +216,37 @@ export default function Company() {
         </div>
 
         {/* List Grid Container */}
-        <div className="company-list-container">
-          {companies.length > 0 ? (
+        <div
+          className={`company-list-container${isLoading && companies.length > 0 ? ' company-list-container--loading' : ''}`}
+          aria-busy={isLoading}
+        >
+          {loadError && !isLoading ? (
+            <div className="company-empty-state company-error-state" role="alert">
+              <p className="company-state-title">ไม่สามารถโหลดข้อมูลสถานประกอบการได้</p>
+              <p className="company-empty-text">
+                กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วลองใหม่อีกครั้ง
+              </p>
+              <button onClick={retry} className="company-state-btn">
+                ลองใหม่
+              </button>
+            </div>
+          ) : isLoading && companies.length === 0 ? (
+            // โครงการ์ดระหว่างโหลดครั้งแรก
+            Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="company-card-item company-card-skeleton" aria-hidden="true">
+                <div className="company-card-logo-box skeleton-block" />
+                <div className="company-card-details">
+                  <div className="skeleton-line skeleton-line--title" />
+                  <div className="skeleton-line" />
+                  <div className="skeleton-line skeleton-line--short" />
+                </div>
+              </div>
+            ))
+          ) : companies.length > 0 ? (
             companies.map((company) => (
               <div
                 key={company.id}
-                onClick={() => setSelectedCompany(company)}
+                onClick={() => navigate(`/company/${company.id}`)}
                 className="company-card-item"
               >
                 {/* Top: Logo Box */}
@@ -238,15 +292,19 @@ export default function Company() {
           ) : (
             <div className="company-empty-state">
               <div>
-                <img src={searchIcon} alt="search" className="company-empty-icon" />
+                <img src={searchIcon} alt="" className="company-empty-icon" />
               </div>
-              <p className="company-empty-text">
-                {isLoading
-                  ? 'กำลังโหลดข้อมูล…'
-                  : loadError
-                    ? 'ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
-                    : 'ไม่พบข้อมูลที่ค้นหา'}
+              <p className="company-state-title">
+                {isFiltering ? 'ไม่พบสถานประกอบการที่ตรงกับเงื่อนไข' : 'ยังไม่มีข้อมูลสถานประกอบการ'}
               </p>
+              {isFiltering && (
+                <>
+                  <p className="company-empty-text">ลองเปลี่ยนคำค้นหาหรือตัวกรอง</p>
+                  <button onClick={clearFilters} className="company-state-btn">
+                    ล้างตัวกรอง
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -254,7 +312,7 @@ export default function Company() {
         {selectedCompany && (
           <CompanyDetailModal
             company={selectedCompany}
-            onClose={() => setSelectedCompany(null)}
+            onClose={() => navigate('/company')}
           />
         )}
       </div>

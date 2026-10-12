@@ -23,6 +23,8 @@ const COMPANY_COLUMNS = `
 // ส่งค่าว่าง = ไม่กรองเงื่อนไขนั้น
 // "วันนี้" ใช้เวลาประเทศไทย เพราะ RDS ตั้งเวลาเป็น UTC (ช่วงตี 0–7 วันที่จะยังเป็นของเมื่อวาน)
 export async function findAll({ search = "", province = "", position = "", status = "" } = {}) {
+  // escape ตัวอักษรพิเศษของ ILIKE (% _ \) ให้ค้นหาเป็นตัวอักษรธรรมดา ไม่ใช่ wildcard
+  const searchPattern = search.replace(/[\\%_]/g, "\\$&");
   const { rows } = await query(
     `WITH today AS (SELECT (now() AT TIME ZONE 'Asia/Bangkok')::date AS d)
      SELECT ${COMPANY_COLUMNS}
@@ -41,7 +43,7 @@ export async function findAll({ search = "", province = "", position = "", statu
             OR ($4 = 'upcoming' AND today.d < c.application_start)
             OR ($4 = 'closed'   AND today.d > c.application_end))
      ORDER BY c.id`,
-    [search, province, position, status]
+    [searchPattern, province, position, status]
   );
   return rows;
 }
