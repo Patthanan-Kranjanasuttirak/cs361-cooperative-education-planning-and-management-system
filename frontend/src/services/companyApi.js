@@ -16,11 +16,14 @@ async function request(path, signal) {
   return response.json();
 }
 
-// GET /companies?search=&province=  → { data: [...], total }
-export async function fetchCompanies({ search = '', province = '' } = {}, signal) {
+// GET /companies?search=&province=&position=&status=  → { data: [...], total }
+// status: open | upcoming | closed
+export async function fetchCompanies({ search = '', province = '', position = '', status = '' } = {}, signal) {
   const params = new URLSearchParams();
   if (search.trim()) params.set('search', search.trim());
   if (province) params.set('province', province);
+  if (position) params.set('position', position);
+  if (status) params.set('status', status);
   const query = params.toString();
 
   const result = await request(`/companies${query ? `?${query}` : ''}`, signal);

@@ -17,9 +17,8 @@ export default function Navbar() {
 
     const navLinks = [
         { name: 'หน้าแรก', href: '/' },
-        { name: 'เกี่ยวกับ', href: '#' },
         { name: 'คู่มือนักศึกษา', href: '/student-handbook' },
-        { name: 'คู่มือสหกิจศึกษา', href: '#' },
+        { name: 'สถานประกอบการ', href: '/company' },
         { name: 'ติดต่อ', href: '#footer', onClick: handleContactClick },
     ];
 
@@ -46,7 +45,7 @@ export default function Navbar() {
                             key={link.name}
                             to={link.href}
                             onClick={link.onClick ? link.onClick : undefined}
-                            className={`nav-item${location.pathname === link.href ? ' nav-item--active' : ''}`}
+                            className={`nav-item${location.pathname === link.href || location.pathname.startsWith(`${link.href}/`) ?' nav-item--active' : ''}`}
                         >
                             {link.name}
                         </Link>

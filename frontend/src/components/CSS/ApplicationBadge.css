@@ -1,0 +1,34 @@
+.application-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.application-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: currentColor;
+}
+
+.application-badge--open {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+
+.application-badge--upcoming {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.application-badge--closed,
+.application-badge--unknown {
+  background-color: #f1f5f9;
+  color: #64748b;
+}

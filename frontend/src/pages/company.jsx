@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { getImageUrl } from '../utils/image';
-import { fetchCompanies } from '../services/companyApi';
+import { fetchCompanies, fetchCompany } from '../services/companyApi';
+import ApplicationBadge from '../components/ApplicationBadge';
+import { APPLICATION_STATUSES } from '../utils/applicationPeriod';
 import locationIcon from '../assets/location.png';
 import searchIcon from '../assets/search.png';
 import CompanyDetailModal from '../components/CompanyDetailModal';
@@ -11,14 +13,42 @@ import './CSS/company.css';
 
 export default function Company() {
   const navigate = useNavigate();
+  const { id } = useParams();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [selectedProvince, setSelectedProvince] = useState('');
+  const [selectedPosition, setSelectedPosition] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
   const [companies, setCompanies] = useState([]);
   const [provinces, setProvinces] = useState([]);
+  const [positions, setPositions] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+
+  // เปิดรายละเอียดตาม id ใน URL (/company/:id) ดึงจาก GET /companies/{id}
+  useEffect(() => {
+    if (!id) {
+      setSelectedCompany(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    fetchCompany(id, controller.signal)
+      .then((company) => {
+        if (company) {
+          setSelectedCompany(company);
+        } else {
+          setSelectedCompany(null);
+          navigate('/company', { replace: true });
+        }
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') console.error('Error fetching company:', error);
+      });
+
+    return () => controller.abort();
+  }, [id, navigate]);
 
   // ค้นหา/กรองผ่าน API (รอให้หยุดพิมพ์ 300ms ก่อนค่อยเรียก)
   useEffect(() => {
@@ -27,16 +57,24 @@ export default function Company() {
       setIsLoading(true);
       try {
         const data = await fetchCompanies(
-          { search: searchTerm, province: selectedProvince },
+          {
+            search: searchTerm,
+            province: selectedProvince,
+            position: selectedPosition,
+            status: selectedStatus,
+          },
           controller.signal
         );
         setCompanies(data);
         setLoadError(null);
 
-        // ผลลัพธ์แบบไม่กรองคือข้อมูลทั้งหมด ใช้สร้างรายชื่อจังหวัดและจำนวนรวม
-        if (!searchTerm.trim() && !selectedProvince) {
+        // ผลลัพธ์แบบไม่กรองคือข้อมูลทั้งหมด ใช้สร้างตัวเลือกจังหวัด ตำแหน่ง และจำนวนรวม
+        if (!searchTerm.trim() && !selectedProvince && !selectedPosition && !selectedStatus) {
           setTotalCount(data.length);
-          setProvinces(getProvinces(data));
+          setProvinces(sortByCount(data.map((company) => company.province)));
+          setPositions(
+            sortByCount(data.flatMap((company) => (company.positions ?? []).map((p) => p.name)))
+          );
         }
       } catch (error) {
         if (error.name === 'AbortError') return;
@@ -51,12 +89,15 @@ export default function Company() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [searchTerm, selectedProvince]);
+  }, [searchTerm, selectedProvince, selectedPosition, selectedStatus]);
 
-  const isFiltering = searchTerm !== '' || selectedProvince !== '';
+  const isFiltering =
+    searchTerm !== '' || selectedProvince !== '' || selectedPosition !== '' || selectedStatus !== '';
   const clearFilters = () => {
     setSearchTerm('');
     setSelectedProvince('');
+    setSelectedPosition('');
+    setSelectedStatus('');
   };
 
   const getDisplayLocation = (company) => {
@@ -96,23 +137,8 @@ export default function Company() {
             <p className="company-subtitle">รายชื่อและรายละเอียดข้อมูลสถานประกอบการสำหรับสหกิจศึกษา</p>
           </div>
 
+          {/* ด้านขวาของหัวข้อ: Search แล้วตามด้วย Filters */}
           <div className="company-filter-group">
-            {/* Province Filter */}
-            <select
-              value={selectedProvince}
-              onChange={(e) => setSelectedProvince(e.target.value)}
-              className="company-filter-select"
-              aria-label="กรองตามจังหวัด"
-            >
-              <option value="">ทุกจังหวัด</option>
-              {provinces.map((province) => (
-                <option key={province} value={province}>
-                  {province}
-                </option>
-              ))}
-            </select>
-
-            {/* Search Bar for Company Page */}
             <div className="company-search-bar">
               <img src={searchIcon} alt="search" className="company-search-icon" />
               <input
@@ -123,12 +149,57 @@ export default function Company() {
                 className="company-search-input"
               />
             </div>
+            <div className="company-filter-selects">
+              <select
+                value={selectedProvince}
+                onChange={(e) => setSelectedProvince(e.target.value)}
+                className="company-filter-select"
+                aria-label="กรองตามจังหวัด"
+              >
+                <option value="">ทุกจังหวัด</option>
+                {provinces.map((province) => (
+                  <option key={province} value={province}>
+                    {province}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedPosition}
+                onChange={(e) => setSelectedPosition(e.target.value)}
+                className="company-filter-select"
+                aria-label="กรองตามตำแหน่งงาน"
+              >
+                <option value="">ทุกตำแหน่ง</option>
+                {positions.map((position) => (
+                  <option key={position} value={position}>
+                    {position}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="company-filter-select"
+                aria-label="กรองตามสถานะการรับสมัคร"
+              >
+                <option value="">ทุกสถานะการรับสมัคร</option>
+                {Object.entries(APPLICATION_STATUSES).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+
         </header>
+
 
         {/* Result count */}
         <div className="company-result-bar">
-          <span>
+          <span aria-live="polite">
             {isLoading
               ? 'กำลังโหลดข้อมูล…'
               : `พบ ${companies.length} จาก ${totalCount} สถานประกอบการ`}
@@ -141,12 +212,34 @@ export default function Company() {
         </div>
 
         {/* List Grid Container */}
-        <div className="company-list-container">
-          {companies.length > 0 ? (
+        <div
+          className={`company-list-container${isLoading && companies.length > 0 ? ' company-list-container--loading' : ''}`}
+          aria-busy={isLoading}
+        >
+          {loadError && !isLoading ? (
+            <div className="company-empty-state" role="alert">
+              <div>
+                <img src={searchIcon} alt="" className="company-empty-icon" />
+              </div>
+              <p className="company-empty-text">ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง</p>
+            </div>
+          ) : isLoading && companies.length === 0 ? (
+            // โครงการ์ดระหว่างโหลดครั้งแรก
+            Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="company-card-item company-card-skeleton" aria-hidden="true">
+                <div className="company-card-logo-box skeleton-block" />
+                <div className="company-card-details">
+                  <div className="skeleton-line skeleton-line--title" />
+                  <div className="skeleton-line" />
+                  <div className="skeleton-line skeleton-line--short" />
+                </div>
+              </div>
+            ))
+          ) : companies.length > 0 ? (
             companies.map((company) => (
               <div
                 key={company.id}
-                onClick={() => setSelectedCompany(company)}
+                onClick={() => navigate(`/company/${company.id}`)}
                 className="company-card-item"
               >
                 {/* Top: Logo Box */}
@@ -163,6 +256,24 @@ export default function Company() {
                   <h2 className="company-card-name">{company.name}</h2>
                   <p className="company-card-desc">{company.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
 
+                  {/* Application status & positions */}
+                  <div className="company-card-tags">
+                    <ApplicationBadge company={company} />
+                  </div>
+
+                  {company.positions?.length > 0 && (
+                    <div className="company-card-positions">
+                      {company.positions.map((position) => (
+                        <span
+                          key={position.name}
+                          className={`position-chip position-chip--${getPositionColor(position.name)}`}
+                        >
+                          {getShortPositionName(position.name)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Meta details */}
                   <div className="company-card-meta">
                     <img src={locationIcon} alt="pin" className="company-meta-icon" />
@@ -174,14 +285,10 @@ export default function Company() {
           ) : (
             <div className="company-empty-state">
               <div>
-                <img src={searchIcon} alt="search" className="company-empty-icon" />
+                <img src={searchIcon} alt="" className="company-empty-icon" />
               </div>
-              <p className="company-empty-text">
-                {isLoading
-                  ? 'กำลังโหลดข้อมูล…'
-                  : loadError
-                    ? 'ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง'
-                    : 'ไม่พบข้อมูลที่ค้นหา'}
+              <p className="company-state-title">
+                {isFiltering ? 'ไม่พบสถานประกอบการที่ตรงกับเงื่อนไข' : 'ยังไม่มีข้อมูลสถานประกอบการ'}
               </p>
             </div>
           )}
@@ -190,7 +297,7 @@ export default function Company() {
         {selectedCompany && (
           <CompanyDetailModal
             company={selectedCompany}
-            onClose={() => setSelectedCompany(null)}
+            onClose={() => navigate('/company')}
           />
         )}
       </div>
@@ -200,14 +307,33 @@ export default function Company() {
   );
 }
 
-// รายชื่อจังหวัดทั้งหมด เรียงตามจำนวนบริษัทมากไปน้อย
-function getProvinces(companies) {
-  const provinceCounts = companies.reduce((counts, company) => {
-    const province = company.province?.trim();
-    if (province) counts[province] = (counts[province] || 0) + 1;
-    return counts;
+// ค่าที่ไม่ซ้ำกัน เรียงตามจำนวนที่พบมากไปน้อย (ใช้สร้างตัวเลือกจังหวัดและตำแหน่ง)
+function sortByCount(values) {
+  const counts = values.reduce((acc, value) => {
+    const key = value?.trim();
+    if (key) acc[key] = (acc[key] || 0) + 1;
+    return acc;
   }, {});
-  return Object.keys(provinceCounts).sort(
-    (a, b) => provinceCounts[b] - provinceCounts[a] || a.localeCompare(b, 'th')
-  );
+  return Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b, 'th'));
+}
+
+// ชื่อตำแหน่งแบบสั้นสำหรับแสดงบนการ์ด เช่น "Data Analyst Intern" → "Data Analyst"
+function getShortPositionName(name) {
+  return name.replace(/\s*Intern$/i, '');
+}
+
+// สีของป้ายตำแหน่งตามประเภทงาน (ตำแหน่งที่ไม่ตรงกลุ่มไหนได้สีเทา)
+// (เรียงตามลำดับ ตรงกลุ่มแรกก่อน เช่น "Cloud / DevOps Engineer" ต้องได้สี cloud ไม่ใช่ developer)
+const POSITION_COLORS = [
+  [/cloud|devops/i, 'orange'],
+  [/developer|engineer/i, 'blue'],
+  [/qa|tester/i, 'purple'],
+  [/data/i, 'teal'],
+  [/\bai\b|machine learning/i, 'pink'],
+  [/security/i, 'red'],
+  [/business analyst/i, 'indigo'],
+  [/ux|ui|design/i, 'yellow'],
+];
+function getPositionColor(name) {
+  return POSITION_COLORS.find(([pattern]) => pattern.test(name))?.[1] ?? 'gray';
 }

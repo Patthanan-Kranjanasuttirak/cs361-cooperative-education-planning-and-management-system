@@ -47,6 +47,45 @@
 
 ---
 
+## 🔌 การเชื่อมต่อ API (`VITE_API_URL`)
+หน้าเว็บดึงข้อมูลสถานประกอบการจาก API ผ่าน `src/services/companyApi.js` โดยอ่าน URL จากตัวแปร `VITE_API_URL`
+ถ้าไม่ได้ตั้งค่า หรือเรียก API ไม่สำเร็จ หน้าเว็บจะแสดงข้อความ "ไม่สามารถโหลดข้อมูลได้"
+
+1. สร้างไฟล์ `.env` จากตัวอย่าง แล้วแก้ค่า `VITE_API_URL`
+
+```bash
+   cp .env.example .env
+```
+
+2. เลือก API ที่จะใช้ (เปลี่ยนแค่ `VITE_API_URL` ไม่ต้องแก้โค้ด)
+
+| ใช้กับ | ค่า `VITE_API_URL` |
+|---|---|
+| Mock API ในเครื่อง | `http://localhost:5099` |
+| API Gateway จริง | `https://xxxx.execute-api.ap-southeast-1.amazonaws.com/prod` |
+
+> แก้ `.env` แล้วต้องรัน `npm run dev` ใหม่ ส่วนตอน build ขึ้น S3 ค่า `VITE_API_URL` จะถูกฝังลงไปในไฟล์ ถ้าเปลี่ยน URL ต้อง build ใหม่
+
+### 🧪 Mock API (ทดสอบโดยไม่ต้องมี Backend)
+`mock-api.mjs` จำลอง API ตาม contract เดียวกับ Lambda โดยอ่านข้อมูลจาก `src/data/mockfile.json` (แก้ไฟล์แล้วเห็นผลทันที)
+
+```bash
+   # Terminal 1: เปิด Mock API ที่ http://localhost:5099
+   npm run mock-api
+
+   # Terminal 2: เปิดหน้าเว็บ (ตั้ง VITE_API_URL=http://localhost:5099 ใน .env)
+   npm run dev
+```
+
+| Endpoint | ผลลัพธ์ |
+|---|---|
+| `GET /companies?search=&province=` | `200 { "data": [...], "total": 102 }` (ไม่ส่ง parameter = ทุกบริษัท) |
+| `GET /companies/{id}` | `200 { id, name, logo, description, province, location }` หรือ `404` |
+
+> Mock API ใช้สำหรับพัฒนาในเครื่องเท่านั้น ไม่ถูกรวมไปตอน `npm run build`
+
+---
+
 ```bash
 npm run build
 ```
