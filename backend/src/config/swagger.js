@@ -87,7 +87,7 @@ export const swaggerSpec = {
           {
             name: "search",
             in: "query",
-            description: "คำค้นใน name, description, location, province และชื่อตำแหน่งงาน",
+            description: "คำค้นใน name, province และชื่อตำแหน่งงาน",
             schema: { type: "string" },
           },
           {

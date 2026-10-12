@@ -18,7 +18,7 @@ const COMPANY_COLUMNS = `
   ) AS positions
 `;
 
-// ค้นหาใน name, description, location, province และชื่อตำแหน่งงาน (ไม่สนตัวพิมพ์เล็กใหญ่)
+// ค้นหาใน name, province และชื่อตำแหน่งงาน (ไม่สนตัวพิมพ์เล็กใหญ่)
 // แล้วกรองตามจังหวัด, ชื่อตำแหน่ง (ตรงทั้งคำ) และสถานะการรับสมัคร (open | upcoming | closed)
 // ส่งค่าว่าง = ไม่กรองเงื่อนไขนั้น
 // "วันนี้" ใช้เวลาประเทศไทย เพราะ RDS ตั้งเวลาเป็น UTC (ช่วงตี 0–7 วันที่จะยังเป็นของเมื่อวาน)
@@ -30,8 +30,6 @@ export async function findAll({ search = "", province = "", position = "", statu
      SELECT ${COMPANY_COLUMNS}
      FROM companies c, today
      WHERE ($1 = '' OR c.name ILIKE '%' || $1 || '%'
-                    OR c.description ILIKE '%' || $1 || '%'
-                    OR c.location ILIKE '%' || $1 || '%'
                     OR c.province ILIKE '%' || $1 || '%'
                     OR EXISTS (SELECT 1 FROM positions p
                                WHERE p.company_id = c.id AND p.name ILIKE '%' || $1 || '%'))

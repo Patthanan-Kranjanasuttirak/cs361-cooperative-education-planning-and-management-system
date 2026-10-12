@@ -19,7 +19,6 @@ export default function Home() {
   const [allError, setAllError] = useState(null);
   // ผลค้นหาล่าสุด พร้อมคำค้นที่ใช้ (ถ้าคำค้นตอนนี้ไม่ตรงกับ term แปลว่ากำลังค้นหา)
   const [search, setSearch] = useState({ term: '', companies: [], error: null });
-  const [reloadKey, setReloadKey] = useState(0);
 
   const navigate = useNavigate();
   const { id } = useParams();
@@ -48,7 +47,7 @@ export default function Home() {
     return () => controller.abort();
   }, [id, navigate]);
 
-  // โหลดรายชื่อทั้งหมดครั้งแรก (และเมื่อกด "ลองใหม่")
+  // โหลดรายชื่อทั้งหมดครั้งแรก
   useEffect(() => {
     const controller = new AbortController();
     fetchCompanies({}, controller.signal)
@@ -63,7 +62,7 @@ export default function Home() {
       });
 
     return () => controller.abort();
-  }, [reloadKey]);
+  }, []);
 
   // ค้นหาสถานประกอบการผ่าน API (รอให้หยุดพิมพ์ 300ms ก่อนค่อยเรียก)
   const term = searchTerm.trim();
@@ -85,30 +84,13 @@ export default function Home() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [term, reloadKey]);
+  }, [term]);
 
   const isSearching = term !== '' && search.term !== term;
   const searchError = !isSearching ? search.error : null;
-  const retry = () => {
-    setAllError(null);
-    setSearch((prev) => ({ ...prev, term: '' }));
-    setReloadKey((key) => key + 1);
-  };
 
-  // ถ้าคำค้นตรงกับต้นชื่อจังหวัด (เช่น "ปทุม") ให้แสดงเฉพาะบริษัทในจังหวัดนั้น
-  // หรือที่ชื่อ/ตำแหน่งตรง ตัดผลที่เจอแค่ในที่อยู่ออก (เช่น "เขตปทุมวัน" ของกรุงเทพฯ)
   const keyword = term.toLowerCase();
-  const provinces = [...new Set((allCompanies ?? []).map((c) => c.province).filter(Boolean))];
-  const isProvinceSearch = keyword !== '' && provinces.some((p) => p.startsWith(keyword));
-  const companies = search.companies;
-  const searchResults = isProvinceSearch
-    ? companies.filter(
-        (c) =>
-          c.province?.startsWith(keyword) ||
-          c.name?.toLowerCase().includes(keyword) ||
-          (c.positions ?? []).some((p) => p.name?.toLowerCase().includes(keyword))
-      )
-    : companies;
+  const searchResults = search.companies;
 
   const handleCloseModal = () => {
     setSelectedCompany(null);
@@ -133,7 +115,7 @@ export default function Home() {
             <span className="home-search-icon"><img src={searchIcon} alt="Search" /></span>
             <input
               type="text"
-              placeholder="ค้นหาชื่อสถานประกอบการ จังหวัด หรือตำแหน่งงาน"
+              placeholder="ค้นหาสถานประกอบการ"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => {
@@ -153,11 +135,8 @@ export default function Home() {
                     กำลังค้นหา…
                   </li>
                 ) : searchError ? (
-                  <li className="home-search-result-status home-search-result-status--error">
-                    ค้นหาไม่สำเร็จ กรุณาลองใหม่อีกครั้ง
-                    <button type="button" className="home-retry-btn" onClick={retry}>
-                      ลองใหม่
-                    </button>
+                  <li className="home-search-result-status">
+                    ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง
                   </li>
                 ) : searchResults.length > 0 ? (
                   searchResults.map((company) => {
@@ -317,11 +296,8 @@ export default function Home() {
 
           {/* Logos Grid */}
           {allError ? (
-            <div className="home-state-box home-state-box--error">
-              <p>ไม่สามารถโหลดข้อมูลสถานประกอบการได้</p>
-              <button type="button" className="home-retry-btn" onClick={retry}>
-                ลองใหม่
-              </button>
+            <div className="home-state-box">
+              <p>ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง</p>
             </div>
           ) : allCompanies && allCompanies.length === 0 ? (
             <div className="home-state-box">

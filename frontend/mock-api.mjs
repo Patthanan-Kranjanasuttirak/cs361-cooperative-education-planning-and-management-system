@@ -72,7 +72,7 @@ const server = http.createServer((req, res) => {
     const data = companies.filter((c) => {
       const matchesSearch =
         !search ||
-        [c.name, c.description, c.location, c.province, ...(c.positions ?? []).map((p) => p.name)].some(
+        [c.name, c.province, ...(c.positions ?? []).map((p) => p.name)].some(
           (value) => value && value.toLowerCase().includes(search)
         );
       const matchesProvince = !province || c.province === province;

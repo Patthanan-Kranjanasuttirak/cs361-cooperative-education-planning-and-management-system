@@ -25,7 +25,6 @@ export default function Company() {
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [reloadKey, setReloadKey] = useState(0);
 
   // เปิดรายละเอียดตาม id ใน URL (/company/:id) ดึงจาก GET /companies/{id}
   useEffect(() => {
@@ -90,11 +89,10 @@ export default function Company() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [searchTerm, selectedProvince, selectedPosition, selectedStatus, reloadKey]);
+  }, [searchTerm, selectedProvince, selectedPosition, selectedStatus]);
 
   const isFiltering =
     searchTerm !== '' || selectedProvince !== '' || selectedPosition !== '' || selectedStatus !== '';
-  const retry = () => setReloadKey((key) => key + 1);
   const clearFilters = () => {
     setSearchTerm('');
     setSelectedProvince('');
@@ -145,7 +143,7 @@ export default function Company() {
               <img src={searchIcon} alt="search" className="company-search-icon" />
               <input
                 type="text"
-                placeholder="ค้นหาสถานประกอบการหรือตำแหน่งงาน"
+                placeholder="ค้นหาสถานประกอบการ"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="company-search-input"
@@ -204,9 +202,7 @@ export default function Company() {
           <span aria-live="polite">
             {isLoading
               ? 'กำลังโหลดข้อมูล…'
-              : loadError
-                ? 'โหลดข้อมูลไม่สำเร็จ'
-                : `พบ ${companies.length} จาก ${totalCount} สถานประกอบการ`}
+              : `พบ ${companies.length} จาก ${totalCount} สถานประกอบการ`}
           </span>
           {isFiltering && (
             <button onClick={clearFilters} className="company-clear-filter-btn">
@@ -221,14 +217,11 @@ export default function Company() {
           aria-busy={isLoading}
         >
           {loadError && !isLoading ? (
-            <div className="company-empty-state company-error-state" role="alert">
-              <p className="company-state-title">ไม่สามารถโหลดข้อมูลสถานประกอบการได้</p>
-              <p className="company-empty-text">
-                กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วลองใหม่อีกครั้ง
-              </p>
-              <button onClick={retry} className="company-state-btn">
-                ลองใหม่
-              </button>
+            <div className="company-empty-state" role="alert">
+              <div>
+                <img src={searchIcon} alt="" className="company-empty-icon" />
+              </div>
+              <p className="company-empty-text">ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง</p>
             </div>
           ) : isLoading && companies.length === 0 ? (
             // โครงการ์ดระหว่างโหลดครั้งแรก
@@ -297,14 +290,6 @@ export default function Company() {
               <p className="company-state-title">
                 {isFiltering ? 'ไม่พบสถานประกอบการที่ตรงกับเงื่อนไข' : 'ยังไม่มีข้อมูลสถานประกอบการ'}
               </p>
-              {isFiltering && (
-                <>
-                  <p className="company-empty-text">ลองเปลี่ยนคำค้นหาหรือตัวกรอง</p>
-                  <button onClick={clearFilters} className="company-state-btn">
-                    ล้างตัวกรอง
-                  </button>
-                </>
-              )}
             </div>
           )}
         </div>

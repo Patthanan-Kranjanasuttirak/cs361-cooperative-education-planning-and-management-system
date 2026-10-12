@@ -344,30 +344,6 @@
   margin-top: 0.75rem;
 }
 
-.company-state-title + .company-empty-text {
-  margin-top: 0.25rem;
-}
-
-.company-error-state .company-state-title {
-  color: #dc2626;
-}
-
-.company-state-btn {
-  margin-top: 1rem;
-  padding: 0.5rem 1.25rem;
-  background-color: #f59e0b;
-  color: #ffffff;
-  font-size: 0.85rem;
-  font-weight: 700;
-  border: none;
-  border-radius: 9999px;
-  cursor: pointer;
-}
-
-.company-state-btn:hover {
-  background-color: #d97706;
-}
-
 /* Loading State */
 .company-list-container--loading {
   opacity: 0.5;
