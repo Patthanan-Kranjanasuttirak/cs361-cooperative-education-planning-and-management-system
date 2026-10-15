@@ -1,0 +1,77 @@
+.user-row--inactive td {
+  opacity: 0.55;
+}
+
+/* ปุ่มยังกดได้ชัดเจนแม้แถวถูกปิดใช้งาน */
+.user-row--inactive td.cm-actions {
+  opacity: 1;
+}
+
+.user-inactive-badge {
+  margin-left: 0.4rem;
+}
+
+.user-advisor-select {
+  margin-bottom: 0;
+  width: 100%;
+  min-width: 200px;
+  max-width: 240px;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.user-advisor-select--empty {
+  color: #b45309;
+  border-color: #fcd34d;
+}
+
+.user-readonly {
+  margin-bottom: 0.5rem;
+}
+
+/* ปุ่มขวาสุด (ปิด/เปิดใช้งาน หรือ "บัญชีของคุณ") กว้างเท่ากันทุกแถว ปุ่ม "แก้ไข" จะได้ตรงแนวกัน */
+.user-toggle {
+  display: inline-block;
+  width: 6.5rem;
+  margin-left: 0.4rem;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.cm-actions .cm-small-btn + .user-toggle {
+  margin-left: 0.4rem;
+}
+
+@media (max-width: 768px) {
+  .user-advisor-select {
+    min-width: 0;
+  }
+}
+
+/* ช่องรหัส + ปุ่มดึงข้อมูลจาก TU */
+.user-lookup {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.user-lookup .profile-input {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0.5rem;
+}
+
+.user-lookup-btn {
+  flex-shrink: 0;
+  padding: 0.6rem 1rem;
+}
+
+.user-refresh-btn {
+  align-self: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.user-readonly-empty {
+  color: #94a3b8;
+}

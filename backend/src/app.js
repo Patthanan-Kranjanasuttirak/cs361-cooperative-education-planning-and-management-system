@@ -31,7 +31,10 @@ app.get("/api/db-check", async (_req, res) => {
 
 app.get("/api/users", async (_req, res) => {
   try {
-    const { rows } = await query("SELECT * FROM users ORDER BY id");
+    const { rows } = await query(
+      // ไม่ส่ง password_hash / cognito_sub ออกไป
+      "SELECT user_id, username, role, th_name, en_name, email, is_active FROM users ORDER BY user_id"
+    );
     res.json(rows);
   } catch (err) {
     console.error(err);

@@ -1,0 +1,156 @@
+.students-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.students-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #334155;
+  border-radius: 9999px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.students-filter:hover {
+  background-color: #f8fafc;
+}
+
+.students-filter--active {
+  background-color: #222A4B;
+  border-color: #222A4B;
+  color: #ffffff;
+}
+
+.students-filter--active:hover {
+  background-color: #2f3a66;
+}
+
+.students-filter-count {
+  background-color: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+  padding: 0 0.45rem;
+  font-size: 0.8rem;
+}
+
+.students-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.students-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.students-table th {
+  background-color: #f8fafc;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.students-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: top;
+}
+
+.students-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.students-table tbody tr:hover {
+  background-color: #fafafa;
+}
+
+.students-num {
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+.students-name {
+  font-weight: 600;
+  color: #222A4B;
+}
+
+.students-code {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.students-latest {
+  color: #334155;
+  margin-top: 0.3rem;
+}
+
+.students-pending-link {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: #b45309;
+  text-decoration: none;
+}
+
+.students-pending-link:hover {
+  text-decoration: underline;
+}
+
+/* มือถือ: แต่ละแถวเป็นการ์ด แสดงหัวคอลัมน์จาก data-label */
+@media (max-width: 768px) {
+  .students-table thead {
+    display: none;
+  }
+
+  .students-table,
+  .students-table tbody,
+  .students-table tr,
+  .students-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .students-table tr {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0.5rem 0;
+  }
+
+  .students-table td {
+    border-bottom: none;
+    padding: 0.35rem 1rem;
+    text-align: left !important;
+  }
+
+  .students-table td:not(:first-child)::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    color: #94a3b8;
+  }
+}
+
+/* แถวกดเพื่อดูรายละเอียดนักศึกษา */
+.students-row {
+  cursor: pointer;
+}
+
+.students-name-link {
+  display: block;
+  text-decoration: none;
+}
+
+.students-row:hover .students-name-link {
+  text-decoration: underline;
+}

@@ -1,0 +1,108 @@
+.apply-combobox {
+  position: relative;
+}
+
+.apply-combobox .profile-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.apply-options {
+  position: absolute;
+  top: calc(100% - 0.75rem);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.apply-option {
+  display: flex;
+  flex-direction: column;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.apply-option:last-child {
+  border-bottom: none;
+}
+
+.apply-option:hover {
+  background-color: #fef3c7;
+}
+
+.apply-option--empty {
+  color: #64748b;
+  cursor: default;
+}
+
+.apply-option--empty:hover {
+  background-color: transparent;
+}
+
+.apply-option-name {
+  color: #222A4B;
+  font-weight: 500;
+}
+
+.apply-option-meta {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.apply-position-desc {
+  background-color: #f8fafc;
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  color: #334155;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+/* แจ้งเตือนเรื่องเกณฑ์ GPAX ด้านบนฟอร์ม */
+.apply-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background-color: #fef3c7;
+  color: #92400e;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.apply-gate--blocked {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.apply-gate-note {
+  font-size: 0.85rem;
+}
+
+/* กลุ่มฟอร์มทั้งหมด ใช้ปิดทั้งฟอร์มเมื่อยังไม่ผ่านเกณฑ์ */
+.apply-fieldset-group {
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.apply-fieldset-group:disabled {
+  opacity: 0.5;
+}
+
+.apply-fieldset-group:disabled .profile-submit {
+  cursor: not-allowed;
+}

@@ -1,0 +1,99 @@
+/* ==============================
+   ROLE LAYOUT (หน้าหลัง login)
+============================== */
+.role-page-container {
+  background-color: #f8fafc;
+  min-height: 100vh;
+  padding-top: 175px;
+  box-sizing: border-box;
+}
+
+.role-content-wrapper {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 0 2rem;
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  box-sizing: border-box;
+}
+
+.role-sidebar {
+  width: 300px;
+  flex-shrink: 0;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  position: sticky;
+  top: 190px;
+}
+
+.role-sidebar-header {
+  background-color: #222A4B;
+  color: #ffffff;
+  padding: 1rem 1.25rem;
+}
+
+.role-sidebar-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.role-sidebar-role {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.role-sidebar-menu {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0;
+}
+
+.role-menu-item {
+  padding: 0.75rem 1.25rem;
+  color: #334155;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.role-menu-item:hover {
+  background-color: #f1f5f9;
+}
+
+.role-menu-item--active {
+  color: #222A4B;
+  font-weight: 600;
+  background-color: #fef3c7;
+  border-left-color: #f59e0b;
+}
+
+.role-main {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 1.5rem 2rem;
+  min-height: 400px;
+}
+
+@media (max-width: 768px) {
+  .role-content-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 1rem;
+  }
+
+  .role-sidebar {
+    width: 100%;
+    position: static;
+  }
+
+  .role-main {
+    padding: 1.25rem 1rem;
+  }
+}

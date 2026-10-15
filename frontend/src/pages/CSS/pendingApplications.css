@@ -1,0 +1,128 @@
+.pending-search {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+}
+
+.pending-search:focus,
+.pending-comment:focus {
+  outline: 2px solid #f59e0b;
+  outline-offset: 0;
+}
+
+.pending-student {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pending-student-meta {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+
+.pending-target {
+  margin-top: 0.75rem;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.pending-label {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.pending-company {
+  font-weight: 600;
+  color: #222A4B;
+}
+
+.pending-docs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.pending-doc {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  color: #222A4B;
+  text-decoration: none;
+}
+
+.pending-doc:hover {
+  background-color: #f1f5f9;
+}
+
+.pending-doc--missing {
+  color: #94a3b8;
+  background-color: #f8fafc;
+  cursor: not-allowed;
+}
+
+.pending-doc--missing:hover {
+  background-color: transparent;
+}
+
+.pending-actions {
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.pending-review {
+  margin-top: 1rem;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.pending-review--approved {
+  background-color: #f0fdf4;
+}
+
+.pending-review--rejected {
+  background-color: #fef2f2;
+}
+
+.pending-comment {
+  margin-top: 0.35rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
+  background-color: #ffffff;
+}
+
+.pending-comment--error {
+  border-color: #dc2626;
+}
+
+.pending-error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.pending-btn-cancel {
+  background-color: #ffffff;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.pending-btn-cancel:hover {
+  background-color: #f8fafc;
+}

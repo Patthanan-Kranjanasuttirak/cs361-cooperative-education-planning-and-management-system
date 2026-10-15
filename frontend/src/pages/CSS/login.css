@@ -1,0 +1,72 @@
+.login-page-container {
+  background-color: #f8fafc;
+  min-height: 100vh;
+  /* ไม่มี padding ซ้ายขวา เพื่อให้ footer เต็มจอ — ระยะขอบไปอยู่ที่ .login-card แทน */
+  padding-top: 215px;
+  box-sizing: border-box;
+}
+
+.login-card {
+  max-width: 420px;
+  width: calc(100% - 2rem);
+  box-sizing: border-box;
+  margin: 0 auto;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.login-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #222A4B;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.login-mock-note {
+  font-size: 0.85rem;
+  color: #92400e;
+  background-color: #fef3c7;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.login-label {
+  font-size: 0.9rem;
+  color: #334155;
+  margin-bottom: 0.35rem;
+}
+
+.login-input {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  background-color: #ffffff;
+}
+
+.login-input:focus {
+  outline: 2px solid #f59e0b;
+  outline-offset: 0;
+}
+
+.login-submit {
+  background-color: #222A4B;
+  color: #ffffff;
+  font-weight: 600;
+  border: none;
+  border-radius: 9999px;
+  padding: 0.7rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+.login-submit:hover {
+  background-color: #2f3a66;
+}

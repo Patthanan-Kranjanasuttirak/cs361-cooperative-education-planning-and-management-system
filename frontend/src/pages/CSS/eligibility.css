@@ -1,0 +1,188 @@
+.elig-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  background-color: #dbeafe;
+  color: #1e3a8a;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.elig-edit {
+  color: #1e3a8a;
+  border-color: #93c5fd;
+}
+
+.elig-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.elig-slot--choice {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1.5rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin: 0.25rem 0;
+  padding: 1rem 1.5rem 0.6rem 1.5rem;
+}
+
+.elig-slot--choice .elig-slot-note {
+  grid-column: 1 / -1;
+}
+
+.elig-slot-note {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+  margin: 0.25rem 0 0.4rem 0;
+}
+
+.elig-course {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.elig-course-code {
+  width: 4.5rem;
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #222A4B;
+}
+
+.elig-grade {
+  flex: 1;
+  max-width: 210px;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+/* หัวข้อตัวหนาเสมอ / ยังกรอกไม่ครบ = ตัวเล็กสีเทา / ครบแล้ว = ตัวหนาสีเขียวหรือแดง */
+.elig-average {
+  margin-bottom: 1rem;
+}
+
+.elig-average-label {
+  font-weight: 600;
+  color: #222A4B;
+}
+
+.elig-average-pending {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.elig-average--ok {
+  font-weight: 600;
+  color: #15803d;
+}
+
+.elig-average--no {
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.elig-gpax {
+  margin-bottom: 1rem;
+  color: #222A4B;
+  font-weight: 600;
+}
+
+.elig-link {
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: #b45309;
+  margin-left: 0.5rem;
+}
+
+.elig-declare {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+  color: #334155;
+  cursor: pointer;
+}
+
+.elig-declare input {
+  margin-top: 0.3rem;
+  width: 1rem;
+  height: 1rem;
+  accent-color: #222A4B;
+  flex-shrink: 0;
+}
+
+.elig-summary {
+  background-color: #f8fafc;
+  padding-bottom: 1rem;
+}
+
+.elig-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.elig-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.elig-check-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.elig-check--ok {
+  color: #15803d;
+}
+
+.elig-check--ok .elig-check-icon {
+  background-color: #dcfce7;
+}
+
+.elig-check--no {
+  color: #64748b;
+}
+
+.elig-check--no .elig-check-icon {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.profile-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  /* minmax(0, 1fr) ให้ช่องเลือกหดตามจอได้ (1fr เฉย ๆ จะกว้างเท่าข้อความยาวสุดใน dropdown แล้วล้นจอ) */
+  .elig-grid,
+  .elig-slot--choice {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .elig-slot--choice {
+    padding: 0.85rem 1rem 0.5rem 1rem;
+  }
+}

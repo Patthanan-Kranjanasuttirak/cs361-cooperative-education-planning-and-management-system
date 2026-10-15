@@ -1,0 +1,18 @@
+.placeholder-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #222A4B;
+  margin-bottom: 0.75rem;
+}
+
+.placeholder-note {
+  color: #64748b;
+  margin-bottom: 0.5rem;
+}
+
+.placeholder-todo {
+  list-style: disc;
+  padding-left: 1.5rem;
+  color: #334155;
+  line-height: 1.8;
+}
