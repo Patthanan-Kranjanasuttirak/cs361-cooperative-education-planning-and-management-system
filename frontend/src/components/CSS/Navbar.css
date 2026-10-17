@@ -71,12 +71,22 @@ body {
 }
 
 .navbar-links {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 0 2rem;
+    padding: 0 2.5rem;
     display: flex;
     align-items: center;
+}
+
+.navbar-primary-links {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
     justify-content: center;
+}
+
+.navbar-contact-link:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
 }
 
 .nav-item {
@@ -99,6 +109,7 @@ body {
     font-weight: 500;
     border-bottom: 3px solid #f59e0b;
 }
+
 .nav-item--button {
     background: none;
     border-top: none;
@@ -106,4 +117,297 @@ body {
     border-right: none;
     cursor: pointer;
     font-family: inherit;
+}
+
+/* ใช้โครงส่วนหัวเดียวกันทั้งก่อนและหลังเข้าสู่ระบบ */
+.navbar .navbar-top-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    padding-inline: 2.5rem;
+    gap: 1.5rem;
+}
+
+.navbar .navbar-logo {
+    position: static;
+    justify-self: start;
+}
+
+.navbar .navbar-logo-image {
+    padding: 0;
+    max-width: 100%;
+    object-fit: contain;
+}
+
+.navbar-login-link {
+    display: inline-flex;
+    justify-self: end;
+    align-items: center;
+    gap: 16px;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 12px;
+}
+
+.navbar-login-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 10px 20px;
+    border-radius: 12px;
+    background: #f28c00;
+    color: #fff;
+    border: 0;
+    font-family: inherit;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background-color 0.2s ease;
+}
+
+.navbar-login-link:hover .navbar-login-button,
+.navbar-logout-button:hover {
+    background: #dc7d00;
+}
+
+.navbar-login-link:focus-visible,
+.navbar-account-trigger:focus-visible,
+.navbar-account-logout:focus-visible {
+    outline: 3px solid #f59e0b;
+    outline-offset: 5px;
+}
+
+.navbar-user-icon {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 50%;
+    background: #222a4b;
+}
+
+.navbar-user-icon img {
+    width: 34px;
+    height: 34px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+    border-radius: 50%;
+}
+
+.navbar-account {
+    position: relative;
+    display: block;
+    justify-self: end;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.navbar-account-name {
+    min-width: 0;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #222a4b;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.navbar-account-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    min-width: 0;
+    max-width: 200px;
+}
+
+.navbar-account-email {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.navbar-account-trigger {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    min-height: 44px;
+    padding: 6px 8px;
+    border-radius: 12px;
+    color: #222a4b;
+    list-style: none;
+    cursor: pointer;
+}
+
+.navbar-account-trigger::-webkit-details-marker { display: none; }
+.navbar-account-trigger:hover,
+.navbar-account[open] .navbar-account-trigger { background: #f1f5f9; }
+.navbar-account-chevron { flex-shrink: 0; transition: transform 0.2s ease; }
+.navbar-account[open] .navbar-account-chevron { transform: rotate(180deg); }
+
+.navbar-account-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 1;
+    width: 200px;
+    max-width: calc(100vw - 32px);
+    padding: 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgb(34 42 75 / 14%);
+}
+
+.navbar-account-action {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #b42318;
+    font: inherit;
+    font-size: 15px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.navbar-account-action:hover { background: #fff1ef; }
+
+.navbar-user-icon.navbar-user-icon--photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: none;
+}
+
+@media (max-width: 1100px) {
+    .navbar .navbar-top-inner {
+        padding-inline: 1.5rem;
+        gap: 1rem;
+    }
+
+    .navbar .navbar-logo-image {
+        height: 72px;
+    }
+
+    .navbar .navbar-title-th {
+        font-size: 26px;
+    }
+
+    .navbar .navbar-title-en {
+        font-size: 13px;
+    }
+
+    .navbar-login-link { gap: 12px; }
+    .navbar-account-trigger { gap: 10px; }
+    .navbar-account-name { max-width: 100px; font-size: 14px; }
+    .navbar-account-text { max-width: 160px; }
+    .navbar-account-email { font-size: 12px; }
+}
+
+@media (max-width: 900px) {
+    .navbar .navbar-top-inner {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: 54px auto;
+        padding: 8px 16px;
+        gap: 4px 16px;
+    }
+
+    .navbar .navbar-logo-image {
+        height: 54px;
+    }
+
+    .navbar .navbar-title-group {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        text-align: center;
+    }
+
+    .navbar .navbar-title-th {
+        font-size: 20px;
+    }
+
+    .navbar .navbar-title-en {
+        font-size: 11px;
+    }
+
+    .navbar-login-link,
+    .navbar-account {
+        grid-column: 2;
+        grid-row: 1;
+        gap: 10px;
+    }
+
+    .navbar-login-button {
+        padding-inline: 14px;
+        font-size: 14px;
+    }
+
+    .navbar-user-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .navbar-user-icon img {
+        width: 28px;
+        height: 28px;
+    }
+
+    .navbar .navbar-links {
+        padding-inline: 8px;
+    }
+
+    .navbar-primary-links {
+        justify-content: flex-start;
+        overflow-x: auto;
+        scrollbar-width: thin;
+    }
+
+    .navbar .nav-item {
+        padding-inline: 16px;
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .navbar-account-trigger { gap: 8px; }
+    .navbar-account-name { max-width: 76px; font-size: 12px; }
+    .navbar-account-text { max-width: 120px; }
+    .navbar-account-email { font-size: 11px; }
+    .navbar--authenticated .navbar-logo-image { height: 42px; }
+    .navbar .navbar-title-th {
+        font-size: 18px;
+    }
+
+    .navbar .navbar-title-en {
+        font-size: 10px;
+    }
+
+    .navbar .nav-item {
+        padding-inline: 10px;
+        font-size: 12px;
+    }
+
+}
+@media (max-width: 380px) {
+    .navbar-account-name { max-width: 50px; }
+    .navbar-account-text { max-width: 90px; }
+    .navbar--authenticated .navbar-logo-image { height: 34px; }
 }
