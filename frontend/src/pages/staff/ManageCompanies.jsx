@@ -4,6 +4,7 @@ import { formatApplicationPeriod } from '../../utils/applicationPeriod';
 import { getImageUrl } from '../../utils/image';
 import { validateCompany } from '../../utils/companyValidation';
 import { formatPhone, isPhone, normalizePhone } from '../../utils/phone';
+import PositionCard from '../../components/PositionCard';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
@@ -23,13 +24,10 @@ const MOCK_COORDINATORS = {
 
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, onSave, onClose }) {
+function CompanyDialog({ initial, provinces, onSave, onClose }) {
   const isNew = !initial;
   const [form, setForm] = useState(() => (initial ? { ...EMPTY_FORM, ...pick(initial) } : EMPTY_FORM));
-  const [coordinators, setCoordinators] = useState(initialCoordinators ?? []);
-  const [newCoordinator, setNewCoordinator] = useState({ th_name: '', email: '', phone: '', job_title: '' });
   const [errors, setErrors] = useState({});
-  const [coordinatorError, setCoordinatorError] = useState('');
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -47,28 +45,12 @@ function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, 
     setErrors((prev) => ({ ...prev, [name]: undefined, period: name.startsWith('application_') ? undefined : prev.period }));
   };
 
-  const addCoordinator = () => {
-    const c = {
-      th_name: newCoordinator.th_name.trim(),
-      email: newCoordinator.email.trim().toLowerCase(),
-      phone: newCoordinator.phone,
-      job_title: newCoordinator.job_title.trim() || null,
-    };
-    if (!c.th_name || !c.email || !c.phone) return setCoordinatorError('กรุณากรอกชื่อ อีเมล และเบอร์โทรศัพท์ของผู้ประสานงาน');
-    if (!isEmail(c.email)) return setCoordinatorError('รูปแบบอีเมลไม่ถูกต้อง');
-    if (!isPhone(c.phone)) return setCoordinatorError('เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลัก ขึ้นต้นด้วย 0');
-    if (coordinators.some((x) => x.email === c.email)) return setCoordinatorError('อีเมลนี้เป็นผู้ประสานงานของบริษัทนี้อยู่แล้ว');
-    setCoordinators((prev) => [...prev, { ...c, user_id: `new-${Date.now()}` }]);
-    setNewCoordinator({ th_name: '', email: '', phone: '', job_title: '' });
-    setCoordinatorError('');
-  };
-
   const submit = (e) => {
     e.preventDefault();
     const nextErrors = validateCompany(form);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    onSave({ ...form, name: form.name.trim(), province: form.province.trim() }, coordinators);
+    onSave({ ...form, name: form.name.trim(), province: form.province.trim() });
   };
 
   const inputClass = (name) => `profile-input${errors[name] ? ' profile-input--error' : ''}`;
@@ -118,46 +100,6 @@ function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, 
             </div>
             {errors.period && <p className="profile-error">{errors.period}</p>}
           </fieldset>
-
-          <fieldset className="profile-section">
-            <legend className="profile-section-title">ผู้ประสานงาน</legend>
-            <p className="profile-hint">อีเมลที่ผู้ประสานงานใช้สำหรับเข้าสู่ระบบ</p>
-
-            {coordinators.length === 0 ? (
-              <p className="cm-empty">ยังไม่มีผู้ประสานงาน</p>
-            ) : (
-              <ul className="cm-coordinators">
-                {coordinators.map((c) => (
-                  <li key={c.user_id} className="cm-coordinator">
-                    <div className="cm-coordinator-info">
-                      <p className="cm-coordinator-name">{c.th_name}{c.job_title && <span className="cm-muted"> · {c.job_title}</span>}</p>
-                      <p className="cm-muted">{c.email}{c.phone && ` · ${formatPhone(c.phone)}`}</p>
-                    </div>
-                    <button
-                      type="button"
-                      className="app-btn app-btn--ghost cm-small-btn"
-                      onClick={() => setCoordinators((prev) => prev.filter((x) => x.user_id !== c.user_id))}
-                    >
-                      นำออก
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <div className="cm-add-coordinator">
-              <input className="profile-input" placeholder="ชื่อ-นามสกุล" value={newCoordinator.th_name}
-                onChange={(e) => { setNewCoordinator((p) => ({ ...p, th_name: e.target.value })); setCoordinatorError(''); }} />
-              <input className="profile-input" type="email" placeholder="อีเมล" value={newCoordinator.email}
-                onChange={(e) => { setNewCoordinator((p) => ({ ...p, email: e.target.value })); setCoordinatorError(''); }} />
-              <input className="profile-input" type="tel" inputMode="numeric" placeholder="เบอร์โทรศัพท์" value={newCoordinator.phone}
-                onChange={(e) => { setNewCoordinator((p) => ({ ...p, phone: normalizePhone(e.target.value) })); setCoordinatorError(''); }} />
-              <input className="profile-input" placeholder="ตำแหน่งงาน (ไม่บังคับ)" value={newCoordinator.job_title}
-                onChange={(e) => setNewCoordinator((p) => ({ ...p, job_title: e.target.value }))} />
-              <button type="button" className="app-btn app-btn--primary cm-small-btn" onClick={addCoordinator}>เพิ่ม</button>
-            </div>
-            {coordinatorError && <p className="profile-error">{coordinatorError}</p>}
-          </fieldset>
         </div>
 
         <div className="cm-dialog-foot">
@@ -165,6 +107,118 @@ function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, 
           <button type="submit" className="app-btn app-btn--primary">บันทึก</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// ผู้ประสานงานของบริษัท — เพิ่ม / นำออกแล้วมีผลทันที (ส่งรายชื่อใหม่ทั้งหมดผ่าน onChange)
+function CoordinatorsSection({ coordinators, onChange }) {
+  const [newCoordinator, setNewCoordinator] = useState({ th_name: '', email: '', phone: '', job_title: '' });
+  const [coordinatorError, setCoordinatorError] = useState('');
+
+  const addCoordinator = () => {
+    const c = {
+      th_name: newCoordinator.th_name.trim(),
+      email: newCoordinator.email.trim().toLowerCase(),
+      phone: newCoordinator.phone,
+      job_title: newCoordinator.job_title.trim() || null,
+    };
+    if (!c.th_name || !c.email || !c.phone) return setCoordinatorError('กรุณากรอกชื่อ อีเมล และเบอร์โทรศัพท์ของผู้ประสานงาน');
+    if (!isEmail(c.email)) return setCoordinatorError('รูปแบบอีเมลไม่ถูกต้อง');
+    if (!isPhone(c.phone)) return setCoordinatorError('เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลัก ขึ้นต้นด้วย 0');
+    if (coordinators.some((x) => x.email === c.email)) return setCoordinatorError('อีเมลนี้เป็นผู้ประสานงานของบริษัทนี้อยู่แล้ว');
+    onChange([...coordinators, { ...c, user_id: `new-${Date.now()}` }]);
+    setNewCoordinator({ th_name: '', email: '', phone: '', job_title: '' });
+    setCoordinatorError('');
+  };
+
+  const remove = (c) => {
+    if (!window.confirm(`นำ ${c.th_name} ออกจากผู้ประสานงาน?\n\nบัญชีนี้จะเข้าจัดการบริษัทนี้ไม่ได้อีก`)) return;
+    onChange(coordinators.filter((x) => x.user_id !== c.user_id));
+  };
+
+  return (
+    <fieldset className="profile-section">
+      <legend className="profile-section-title">ผู้ประสานงาน</legend>
+      <p className="profile-hint">อีเมลที่ผู้ประสานงานใช้สำหรับเข้าสู่ระบบ</p>
+
+      {coordinators.length === 0 ? (
+        <p className="cm-empty">ยังไม่มีผู้ประสานงาน</p>
+      ) : (
+        <ul className="cm-coordinators">
+          {coordinators.map((c) => (
+            <li key={c.user_id} className="cm-coordinator">
+              <div className="cm-coordinator-info">
+                <p className="cm-coordinator-name">{c.th_name}{c.job_title && <span className="cm-muted"> · {c.job_title}</span>}</p>
+                <p className="cm-muted">{c.email}{c.phone && ` · ${formatPhone(c.phone)}`}</p>
+              </div>
+              <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => remove(c)}>นำออก</button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="cm-add-coordinator">
+        <input className="profile-input" placeholder="ชื่อ-นามสกุล" value={newCoordinator.th_name}
+          onChange={(e) => { setNewCoordinator((p) => ({ ...p, th_name: e.target.value })); setCoordinatorError(''); }} />
+        <input className="profile-input" type="email" placeholder="อีเมล" value={newCoordinator.email}
+          onChange={(e) => { setNewCoordinator((p) => ({ ...p, email: e.target.value })); setCoordinatorError(''); }} />
+        <input className="profile-input" type="tel" inputMode="numeric" placeholder="เบอร์โทรศัพท์" value={newCoordinator.phone}
+          onChange={(e) => { setNewCoordinator((p) => ({ ...p, phone: normalizePhone(e.target.value) })); setCoordinatorError(''); }} />
+        <input className="profile-input" placeholder="ตำแหน่งงาน (ไม่บังคับ)" value={newCoordinator.job_title}
+          onChange={(e) => setNewCoordinator((p) => ({ ...p, job_title: e.target.value }))} />
+        <button type="button" className="app-btn app-btn--primary cm-small-btn" onClick={addCoordinator}>เพิ่ม</button>
+      </div>
+      {coordinatorError && <p className="profile-error">{coordinatorError}</p>}
+    </fieldset>
+  );
+}
+
+// ดูข้อมูลบริษัท: ตำแหน่งงาน (อ่านอย่างเดียว — บริษัทเป็นผู้จัดการเอง) และผู้ประสานงาน (เจ้าหน้าที่เพิ่ม / นำออกได้)
+function CompanyInfoDialog({ company, coordinators, onCoordinatorsChange, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  const positions = company.positions ?? [];
+
+  return (
+    <div className="cm-overlay" role="dialog" aria-modal="true" aria-labelledby="cm-info-title">
+      <div className="cm-backdrop" onClick={onClose} />
+      <div className="cm-dialog">
+        <div className="cm-dialog-head">
+          <div>
+            <h2 id="cm-info-title" className="cm-dialog-title">{company.name}</h2>
+            <p className="cm-muted">{company.province || 'ไม่ระบุจังหวัด'} · {formatApplicationPeriod(company)}</p>
+          </div>
+          <button type="button" className="cm-close" onClick={onClose} aria-label="ปิด">✕</button>
+        </div>
+
+        <div className="cm-dialog-body">
+          <fieldset className="profile-section">
+            <legend className="profile-section-title">ตำแหน่งงาน</legend>
+            {positions.length === 0 ? (
+              <p className="cm-empty">ยังไม่มีตำแหน่งในภาคการศึกษานี้</p>
+            ) : (
+              <ul className="app-list">
+                {positions.map((p) => <PositionCard key={p.id} position={p} />)}
+              </ul>
+            )}
+          </fieldset>
+
+          <CoordinatorsSection coordinators={coordinators} onChange={onCoordinatorsChange} />
+        </div>
+
+        <div className="cm-dialog-foot">
+          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose}>ปิด</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -189,6 +243,8 @@ export default function ManageCompanies() {
   const [page, setPage] = useState(1);
   // null = ปิด, 'new' = เพิ่มใหม่, object = แก้ไขบริษัทนั้น
   const [editing, setEditing] = useState(null);
+  // บริษัทที่กำลังดูตำแหน่ง (null = ปิด)
+  const [viewing, setViewing] = useState(null);
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
@@ -218,23 +274,26 @@ export default function ManageCompanies() {
   const currentPage = Math.min(page, pageCount);
   const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  const handleSave = (form, nextCoordinators) => {
+  const handleSave = (form) => {
     if (editing === 'new') {
       // TODO: POST /api/companies แล้วใช้ id ที่ได้จาก backend
       const id = Math.max(0, ...companies.map((c) => c.id)) + 1;
       setCompanies((prev) => [...prev, { id, logo: null, positions: [], ...form }]);
-      setCoordinators((prev) => ({ ...prev, [id]: nextCoordinators }));
-      setNotice(`เพิ่ม ${form.name} แล้ว`);
+      setNotice(`เพิ่ม ${form.name} แล้ว — กด "ดูข้อมูล" เพื่อเพิ่มผู้ประสานงาน`);
       setSearch('');
       setPage(Math.ceil((companies.length + 1) / PAGE_SIZE));
     } else {
-      // TODO: PUT /api/companies/:id และ POST/DELETE /api/companies/:id/coordinators
-      //   เพิ่มผู้ประสานงาน = สร้าง users (role company) ถ้ายังไม่มี แล้ว insert company_users
+      // TODO: PUT /api/companies/:id
       setCompanies((prev) => prev.map((c) => (c.id === editing.id ? { ...c, ...form } : c)));
-      setCoordinators((prev) => ({ ...prev, [editing.id]: nextCoordinators }));
       setNotice(`บันทึก ${form.name} แล้ว`);
     }
     setEditing(null);
+  };
+
+  // TODO: POST/DELETE /api/companies/:id/coordinators
+  //   เพิ่มผู้ประสานงาน = สร้าง users (role company) ถ้ายังไม่มี แล้ว insert company_users
+  const handleCoordinatorsChange = (companyId, next) => {
+    setCoordinators((prev) => ({ ...prev, [companyId]: next }));
   };
 
   const handleDelete = (company) => {
@@ -304,6 +363,7 @@ export default function ManageCompanies() {
                       {(coordinators[c.id]?.length ?? 0) || <span className="cm-muted" title="ยังไม่มีผู้ประสานงาน">-</span>}
                     </td>
                     <td className="cm-actions">
+                      <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setViewing(c); setNotice(''); }}>ดูข้อมูล</button>
                       <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setEditing(c); setNotice(''); }}>แก้ไข</button>
                       <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => handleDelete(c)}>ลบ</button>
                     </td>
@@ -323,10 +383,18 @@ export default function ManageCompanies() {
         </>
       )}
 
+      {viewing && (
+        <CompanyInfoDialog
+          company={viewing}
+          coordinators={coordinators[viewing.id] ?? []}
+          onCoordinatorsChange={(next) => handleCoordinatorsChange(viewing.id, next)}
+          onClose={() => setViewing(null)}
+        />
+      )}
+
       {editing && (
         <CompanyDialog
           initial={editing === 'new' ? null : editing}
-          coordinators={editing === 'new' ? [] : coordinators[editing.id]}
           provinces={provinces}
           onSave={handleSave}
           onClose={() => setEditing(null)}

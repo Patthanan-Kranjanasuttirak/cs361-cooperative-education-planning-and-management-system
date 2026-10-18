@@ -53,3 +53,9 @@ export const CONTACT_VISIBLE_STATUSES = ['approved', 'accepted', 'confirmed'];
 
 // สถานะที่นับว่า "รับแล้ว" (ใช้คิดเทียบกับ quota)
 export const ACCEPTED_STATUSES = ['accepted', 'confirmed'];
+
+// จำนวนผู้สมัครและผู้ยืนยันสิทธิ์ของตำแหน่ง — TODO: ให้ backend คืนมากับตำแหน่ง (นับจาก applications)
+export function getPositionStats(positionId) {
+  const apps = MOCK_COMPANY_APPLICANTS.filter((a) => a.position_id === positionId);
+  return { applicants: apps.length, confirmed: apps.filter((a) => a.status === 'confirmed').length };
+}

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/useAuth';
 import { fetchCompany } from '../../services/companyApi';
-import { MOCK_ACTIVE_TERM, MOCK_COMPANY_APPLICANTS } from '../../services/companyPortalMock';
+import { MOCK_ACTIVE_TERM, getPositionStats } from '../../services/companyPortalMock';
+import PositionCard from '../../components/PositionCard';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
@@ -113,11 +114,6 @@ export default function CompanyPositions() {
     return () => controller.abort();
   }, [user.company_id]);
 
-  const statsOf = (positionId) => {
-    const apps = MOCK_COMPANY_APPLICANTS.filter((a) => a.position_id === positionId);
-    return { applicants: apps.length, confirmed: apps.filter((a) => a.status === 'confirmed').length };
-  };
-
   const handleSave = (data) => {
     if (editing === 'new') {
       // TODO: POST /api/company/positions — backend ใส่ company_id จากผู้ login และ term_id จากภาคที่ active
@@ -168,53 +164,20 @@ export default function CompanyPositions() {
         <div className="app-empty"><p>ยังไม่มีตำแหน่งในภาคการศึกษานี้</p></div>
       ) : (
         <ul className="app-list">
-          {positions.map((p) => {
-            const { applicants, confirmed } = statsOf(p.id);
-            const full = p.quota != null && confirmed >= p.quota;
-            const percent = p.quota ? Math.min(100, Math.round((confirmed / p.quota) * 100)) : 0;
-            return (
-              <li key={p.id} className={`app-card${p.is_open ? '' : ' cp-card--closed'}`}>
-                <div className="app-card-head">
-                  <div>
-                    <p className="app-company">{p.name}</p>
-                    {p.description && <p className="app-position">{p.description}</p>}
-                  </div>
-                  <span className={`status-badge status-badge--${p.is_open ? 'success' : 'muted'}`}>{p.is_open ? 'เปิดรับสมัคร' : 'ปิดรับสมัคร'}</span>
-                </div>
-
-                <div className="cp-stats">
-                  <div className="cp-stat">
-                    <p className="pending-label">ยืนยันสิทธิ์แล้ว / จำนวนที่เปิดรับ</p>
-                    <p className="cp-stat-value">
-                      {confirmed} / {p.quota ?? 'ไม่ระบุ'}
-                    </p>
-                    {p.quota ? (
-                      <div className="cp-bar" aria-hidden="true">
-                        <div className={`cp-bar-fill${full ? ' cp-bar-fill--full' : ''}`} style={{ width: `${percent}%` }} />
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="cp-stat">
-                    <p className="pending-label">ผู้สมัครที่ผ่านการอนุมัติ</p>
-                    <p className="cp-stat-value">{applicants} คน</p>
-                  </div>
-                </div>
-
-                {full && p.is_open && <p className="cp-full-hint">ยืนยันสิทธิ์ครบตามจำนวนแล้ว — ถ้าไม่รับเพิ่ม กด "ปิดรับสมัคร" ได้</p>}
-
-                <div className="app-actions pending-actions">
-                  {/* ลบได้เฉพาะตำแหน่งที่ยังไม่มีผู้สมัคร (มีแล้วให้ปิดรับสมัครแทน) */}
-                  {applicants === 0 && (
-                    <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => remove(p)}>ลบ</button>
-                  )}
-                  <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setEditing(p); setNotice(''); }}>แก้ไข</button>
-                  <button type="button" className={`app-btn cm-small-btn ${p.is_open ? 'pending-btn-cancel' : 'app-btn--primary'}`} onClick={() => toggleOpen(p)}>
-                    {p.is_open ? 'ปิดรับสมัคร' : 'เปิดรับสมัคร'}
-                  </button>
-                </div>
-              </li>
-            );
-          })}
+          {positions.map((p) => (
+            <PositionCard key={p.id} position={p} fullHint={'ยืนยันสิทธิ์ครบตามจำนวนแล้ว — ถ้าไม่รับเพิ่ม กด "ปิดรับสมัคร" ได้'}>
+              <div className="app-actions pending-actions">
+                {/* ลบได้เฉพาะตำแหน่งที่ยังไม่มีผู้สมัคร (มีแล้วให้ปิดรับสมัครแทน) */}
+                {getPositionStats(p.id).applicants === 0 && (
+                  <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => remove(p)}>ลบ</button>
+                )}
+                <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setEditing(p); setNotice(''); }}>แก้ไข</button>
+                <button type="button" className={`app-btn cm-small-btn ${p.is_open ? 'pending-btn-cancel' : 'app-btn--primary'}`} onClick={() => toggleOpen(p)}>
+                  {p.is_open ? 'ปิดรับสมัคร' : 'เปิดรับสมัคร'}
+                </button>
+              </div>
+            </PositionCard>
+          ))}
         </ul>
       )}
 
