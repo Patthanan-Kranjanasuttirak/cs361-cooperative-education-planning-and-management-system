@@ -13,7 +13,7 @@ export async function applications(actor, filters = {}, db = { query }) {
   const studentId = filters.student_id ?? null;
   const { rows } = await db.query(`SELECT a.*,c.name AS company_name,p.name AS position_name,p.company_id,t.code AS term,
     json_build_object('student_id',s.student_id,'user_id',u.user_id,'student_code',u.username,
-      'th_name',u.th_name,'gpax',s.gpax::float8,'email',u.email,'phone',u.phone,'advisor_name',advisor.th_name) AS student,
+      'th_name',u.th_name,'gpax',s.gpax::float8,'curriculum',s.curriculum,'email',u.email,'phone',u.phone,'advisor_name',advisor.th_name) AS student,
     s.transcript_s3_key,
     COALESCE((SELECT json_agg(json_build_object('review_id',r.review_id,'reviewer_id',r.reviewer_id,
       'reviewer_name',reviewer.th_name,'reviewer_role',reviewer.role,'status',r.status,'comment',r.comment,'created_at',r.created_at) ORDER BY r.review_id)

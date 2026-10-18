@@ -186,6 +186,34 @@ test('course grades and declarations persist, reload through auth, and respect s
   assert.deepEqual(rows[0], body);
 });
 
+test('company logo uploads persist through profile save, respect ownership, and serve public images safely', async () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSAAAAABJRU5ErkJggg==', 'base64');
+  const options = { method:'POST', raw:png, headers:{'Content-Type':'image/png'} };
+  assert.equal((await request('/company/logo', null, options)).status, 401);
+  assert.equal((await request('/company/logo', accounts.staff.token, options)).status, 403);
+  assert.equal((await request('/company/logo', accounts.integrationCompany.token, { ...options, raw:pdf })).status, 422);
+  assert.equal((await request('/company/logo', accounts.integrationCompany.token, { ...options, raw:Buffer.alloc(2 * 1024 * 1024 + 1) })).status, 413);
+  const upload = await ok('/company/logo', accounts.integrationCompany.token, options, 201);
+  const profile = await ok('/company/profile', accounts.integrationCompany.token);
+  assert.match(upload.url, new RegExp(`^/company-logos/${profile.company_id}/logo-`));
+  assert.equal((await request(upload.url)).status, 404, 'Uncommitted logo uploads are not published');
+  assert.equal((await request(`/companies/${profile.company_id}`, accounts.otherCompany.token, {method:'PUT',body:{logo:upload.url}})).status, 403);
+  await ok('/company/profile', accounts.integrationCompany.token, {method:'PUT',body:{logo:upload.url}});
+  assert.equal((await ok('/company/profile', accounts.integrationCompany.token)).logo, upload.url);
+  const image = await fetch(base + upload.url);
+  assert.equal(image.status, 200);
+  assert.match(image.headers.get('content-type'), /^image\/png/);
+  assert.equal(image.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(image.headers.get('content-security-policy'), /^sandbox;/);
+  assert.deepEqual(Buffer.from(await image.arrayBuffer()), png);
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="orange"/></svg>');
+  const vector = await ok('/company/logo', accounts.integrationCompany.token, {method:'POST',raw:svg,headers:{'Content-Type':'image/svg+xml'}}, 201);
+  await ok('/company/profile', accounts.integrationCompany.token, {method:'PUT',body:{logo:vector.url}});
+  assert.equal((await fetch(base + vector.url)).status, 200);
+  assert.equal((await request(upload.url)).status, 404, 'Only the currently saved logo is served');
+  assert.equal((await request(`/company-logos/${profile.company_id}/${encodeURIComponent('../.env')}`)).status, 404);
+});
+
 test('duplicate concurrent submissions, unauthorized reviews and concurrent approve/reject', async () => {
   const resume = await upload(student.token, 'resume');
   const body = { position_id: positions[0].position_id, resume_s3_key: resume.key };
@@ -202,6 +230,7 @@ test('duplicate concurrent submissions, unauthorized reviews and concurrent appr
   ]);
   assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
   const detail = await ok(`/applications/${application.application_id}`, student.token);
+  assert.equal(detail.student.curriculum, '66', 'Application cards must display the saved curriculum');
   assert.equal(detail.reviews.length, 1); assert.equal(detail.history.length, 2);
   assert.equal((await request(`/applications/${application.application_id}`, accounts.otherStudent.token)).status, 404);
   assert.equal((await request(`/applications/${application.application_id}`, accounts.otherCompany.token)).status, 404);

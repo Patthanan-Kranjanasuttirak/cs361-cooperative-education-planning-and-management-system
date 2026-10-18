@@ -58,6 +58,10 @@ add('/companies/{id}','delete','Companies','Staff: ลบเมื่อไม�
 add('/staff/companies/{id}','get','Companies','Staff: บริษัทพร้อมรายชื่อผู้ประสานงาน',ref('Company'));
 add('/company/profile','get','Companies','Company: บริษัทของตนเองพร้อมผู้ประสานงาน',ref('Company'));
 add('/company/profile','put','Companies','Company: บันทึกบริษัทของตนเอง',ref('Company'),'CompanyWrite');
+add('/company/logo','post','Companies','Company: อัปโหลดโลโก้ PNG/JPG/WEBP/SVG ไม่เกิน 2 MB (development only)',record({url:string(255)},['url']),null,{status:201});
+paths['/api/company/logo'].post.requestBody = {required:true,content:Object.fromEntries(['image/png','image/jpeg','image/webp','image/svg+xml'].map((type) => [type,{schema:{type:'string',format:'binary'}}]))};
+add('/company-logos/{companyId}/{filename}','get','Companies','โลโก้สาธารณะที่บันทึกไว้กับบริษัท (development only)',null,null,{public:true,parameters:[{name:'companyId',in:'path',required:true,schema:integer()},{name:'filename',in:'path',required:true,schema:string()}]});
+paths['/api/company-logos/{companyId}/{filename}'].get.responses[200] = {description:'Company logo image',content:Object.fromEntries(['image/png','image/jpeg','image/webp','image/svg+xml'].map((type) => [type,{schema:{type:'string',format:'binary'}}]))};
 for (const prefix of ['/positions','/company/positions']) {
   add(prefix,'get','Positions','Staff/company: ตำแหน่งตามสิทธิ์',array('Position'),null,{parameters:prefix==='/positions' ? [{name:'company_id',in:'query',schema:integer()}] : []});
   add(prefix,'post','Positions','เพิ่มตำแหน่ง (staff ระบุ company_id; company ใช้บริษัทตนเอง)',ref('Position'),'PositionWrite',{status:201});

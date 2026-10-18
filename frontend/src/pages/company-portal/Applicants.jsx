@@ -29,13 +29,16 @@ const formatDate = (iso) => new Date(iso).toLocaleDateString('th-TH', { day: 'nu
 
 export default function Applicants() {
   const { user } = useAuth();
-  const { data: positions } = useApi('/company/positions');
-  const { data: activeTerm } = useApi('/terms/active', null);
-  const { data: applicants, reload, loading, error } = useApi('/company/applications');
+  const { data: allPositions, loading: positionsLoading, error: positionsError } = useApi('/company/positions');
+  const { data: activeTerm, loading: termLoading, error: termError } = useApi('/terms/active', null);
+  const { data: applicants, reload, loading: applicantsLoading, error: applicantsError } = useApi(activeTerm ? `/company/applications?term_id=${activeTerm.term_id}` : null);
+  const positions = allPositions.filter((p) => p.term_id == null || p.term_id === activeTerm?.term_id);
+  const loading = positionsLoading || termLoading || applicantsLoading;
+  const error = positionsError || termError || applicantsError;
   const [filter, setFilter] = useState('approved');
   const [positionId, setPositionId] = useState('');
   const [notice, setNotice] = useState('');
-
+  const [deciding, setDeciding] = useState(false);
 
   const positionOf = (id) => positions.find((p) => p.id === id);
   const acceptedCount = (id) => applicants.filter((a) => a.position_id === id && ACCEPTED_STATUSES.includes(a.status)).length;
@@ -45,6 +48,7 @@ export default function Applicants() {
   const visible = inPosition.filter(activeFilter.match);
 
   const decide = async (app, decision) => {
+    if (deciding) return;
     const position = positionOf(app.position_id);
     const name = app.student.th_name;
     let message =
@@ -56,10 +60,12 @@ export default function Applicants() {
     }
     message += '\n\nเปลี่ยนแปลงภายหลังไม่ได้';
     if (!window.confirm(message)) return;
+    setDeciding(true);
     try {
       await api(`/company/applications/${app.application_id}/decision`, { method: 'PATCH', body: { status: decision } });
-      await reload(); setNotice('บันทึกผลการคัดเลือกแล้ว');
+      await reload(); setNotice(decision === 'accepted' ? `${name} ผ่านการคัดเลือกแล้ว — รอนักศึกษายืนยันสิทธิ์` : `${name} ไม่ผ่านการคัดเลือก`);
     } catch (err) { setNotice(err.message); }
+    finally { setDeciding(false); }
   };
 
   if (!user.company_id) {
@@ -112,7 +118,7 @@ export default function Applicants() {
                 <div>
                   <p className="app-company">{app.student.th_name}</p>
                   <p className="pending-student-meta">
-                    รหัส {app.student.student_code} · GPAX <GpaxValue gpax={app.student.gpax} />
+                    รหัส {app.student.student_code} · GPAX <GpaxValue gpax={app.student.gpax} />{app.student.curriculum && ` · หลักสูตร พ.ศ. 25${app.student.curriculum}`}
                   </p>
                 </div>
                 <ApplicationStatusBadge status={app.status} />
@@ -142,8 +148,8 @@ export default function Applicants() {
 
               {app.status === 'approved' ? (
                 <div className="app-actions pending-actions">
-                  <button type="button" className="app-btn app-btn--ghost" onClick={() => decide(app, 'declined')}>ไม่ผ่านการคัดเลือก</button>
-                  <button type="button" className="app-btn app-btn--primary" onClick={() => decide(app, 'accepted')}>ผ่านการคัดเลือก</button>
+                  <button type="button" className="app-btn app-btn--ghost" onClick={() => decide(app, 'declined')} disabled={deciding}>ไม่ผ่านการคัดเลือก</button>
+                  <button type="button" className="app-btn app-btn--primary" onClick={() => decide(app, 'accepted')} disabled={deciding}>ผ่านการคัดเลือก</button>
                 </div>
               ) : (
                 <p className="app-date all-submitted">อาจารย์/เจ้าหน้าที่อนุมัติเมื่อ {formatDate(app.approved_at)}</p>

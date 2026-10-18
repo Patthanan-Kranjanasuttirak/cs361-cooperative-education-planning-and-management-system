@@ -1,8 +1,6 @@
 # cs361-cooperative-education-planning-and-management-system
 cs361 Cooperative Education Planning &amp; Management System
 
-V3: [API และ Workflow](backend/README.md) · [Migration](database/README.md) · [วิธีทดสอบและบัญชี local](TESTING_GUIDE.md)
-
 **Project Vision**
 - สร้างระบบกลางสำหรับจัดการแผนสหกิจศึกษาของนักศึกษา ตั้งแต่ข้อมูลนักศึกษาและสถานประกอบการ การเสนอหรือเลือกแหล่งฝึก การสมัคร/พิจารณา การอนุมัติแผน การติดตามสถานะและกำหนดการ ไปจนถึงข้อมูลสรุปเพื่อสนับสนุนการวางแผนและติดตามในระดับหลักสูตรหรือสาขาวิชา
 
