@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/useAuth';
 import { useApi } from '../../hooks/useApi';
 import { api } from '../../services/api';
+import PositionCard from '../../components/PositionCard';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
@@ -51,7 +52,7 @@ function PositionDialog({ initial, positions, termLabel, onSave, onClose }) {
     if (Object.keys(nextErrors).length > 0) return;
     setSaving(true);
     try { await onSave({ name: form.name.trim(), description: form.description.trim() || null, quota: form.quota === '' ? null : Number(form.quota) }); }
-    catch (error) { setErrors((previous) => ({ ...previous, submit:error.message })); }
+    catch (error) { setErrors((previous) => ({ ...previous, submit: error.message })); }
     finally { setSaving(false); }
   };
 
@@ -105,15 +106,15 @@ export default function CompanyPositions() {
     return { applicants: apps.length, confirmed: apps.filter((a) => a.status === 'confirmed').length };
   };
   const handleSave = async (data) => {
-    const body = editing === 'new' ? { ...data, term_id:activeTerm.term_id } : data;
-    await api(editing === 'new' ? '/company/positions' : `/company/positions/${editing.id}`, { method:editing === 'new' ? 'POST' : 'PUT', body });
+    const body = editing === 'new' ? { ...data, term_id: activeTerm.term_id } : data;
+    await api(editing === 'new' ? '/company/positions' : `/company/positions/${editing.id}`, { method: editing === 'new' ? 'POST' : 'PUT', body });
     await reload(); setEditing(null); setNotice(`บันทึกตำแหน่ง ${data.name} แล้ว`);
   };
   const toggleOpen = async (p) => {
     if (busy || (p.is_open && !window.confirm(`ปิดรับสมัครตำแหน่ง ${p.name}?\n\nนักศึกษาจะสมัครตำแหน่งนี้เพิ่มไม่ได้ แต่ผู้สมัครเดิมยังพิจารณาได้ตามปกติ`))) return;
     setBusy(true);
     try {
-      await api(`/company/positions/${p.id}`, { method:'PATCH', body:{is_open:!p.is_open} });
+      await api(`/company/positions/${p.id}`, { method: 'PATCH', body: { is_open: !p.is_open } });
       await reload(); setNotice(`${p.is_open ? 'ปิด' : 'เปิด'}รับสมัครตำแหน่ง ${p.name} แล้ว`);
     } catch (error) { setNotice(error.message); }
     finally { setBusy(false); }
@@ -121,7 +122,7 @@ export default function CompanyPositions() {
   const remove = async (p) => {
     if (busy || !window.confirm(`ลบตำแหน่ง ${p.name}?`)) return;
     setBusy(true);
-    try { await api(`/company/positions/${p.id}`, {method:'DELETE'}); await reload(); setNotice(`ลบตำแหน่ง ${p.name} แล้ว`); }
+    try { await api(`/company/positions/${p.id}`, { method: 'DELETE' }); await reload(); setNotice(`ลบตำแหน่ง ${p.name} แล้ว`); }
     catch (error) { setNotice(error.message); }
     finally { setBusy(false); }
   };
@@ -149,53 +150,20 @@ export default function CompanyPositions() {
         <div className="app-empty"><p>ยังไม่มีตำแหน่งในภาคการศึกษานี้</p></div>
       ) : (
         <ul className="app-list">
-          {positions.map((p) => {
-            const { applicants, confirmed } = statsOf(p.id);
-            const full = p.quota != null && confirmed >= p.quota;
-            const percent = p.quota ? Math.min(100, Math.round((confirmed / p.quota) * 100)) : 0;
-            return (
-              <li key={p.id} className={`app-card${p.is_open ? '' : ' cp-card--closed'}`}>
-                <div className="app-card-head">
-                  <div>
-                    <p className="app-company">{p.name}</p>
-                    {p.description && <p className="app-position">{p.description}</p>}
-                  </div>
-                  <span className={`status-badge status-badge--${p.is_open ? 'success' : 'muted'}`}>{p.is_open ? 'เปิดรับสมัคร' : 'ปิดรับสมัคร'}</span>
-                </div>
-
-                <div className="cp-stats">
-                  <div className="cp-stat">
-                    <p className="pending-label">ยืนยันสิทธิ์แล้ว / จำนวนที่เปิดรับ</p>
-                    <p className="cp-stat-value">
-                      {confirmed} / {p.quota ?? 'ไม่ระบุ'}
-                    </p>
-                    {p.quota ? (
-                      <div className="cp-bar" aria-hidden="true">
-                        <div className={`cp-bar-fill${full ? ' cp-bar-fill--full' : ''}`} style={{ width: `${percent}%` }} />
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="cp-stat">
-                    <p className="pending-label">ผู้สมัครที่ผ่านการอนุมัติ</p>
-                    <p className="cp-stat-value">{applicants} คน</p>
-                  </div>
-                </div>
-
-                {full && p.is_open && <p className="cp-full-hint">ยืนยันสิทธิ์ครบตามจำนวนแล้ว — ถ้าไม่รับเพิ่ม กด "ปิดรับสมัคร" ได้</p>}
-
-                <div className="app-actions pending-actions">
-                  {/* ลบได้เฉพาะตำแหน่งที่ยังไม่มีผู้สมัคร (มีแล้วให้ปิดรับสมัครแทน) */}
-                  {p.applicant_count === 0 && (
-                    <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => remove(p)} disabled={busy}>ลบ</button>
-                  )}
-                  <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setEditing(p); setNotice(''); }} disabled={busy}>แก้ไข</button>
-                  <button type="button" className={`app-btn cm-small-btn ${p.is_open ? 'pending-btn-cancel' : 'app-btn--primary'}`} onClick={() => toggleOpen(p)} disabled={busy}>
-                    {p.is_open ? 'ปิดรับสมัคร' : 'เปิดรับสมัคร'}
-                  </button>
-                </div>
-              </li>
-            );
-          })}
+          {positions.map((p) => (
+            <PositionCard key={p.id} position={p} stats={statsOf(p.id)} fullHint={'ยืนยันสิทธิ์ครบตามจำนวนแล้ว — ถ้าไม่รับเพิ่ม กด "ปิดรับสมัคร" ได้'}>
+              <div className="app-actions pending-actions">
+                {/* ลบได้เฉพาะตำแหน่งที่ยังไม่มีผู้สมัคร (มีแล้วให้ปิดรับสมัครแทน) */}
+                {p.applicant_count === 0 && (
+                  <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => remove(p)} disabled={busy}>ลบ</button>
+                )}
+                <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setEditing(p); setNotice(''); }} disabled={busy}>แก้ไข</button>
+                <button type="button" className={`app-btn cm-small-btn ${p.is_open ? 'pending-btn-cancel' : 'app-btn--primary'}`} onClick={() => toggleOpen(p)} disabled={busy}>
+                  {p.is_open ? 'ปิดรับสมัคร' : 'เปิดรับสมัคร'}
+                </button>
+              </div>
+            </PositionCard>
+          ))}
         </ul>
       )}
 
