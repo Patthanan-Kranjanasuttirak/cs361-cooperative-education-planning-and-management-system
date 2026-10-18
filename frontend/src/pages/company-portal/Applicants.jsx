@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useApi } from '../../hooks/useApi';
+import { api } from '../../services/api';
+import ApiState from '../../components/ApiState';
+import { useState } from 'react';
 import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
 import DocumentLink from '../../components/DocumentLink';
 import GpaxValue from '../../components/GpaxValue';
 import { useAuth } from '../../context/useAuth';
-import { fetchCompany } from '../../services/companyApi';
 import { formatPhone } from '../../utils/phone';
-import { ACCEPTED_STATUSES, CONTACT_VISIBLE_STATUSES, MOCK_ACTIVE_TERM, MOCK_COMPANY_APPLICANTS } from '../../services/companyPortalMock';
+const ACCEPTED_STATUSES = ['accepted', 'confirmed'];
+const CONTACT_VISIBLE_STATUSES = ['approved', 'accepted', 'confirmed'];
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
@@ -26,20 +29,13 @@ const formatDate = (iso) => new Date(iso).toLocaleDateString('th-TH', { day: 'nu
 
 export default function Applicants() {
   const { user } = useAuth();
-  const [positions, setPositions] = useState([]);
-  const [applicants, setApplicants] = useState(MOCK_COMPANY_APPLICANTS);
+  const { data: positions } = useApi('/company/positions');
+  const { data: activeTerm } = useApi('/terms/active', null);
+  const { data: applicants, reload, loading, error } = useApi('/company/applications');
   const [filter, setFilter] = useState('approved');
   const [positionId, setPositionId] = useState('');
   const [notice, setNotice] = useState('');
 
-  useEffect(() => {
-    if (!user.company_id) return undefined;
-    const controller = new AbortController();
-    fetchCompany(user.company_id, controller.signal)
-      .then((c) => setPositions(c?.positions ?? []))
-      .catch(() => {});
-    return () => controller.abort();
-  }, [user.company_id]);
 
   const positionOf = (id) => positions.find((p) => p.id === id);
   const acceptedCount = (id) => applicants.filter((a) => a.position_id === id && ACCEPTED_STATUSES.includes(a.status)).length;
@@ -48,7 +44,7 @@ export default function Applicants() {
   const inPosition = applicants.filter((a) => !positionId || a.position_id === Number(positionId));
   const visible = inPosition.filter(activeFilter.match);
 
-  const decide = (app, decision) => {
+  const decide = async (app, decision) => {
     const position = positionOf(app.position_id);
     const name = app.student.th_name;
     let message =
@@ -60,9 +56,10 @@ export default function Applicants() {
     }
     message += '\n\nเปลี่ยนแปลงภายหลังไม่ได้';
     if (!window.confirm(message)) return;
-    // TODO: PATCH /api/company/applications/:id/decision { status } — backend เช็กว่าเป็นบริษัทตัวเองและสถานะยังเป็น approved
-    setApplicants((prev) => prev.map((a) => (a.application_id === app.application_id ? { ...a, status: decision } : a)));
-    setNotice(decision === 'accepted' ? `${name} ผ่านการคัดเลือกแล้ว — รอนักศึกษายืนยันสิทธิ์` : `${name} ไม่ผ่านการคัดเลือก`);
+    try {
+      await api(`/company/applications/${app.application_id}/decision`, { method: 'PATCH', body: { status: decision } });
+      await reload(); setNotice('บันทึกผลการคัดเลือกแล้ว');
+    } catch (err) { setNotice(err.message); }
   };
 
   if (!user.company_id) {
@@ -78,9 +75,10 @@ export default function Applicants() {
     <section>
       <div className="app-header">
         <h1 className="app-title">ผู้สมัคร</h1>
-        <span className="app-term">ภาคการศึกษา {MOCK_ACTIVE_TERM}</span>
+        <span className="app-term">ภาคการศึกษา {activeTerm?.code ?? '—'}</span>
       </div>
 
+      <ApiState loading={loading} error={error} />
       {notice && <div className="app-banner">{notice}</div>}
 
       <div className="students-filters" role="tablist">
@@ -114,7 +112,7 @@ export default function Applicants() {
                 <div>
                   <p className="app-company">{app.student.th_name}</p>
                   <p className="pending-student-meta">
-                    รหัส {app.student.student_code} · GPAX <GpaxValue gpax={app.student.gpax} /> · หลักสูตร พ.ศ. 25{app.student.curriculum}
+                    รหัส {app.student.student_code} · GPAX <GpaxValue gpax={app.student.gpax} />
                   </p>
                 </div>
                 <ApplicationStatusBadge status={app.status} />

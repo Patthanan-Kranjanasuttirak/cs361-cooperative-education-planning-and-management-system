@@ -63,3 +63,23 @@ export async function query(text, params) {
   const pool = await getPool();
   return pool.query(text, params);
 }
+
+// Retry the complete transaction, never an individual statement after partial work.
+export async function transaction(work) {
+  const pool = await getPool();
+  for (let attempt = 0; ; attempt++) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '5s'");
+      const result = await work(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (!['40001', '40P01'].includes(error.code) || attempt >= 2) throw error;
+    } finally {
+      client.release();
+    }
+  }
+}

@@ -7,7 +7,6 @@
 อธิบายคร่าวๆ ว่าแต่ละโฟลเดอร์ทำหน้าที่อะไร:
 - `src/assets/` : เก็บไฟล์ภาพในโปรเจค
 - `src/components/` : เก็บ Component ย่อยที่ใช้ซ้ำในหน้าต่างๆ
-- `src/data/` : เก็บไฟล์ข้อมูลจำลอง (เช่น `mockfile.json`)
 - `src/pages/` : เก็บหน้าจอหลักของเว็บ เช่น `home.jsx` (หน้าแรก) และ `detail.jsx` (หน้ารายละเอียด)
 - `src/routes/` : จัดการระบบเส้นทางและการเปลี่ยนหน้า (Routing ด้วย `react-router-dom`)
 - `src/services/` : สำหรับเชื่อมต่อ API หรือดึงข้อมูลภายนอก 
@@ -57,32 +56,20 @@
    cp .env.example .env
 ```
 
-2. เลือก API ที่จะใช้ (เปลี่ยนแค่ `VITE_API_URL` ไม่ต้องแก้โค้ด)
+2. ใช้ Backend จริงจาก Docker (ดู `BACKEND_PORT` ที่ root) หรือ API Gateway
 
 | ใช้กับ | ค่า `VITE_API_URL` |
 |---|---|
-| Mock API ในเครื่อง | `http://localhost:5099` |
-| API Gateway จริง | `https://xxxx.execute-api.ap-southeast-1.amazonaws.com/prod` |
+| Backend local | `http://localhost:5000/api` (เปลี่ยนพอร์ตตาม `.env`) |
+| API Gateway | `https://xxxx.execute-api.us-east-1.amazonaws.com/prod/api` |
 
-> แก้ `.env` แล้วต้องรัน `npm run dev` ใหม่ ส่วนตอน build ขึ้น S3 ค่า `VITE_API_URL` จะถูกฝังลงไปในไฟล์ ถ้าเปลี่ยน URL ต้อง build ใหม่
+เมื่อรันผ่าน Compose จะส่ง URL จาก `BACKEND_PORT` ให้อัตโนมัติ
+เมื่อรัน `npm run dev` นอก Docker ให้ตั้งค่าใน `frontend/.env`
+แก้ URL แล้ว restart dev server; production ต้อง build ใหม่
 
-### 🧪 Mock API (ทดสอบโดยไม่ต้องมี Backend)
-`mock-api.mjs` จำลอง API ตาม contract เดียวกับ Lambda โดยอ่านข้อมูลจาก `src/data/mockfile.json` (แก้ไฟล์แล้วเห็นผลทันที)
-
-```bash
-   # Terminal 1: เปิด Mock API ที่ http://localhost:5099
-   npm run mock-api
-
-   # Terminal 2: เปิดหน้าเว็บ (ตั้ง VITE_API_URL=http://localhost:5099 ใน .env)
-   npm run dev
-```
-
-| Endpoint | ผลลัพธ์ |
-|---|---|
-| `GET /companies?search=&province=` | `200 { "data": [...], "total": 102 }` (ไม่ส่ง parameter = ทุกบริษัท) |
-| `GET /companies/{id}` | `200 { id, name, logo, description, province, location }` หรือ `404` |
-
-> Mock API ใช้สำหรับพัฒนาในเครื่องเท่านั้น ไม่ถูกรวมไปตอน `npm run build`
+V3 ใช้ `src/services/api.js` ส่ง Bearer token และจัดการ error กลาง
+บัญชี/ใบสมัคร/ผลการตรวจอ่านจาก PostgreSQL จริง ไม่มี mock API แล้ว
+ดู [บัญชี local และวิธีทดสอบ](../TESTING_GUIDE.md) และ [API Specification](../backend/README.md)
 
 ---
 

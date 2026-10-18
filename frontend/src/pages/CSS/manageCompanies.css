@@ -145,6 +145,7 @@
   justify-content: space-between;
   padding: 1rem 1.5rem;
   border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
 }
 
 .cm-dialog-title {
@@ -168,6 +169,7 @@
 }
 
 .cm-dialog-body {
+  min-height: 0;
   overflow-y: auto;
   padding: 1.25rem 1.5rem;
   display: flex;
@@ -181,6 +183,9 @@
   gap: 0.5rem;
   padding: 0.85rem 1.5rem;
   border-top: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  background-color: #ffffff;
+  border-radius: 0 0 16px 16px;
 }
 
 .cm-textarea {

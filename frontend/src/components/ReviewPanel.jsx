@@ -12,21 +12,25 @@ const DECISION = {
 export default function ReviewPanel({ id, onSubmit, onOpen }) {
   // null = ยังไม่เปิดช่องความเห็น / { decision, comment, error }
   const [draft, setDraft] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const open = (decision) => {
     setDraft({ decision, comment: '', error: '' });
     onOpen?.();
   };
 
-  const submit = () => {
+  const submit = async () => {
+    if (saving) return;
     const comment = draft.comment.trim();
     // ไม่อนุมัติต้องบอกเหตุผล นักศึกษาจะได้รู้ว่าต้องแก้อะไร
     if (draft.decision === 'rejected' && !comment) {
       setDraft({ ...draft, error: 'กรุณาระบุเหตุผลที่ไม่อนุมัติ' });
       return;
     }
-    onSubmit(draft.decision, comment);
-    setDraft(null);
+    setSaving(true);
+    try { if (await onSubmit(draft.decision, comment) !== false) setDraft(null); }
+    catch (error) { setDraft((prev) => ({ ...prev, error: error.message })); }
+    finally { setSaving(false); }
   };
 
   if (!draft) {
@@ -61,7 +65,7 @@ export default function ReviewPanel({ id, onSubmit, onOpen }) {
         <button type="button" className="app-btn pending-btn-cancel" onClick={() => setDraft(null)}>
           ยกเลิก
         </button>
-        <button type="button" className={`app-btn ${DECISION[draft.decision].button}`} onClick={submit}>
+        <button type="button" className={`app-btn ${DECISION[draft.decision].button}`} onClick={submit} disabled={saving}>
           ยืนยัน{DECISION[draft.decision].label}
         </button>
       </div>

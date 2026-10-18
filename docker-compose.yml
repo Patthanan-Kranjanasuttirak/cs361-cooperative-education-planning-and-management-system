@@ -32,6 +32,11 @@ services:
       DB_NAME: ${DB_NAME}
       DB_SSL: "false"        # Postgres ใน Docker ไม่ได้เปิด SSL (RDS ต้องเปิด)
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      AUTH_MODE: ${AUTH_MODE:-development}
+      DEV_AUTH_PASSWORD: ${DEV_AUTH_PASSWORD:-V3-local-only!}
+      DEV_AUTH_SECRET: ${DEV_AUTH_SECRET:-cs361-development-only-change-before-sharing}
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID:-}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:-}
     ports:
       - "${BACKEND_PORT:-5000}:5000"
     volumes:

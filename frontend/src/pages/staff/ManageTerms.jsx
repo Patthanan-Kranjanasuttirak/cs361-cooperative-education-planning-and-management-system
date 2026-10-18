@@ -1,3 +1,6 @@
+import { useApi } from '../../hooks/useApi';
+import { api } from '../../services/api';
+import ApiState from '../../components/ApiState';
 import { useEffect, useState } from 'react';
 import { formatThaiDate } from '../../utils/applicationPeriod';
 import '../CSS/studentProfile.css';
@@ -6,13 +9,6 @@ import '../CSS/pendingApplications.css';
 import '../CSS/manageCompanies.css';
 import '../CSS/manageTerms.css';
 import '../../components/CSS/ApplicationStatusBadge.css';
-
-// MOCK: ยังไม่มี API — TODO: GET /api/terms (2/2569 ตรงกับข้อมูลใน 01-schema.sql)
-const MOCK_TERMS = [
-  { term_id: 1, code: '2/2569', plan_open_at: '2026-08-01', plan_close_at: '2027-01-15', coop_start: '2027-01-18', coop_end: '2027-05-14', is_active: true },
-  { term_id: 2, code: '1/2569', plan_open_at: '2026-01-05', plan_close_at: '2026-05-31', coop_start: '2026-06-15', coop_end: '2026-10-16', is_active: false },
-  { term_id: 3, code: '1/2570', plan_open_at: '2027-01-04', plan_close_at: '2027-05-31', coop_start: '2027-06-14', coop_end: '2027-10-15', is_active: false },
-];
 
 const EMPTY_FORM = { code: '', plan_open_at: '', plan_close_at: '', coop_start: '', coop_end: '' };
 
@@ -55,6 +51,7 @@ function TermDialog({ initial, terms, onSave, onClose }) {
       : EMPTY_FORM
   );
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -72,12 +69,16 @@ function TermDialog({ initial, terms, onSave, onClose }) {
     setErrors((prev) => ({ ...prev, [group]: undefined }));
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
+    if (saving) return;
     const nextErrors = validate(form, terms, initial?.term_id);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    onSave({ ...form, code: form.code.trim() });
+    setSaving(true);
+    try { await onSave({ ...form, code: form.code.trim() }); }
+    catch (error) { setErrors((prev) => ({ ...prev, submit: error.message })); }
+    finally { setSaving(false); }
   };
 
   const dateClass = (group) => `profile-input${errors[group] ? ' profile-input--error' : ''}`;
@@ -131,8 +132,9 @@ function TermDialog({ initial, terms, onSave, onClose }) {
         </div>
 
         <div className="cm-dialog-foot">
-          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose}>ยกเลิก</button>
-          <button type="submit" className="app-btn app-btn--primary">บันทึก</button>
+          {errors.submit && <p className="profile-error" role="alert">{errors.submit}</p>}
+          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose} disabled={saving}>ยกเลิก</button>
+          <button type="submit" className="app-btn app-btn--primary" disabled={saving}>บันทึก</button>
         </div>
       </form>
     </div>
@@ -140,39 +142,23 @@ function TermDialog({ initial, terms, onSave, onClose }) {
 }
 
 export default function ManageTerms() {
-  const [terms, setTerms] = useState(MOCK_TERMS);
+  const { data: terms, setData: setTerms, loading, error } = useApi('/terms');
   // null = ปิด, 'new' = เพิ่มใหม่, object = แก้ไขภาคนั้น
   const [editing, setEditing] = useState(null);
   const [notice, setNotice] = useState('');
 
   const sorted = [...terms].sort((a, b) => sortKey(b.code) - sortKey(a.code));
-  const active = terms.find((t) => t.is_active);
 
-  const handleSave = (form) => {
-    if (editing === 'new') {
-      // TODO: POST /api/terms — ภาคใหม่ยังไม่เปิดใช้งาน (is_active = false)
-      const term_id = Math.max(0, ...terms.map((t) => t.term_id)) + 1;
-      setTerms((prev) => [...prev, { term_id, ...form, is_active: false }]);
-      setNotice(`เพิ่มภาคการศึกษา ${form.code} แล้ว`);
-    } else {
-      // TODO: PUT /api/terms/:id
-      setTerms((prev) => prev.map((t) => (t.term_id === editing.term_id ? { ...t, ...form } : t)));
-      setNotice(`บันทึกภาคการศึกษา ${form.code} แล้ว`);
-    }
-    setEditing(null);
+  const handleSave = async (form) => {
+    try {
+      setTerms(await api(editing === 'new' ? '/terms' : `/terms/${editing.term_id}`, { method: editing === 'new' ? 'POST' : 'PUT', body: form }));
+      setEditing(null); setNotice(`บันทึกภาคการศึกษา ${form.code} แล้ว`);
+    } catch (err) { setNotice(err.message); throw err; }
   };
-
-  const activate = (term) => {
-    const ok = window.confirm(
-      `ตั้งภาค ${term.code} เป็นภาคที่ใช้งาน?\n\n` +
-        (active ? `ภาค ${active.code} จะถูกปิดการใช้งาน ` : '') +
-        'นักศึกษาจะเห็นและสมัครได้เฉพาะตำแหน่งของภาคนี้'
-    );
-    if (!ok) return;
-    // TODO: POST /api/terms/:id/activate — backend ปิดภาคเดิมแล้วเปิดภาคนี้ใน transaction เดียว
-    //   (unique index one_active_term ใน DB กันไม่ให้เปิดพร้อมกัน 2 ภาค)
-    setTerms((prev) => prev.map((t) => ({ ...t, is_active: t.term_id === term.term_id })));
-    setNotice(`ตั้งภาค ${term.code} เป็นภาคที่ใช้งานแล้ว`);
+  const activate = async (term) => {
+    if (!window.confirm(`ตั้งภาค ${term.code} เป็นภาคที่ใช้งาน?`)) return;
+    try { setTerms(await api(`/terms/${term.term_id}/activate`, { method: 'POST' })); setNotice('ตั้งภาคที่ใช้งานแล้ว'); }
+    catch (err) { setNotice(err.message); }
   };
 
   return (
@@ -184,6 +170,7 @@ export default function ManageTerms() {
         </button>
       </div>
 
+      <ApiState loading={loading} error={error} />
       {notice && <div className="app-banner">{notice}</div>}
 
       <ul className="app-list">

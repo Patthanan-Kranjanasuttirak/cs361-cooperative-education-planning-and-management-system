@@ -1,4 +1,4 @@
--- สร้างตารางทั้งหมดของระบบและข้อมูลเริ่มต้นของสถานประกอบการและตำแหน่งที่เปิดรับ
+-- Schema V3 (#31) และข้อมูลเริ่มต้นของสถานประกอบการและตำแหน่งที่เปิดรับ
 -- ไฟล์นี้จะถูกรันอัตโนมัติครั้งแรกที่ container PostgreSQL ถูกสร้าง (docker-entrypoint-initdb.d)
 -- ข้อมูลมาจาก frontend/src/data/mockfile.json (ตำแหน่งงาน ช่วงเวลาเปิดรับสมัคร และภาคการศึกษาเป็นข้อมูลตัวอย่าง)
 --
@@ -10,20 +10,18 @@
 --   submitted | approved → withdrawn       นักศึกษาถอนใบสมัครเอง
 
 -- ผู้ใช้ทุกบทบาท
--- auth_provider = 'local' ใช้ password_hash, 'cognito' ใช้ cognito_sub
+-- การยืนยันตัวตนอยู่ที่ผู้ให้บริการภายนอก ไม่เก็บรหัสผ่านในฐานข้อมูลนี้
 CREATE TABLE IF NOT EXISTS users (
     user_id       SERIAL PRIMARY KEY,
-    auth_provider VARCHAR(10)  NOT NULL DEFAULT 'local' CHECK (auth_provider IN ('local', 'cognito')),
+    auth_provider VARCHAR(10)  NOT NULL,
     username      VARCHAR(50)  NOT NULL UNIQUE,
-    password_hash VARCHAR(255),
     cognito_sub   VARCHAR(64)  UNIQUE,
     role          VARCHAR(20)  NOT NULL CHECK (role IN ('student', 'advisor', 'staff', 'company')),
     th_name       VARCHAR(255) NOT NULL,
     en_name       VARCHAR(255) NOT NULL,
-    email         VARCHAR(255) NOT NULL UNIQUE,
-    is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
-    CHECK ((auth_provider = 'local' AND password_hash IS NOT NULL)
-        OR (auth_provider = 'cognito' AND cognito_sub IS NOT NULL))
+    email         VARCHAR(255) NOT NULL,
+    phone         VARCHAR(20),
+    is_active     BOOLEAN      NOT NULL DEFAULT TRUE
 );
 
 -- ภาคการศึกษาที่เปิดรับแผนสหกิจ (เปิดใช้งานได้ทีละภาค)
@@ -55,17 +53,16 @@ CREATE TABLE IF NOT EXISTS companies (
 
 CREATE INDEX IF NOT EXISTS idx_companies_province ON companies (province);
 
--- ตำแหน่งผูกกับภาคการศึกษาเสมอ ถ้าเปิดตำแหน่งเดิมในภาคถัดไปให้สร้างแถวใหม่
+-- term_id เป็น NULL ได้สำหรับตำแหน่งที่ไม่ผูกกับภาคการศึกษา
 -- quota เป็นข้อมูลแสดงผลเท่านั้น บริษัทกดปิดรับเองผ่าน is_open
 CREATE TABLE IF NOT EXISTS positions (
     position_id SERIAL PRIMARY KEY,
     company_id  INTEGER      NOT NULL REFERENCES companies (company_id) ON DELETE CASCADE,
-    term_id     INTEGER      NOT NULL REFERENCES terms (term_id),
     name        VARCHAR(255) NOT NULL,
     description TEXT,
     quota       INTEGER CHECK (quota IS NULL OR quota >= 0),
-    is_open     BOOLEAN      NOT NULL DEFAULT TRUE,
-    UNIQUE (position_id, term_id) -- ให้ applications อ้างคู่ (position_id, term_id) ได้
+    term_id     INTEGER REFERENCES terms (term_id),
+    is_open     BOOLEAN      NOT NULL DEFAULT TRUE
 );
 
 CREATE INDEX IF NOT EXISTS idx_positions_company_id ON positions (company_id);
@@ -76,8 +73,10 @@ CREATE TABLE IF NOT EXISTS students (
     user_id           INTEGER NOT NULL UNIQUE REFERENCES users (user_id) ON DELETE CASCADE,
     gpax              NUMERIC(3, 2) CHECK (gpax IS NULL OR gpax BETWEEN 0 AND 4),
     transcript_s3_key VARCHAR(512),
-    phone             VARCHAR(10) CHECK (phone IS NULL OR phone ~ '^0[0-9]{9}$'), -- ให้สถานประกอบการติดต่อนัดสัมภาษณ์
-    advisor_id        INTEGER REFERENCES users (user_id) ON DELETE SET NULL
+    advisor_id        INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
+    curriculum        VARCHAR(2) CHECK (curriculum IN ('61', '66')),
+    course_grades     JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(course_grades) = 'object'),
+    declarations      JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(declarations) = 'object')
 );
 
 CREATE INDEX IF NOT EXISTS idx_students_advisor_id ON students (advisor_id);
@@ -86,27 +85,23 @@ CREATE INDEX IF NOT EXISTS idx_students_advisor_id ON students (advisor_id);
 CREATE TABLE IF NOT EXISTS company_users (
     user_id    INTEGER PRIMARY KEY REFERENCES users (user_id) ON DELETE CASCADE,
     company_id INTEGER NOT NULL REFERENCES companies (company_id) ON DELETE CASCADE,
-    job_title  VARCHAR(150),
-    -- มือถือ 10 หลัก หรือเบอร์สำนักงาน 9 หลัก (เก็บเฉพาะตัวเลข)
-    phone      VARCHAR(10) NOT NULL CHECK (phone ~ '^0[0-9]{8,9}$')
+    job_title  VARCHAR(150)
 );
 
 CREATE INDEX IF NOT EXISTS idx_company_users_company_id ON company_users (company_id);
 
--- term_id เก็บซ้ำกับ positions.term_id เพื่อใช้ทำ unique index รายภาค
--- composite FK บังคับให้ตรงกับภาคของตำแหน่งเสมอ (backend ต้องดึง term_id จาก position ไม่รับจาก client)
+-- ใบสมัครอ้างภาคการศึกษาและตำแหน่งแยกกัน เพื่อรองรับตำแหน่งที่ term_id เป็น NULL
 CREATE TABLE IF NOT EXISTS applications (
     application_id SERIAL PRIMARY KEY,
     student_id     INTEGER     NOT NULL REFERENCES students (student_id) ON DELETE CASCADE,
-    term_id        INTEGER     NOT NULL,
-    position_id    INTEGER     NOT NULL,
+    term_id        INTEGER     NOT NULL REFERENCES terms (term_id),
+    position_id    INTEGER     NOT NULL REFERENCES positions (position_id),
     status         VARCHAR(20) NOT NULL DEFAULT 'submitted'
                    CHECK (status IN ('submitted', 'approved', 'rejected', 'accepted',
                                      'declined', 'confirmed', 'released', 'withdrawn')),
     resume_s3_key  VARCHAR(512),
     submitted_at   TIMESTAMPTZ DEFAULT NOW(),
-    FOREIGN KEY (position_id, term_id) REFERENCES positions (position_id, term_id),
-    UNIQUE (student_id, position_id)
+    UNIQUE (student_id, term_id, position_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_applications_position_id ON applications (position_id);

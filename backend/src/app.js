@@ -3,6 +3,9 @@ import cors from "cors";
 import { query } from "./config/db.js";
 import { setupSwagger } from "./config/swagger.js";
 import companiesRouter from "./routes/companies.js";
+import v3Router from './routes/v3.js';
+import documentsRouter from './routes/documents.js';
+import { randomUUID } from 'node:crypto';
 import { notFound, errorHandler } from "./middlewares/errorHandler.js";
 
 // รวม Middleware และ Routes ของระบบ (ไม่มี app.listen ที่นี่)
@@ -11,7 +14,8 @@ import { notFound, errorHandler } from "./middlewares/errorHandler.js";
 const app = express();
 
 app.use(cors({ origin: process.env.CORS_ORIGIN }));
-app.use(express.json());
+app.use((req, res, next) => { req.requestId = randomUUID(); res.set('X-Request-ID', req.requestId); next(); });
+app.use(express.json({ limit: '256kb' }));
 
 setupSwagger(app); // หน้า docs ที่ /api/docs
 
@@ -20,29 +24,13 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.get("/api/db-check", async (_req, res) => {
-  try {
     const { rows } = await query("SELECT NOW() AS now");
     res.json({ database: "connected", now: rows[0].now });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ database: "error", message: err.message });
-  }
-});
-
-app.get("/api/users", async (_req, res) => {
-  try {
-    const { rows } = await query(
-      // ไม่ส่ง password_hash / cognito_sub ออกไป
-      "SELECT user_id, username, role, th_name, en_name, email, is_active FROM users ORDER BY user_id"
-    );
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
-  }
 });
 
 app.use("/api/companies", companiesRouter);
+app.use('/api/documents', documentsRouter);
+app.use('/api', v3Router);
 
 app.use(notFound);
 app.use(errorHandler);
