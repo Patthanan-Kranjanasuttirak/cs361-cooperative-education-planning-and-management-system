@@ -3,7 +3,9 @@ import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
 import DocumentLink from '../../components/DocumentLink';
 import GpaxValue from '../../components/GpaxValue';
 import { COOP_CRITERIA } from '../../config/coopCriteria';
-import { MOCK_STUDENTS, MOCK_STUDENT_DETAILS } from '../../services/advisorMock';
+import { useApi } from '../../hooks/useApi';
+import ApiState from '../../components/ApiState';
+import CourseGradesFields from '../../components/CourseGradesFields';
 import { formatPhone } from '../../utils/phone';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
@@ -13,15 +15,17 @@ import '../CSS/studentDetail.css';
 const formatDateTime = (iso) =>
   new Date(iso).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-// รายละเอียดนักศึกษาในความดูแล — TODO: GET /api/advisor/students/:id (backend เช็ก advisor_id เอง)
+// รายละเอียดจาก API ที่ตรวจอาจารย์เจ้าของข้อมูลแล้ว
 export default function StudentDetail() {
   const { studentId } = useParams();
-  const summary = MOCK_STUDENTS.find((s) => String(s.student_id) === studentId);
-  const detail = MOCK_STUDENT_DETAILS[studentId];
+  const { data: detail, loading, error } = useApi(`/advisor/students/${studentId}`, null);
+  const summary = detail;
 
   const back = (
     <Link to="/advisor/students" className="sd-back">← นักศึกษาในความดูแล</Link>
   );
+
+  if (loading || error) return <section>{back}<ApiState loading={loading} error={error} /></section>;
 
   if (!summary || !detail) {
     return (
@@ -35,7 +39,6 @@ export default function StudentDetail() {
   const pending = detail.applications.filter((a) => a.status === 'submitted').length;
   const info = [
     ['รหัสนักศึกษา', summary.student_code],
-    ['หลักสูตร', `หลักสูตร พ.ศ. 25${detail.curriculum}`],
     ['GPAX', <GpaxValue key="gpax" gpax={summary.gpax} />],
     ['อีเมล', <a key="email" href={`mailto:${detail.email}`} className="sd-link">{detail.email}</a>],
     ['เบอร์โทรศัพท์', detail.phone ? <a key="phone" href={`tel:${detail.phone}`} className="sd-link">{formatPhone(detail.phone)}</a> : <span key="phone" className="sd-muted">ยังไม่กรอก</span>],
@@ -63,22 +66,11 @@ export default function StudentDetail() {
 
         <div className="profile-section">
           <p className="profile-section-title">คุณสมบัติสหกิจศึกษา</p>
-          {detail.eligibility ? (
-            <>
-              <p className="sd-eligibility">
-                ส่งให้เจ้าหน้าที่ตรวจสอบแล้ว เมื่อ {formatDateTime(detail.eligibility.submitted_at)}
-              </p>
-              <p className="sd-muted">
-                เกรดเฉลี่ยกลุ่มวิชา {detail.eligibility.group_average.toFixed(2)} (เกณฑ์ไม่ต่ำกว่า {COOP_CRITERIA.minGroupAverage.toFixed(2)})
-              </p>
-              <div className="pending-docs">
-                <DocumentLink url={detail.eligibility.transcript_url} label="ดู Transcript" />
-              </div>
-            </>
-          ) : (
-            <p className="sd-muted sd-gap">ยังไม่ได้ส่งข้อมูลคุณสมบัติ</p>
-          )}
+          <p className="sd-muted">เกณฑ์ GPAX ไม่ต่ำกว่า {COOP_CRITERIA.minGpax.toFixed(2)} และผู้ตรวจตรวจคุณสมบัติรายวิชาจาก Transcript</p>
+          <DocumentLink url={detail.transcript_s3_key ? `/documents/${encodeURIComponent(detail.transcript_s3_key)}` : null} label="ดู Transcript" />
         </div>
+
+        <CourseGradesFields curriculum={detail.curriculum} grades={detail.course_grades ?? {}} disabled />
 
         <div className="profile-section">
           <div className="sd-section-head">

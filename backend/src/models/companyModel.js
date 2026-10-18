@@ -3,16 +3,17 @@ import { query } from "../config/db.js";
 // คำสั่ง SQL ของตาราง companies และ positions
 // ใช้ $1, $2 เสมอ (ห้ามต่อ string) เพื่อป้องกัน SQL injection
 
-// ตำแหน่งของภาคการศึกษาที่เปิดใช้งานอยู่ (terms.is_active) — ภาคอื่นไม่แสดงบนหน้าเว็บ
+// แสดงตำแหน่งที่ไม่ผูกภาคการศึกษา และตำแหน่งของภาคที่เปิดใช้งานอยู่
 const ACTIVE_POSITIONS = `
   active_positions AS (
-    SELECT p.* FROM positions p JOIN terms t ON t.term_id = p.term_id WHERE t.is_active
+    SELECT p.* FROM positions p LEFT JOIN terms t ON t.term_id = p.term_id
+    WHERE p.term_id IS NULL OR t.is_active
   )
 `;
 
 // คอลัมน์ที่ส่งกลับไปให้หน้าเว็บ
 // - วันที่แปลงเป็นข้อความ YYYY-MM-DD (ถ้าส่งเป็น DATE ตรง ๆ pg จะแปลงเป็นเวลา UTC แล้ววันเพี้ยนได้)
-// - positions รวมเป็น array ของ { id, name, description, quota, is_open } เฉพาะภาคการศึกษาที่ active เรียงตามลำดับที่เพิ่ม
+// - positions รวมตำแหน่งที่ไม่ผูกภาคและตำแหน่งของภาคที่ active เรียงตามลำดับที่เพิ่ม
 const COMPANY_COLUMNS = `
   c.company_id AS id, c.name, c.logo, c.description, c.province, c.location,
   to_char(c.application_start, 'YYYY-MM-DD') AS application_start,

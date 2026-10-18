@@ -1,7 +1,9 @@
+import { api, uploadDocument } from '../../services/api';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 import FileInput from '../../components/FileInput';
+import SaveSuccessDialog from '../../components/SaveSuccessDialog';
 import { MIN_GPAX, isGpaxEligible } from '../../config/coopRules';
 import { fetchCompanies } from '../../services/companyApi';
 import { formatApplicationPeriod } from '../../utils/applicationPeriod';
@@ -37,7 +39,9 @@ export default function Apply() {
   const [positionId, setPositionId] = useState('');
   const [resume, setResume] = useState(null);
   const [errors, setErrors] = useState({});
-  const [submitted, setSubmitted] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploadedResume, setUploadedResume] = useState(null);
 
   // เฉพาะบริษัทที่อยู่ในช่วงเปิดรับสมัคร และมีตำแหน่งที่ยังเปิดรับ (API คืนเฉพาะตำแหน่งของภาคที่ active)
   useEffect(() => {
@@ -66,7 +70,6 @@ export default function Apply() {
 
   const clearError = (name) => {
     setErrors((prev) => ({ ...prev, [name]: undefined }));
-    setSubmitted(null);
   };
 
   const handleQueryChange = (e) => {
@@ -91,21 +94,27 @@ export default function Apply() {
     clearError('position');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!eligible) return;
+    if (!eligible || saving || submitted) return;
     const nextErrors = validate({ company, positionId, resume });
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
-    // TODO: POST /api/applications { position_id } (term_id ให้ backend ดึงจาก position)
-    //       เรซูเม่: ขอ presigned URL จาก backend แล้วอัปโหลดตรงไป S3 จากนั้นบันทึก resume_s3_key
-    setSubmitted({ company: company.name, position: selectedPosition.name });
+    setSaving(true);
+    try {
+      const document = uploadedResume?.file === resume ? uploadedResume : await uploadDocument(resume, 'resume');
+      setUploadedResume({ ...document, file: resume });
+      await api('/applications', { method: 'POST', body: { position_id: Number(positionId), resume_s3_key: document.key } });
+      setSubmitted(true);
+    } catch (error) { setErrors((prev) => ({ ...prev, submit: error.message })); }
+    finally { setSaving(false); }
   };
 
   return (
     <section>
       <h1 className="profile-title">แบบสมัครสหกิจศึกษา</h1>
+      {submitted && <SaveSuccessDialog title="บันทึกใบสมัครเรียบร้อยแล้ว" to="/student" nextPageLabel="ใบสมัครของฉัน" />}
 
       {/* เช็กเกณฑ์ GPAX ก่อนให้กรอก (backend ต้องเช็กซ้ำตอนรับใบสมัคร) */}
       {user.gpax == null ? (
@@ -125,7 +134,7 @@ export default function Apply() {
       )}
 
       <form className="profile-form" onSubmit={handleSubmit} noValidate>
-        <fieldset className="apply-fieldset-group" disabled={!eligible}>
+        <fieldset className="apply-fieldset-group" disabled={!eligible || saving || submitted}>
           <fieldset className="profile-section">
             <legend className="profile-section-title">เลือกสถานประกอบการและตำแหน่ง</legend>
 
@@ -217,12 +226,8 @@ export default function Apply() {
           </fieldset>
 
           <div className="profile-actions">
-            {submitted && (
-              <p className="profile-saved">
-                ตรวจข้อมูลผ่านแล้ว: {submitted.company} — {submitted.position} (ยังไม่ได้บันทึกลงระบบ เพราะยังไม่ได้เชื่อม API)
-              </p>
-            )}
-            <button type="submit" className="profile-submit">บันทึก</button>
+            {errors.submit && <p className="profile-error" role="alert">{errors.submit}</p>}
+            <button type="submit" className="profile-submit" disabled={saving || submitted}>{saving ? 'กำลังบันทึก…' : submitted ? 'บันทึกแล้ว' : 'บันทึก'}</button>
           </div>
         </fieldset>
       </form>

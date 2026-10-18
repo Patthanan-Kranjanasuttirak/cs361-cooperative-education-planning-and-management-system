@@ -1,198 +1,114 @@
-# CS361 Cooperative Education Plan
+# ทดสอบ V3 API และ Database Integration (#34)
 
-รัน Frontend, Backend และ Database ด้วย Docker Compose คำสั่งเดียว
+## รัน local
 
-| ส่วน | เทคโนโลยี | พอร์ต (บนเครื่องเรา) |
-|---|---|---|
-| Frontend | React 19 + Vite | `5173` |
-| Backend | Node.js 22 + Express + `pg` | `5000` |
-| Database | PostgreSQL 17 | `5432` |
+ต้องมี Docker Desktop และ Python 3 รันคำสั่งจากโฟลเดอร์ที่มี docker-compose.yml
+ครั้งแรกคัดลอก `.env.example` เป็น `.env` แล้วตั้งค่า DB และพอร์ตตามเครื่อง
 
-## โครงสร้างโปรเจกต์
-
-```
-.
-├── docker-compose.yml     # รวมทั้ง 3 service
-├── .env.example           # ตัวอย่างตัวแปรสภาพแวดล้อม
-├── .env                   # ค่าจริง (ห้าม commit)
-├── frontend/              # React + Vite (มี Dockerfile ของตัวเอง)
-├── backend/               # Node.js API
-└── database/              # PostgreSQL + สคริปต์สร้างตาราง
+```sh
+docker compose up -d --build
 ```
 
----
+ถ้ามี volume เก่าต้องรัน [migration V3](database/README.md) ก่อน แล้ว seed บัญชีสำหรับ local:
 
-## วิธีรัน
-
-**ต้องมี:** Docker Desktop (เปิดทิ้งไว้ก่อนรัน)
-
-```bash
-# 1. สร้างไฟล์ .env (ครั้งแรกครั้งเดียว) แล้วแก้รหัสผ่านตามต้องการ
-cp .env.example .env
-
-# 2. build และรันทั้งหมด
-docker compose up --build
+```sh
+docker compose exec -T database sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/seeds/v3-demo.sql
+docker compose up -d --build -V --no-deps backend
+docker compose restart frontend
 ```
 
-เมื่อรันสำเร็จ
+`-V` ต่ออายุเฉพาะ anonymous node_modules ของ backend เพื่อโหลด dependency ใหม่ ไม่ลบ named volume ฐานข้อมูล
+การรัน seed ซ้ำไม่เพิ่มผู้ใช้/ใบสมัครเดิม ไม่เขียนทับข้อมูลที่เปลี่ยนไปแล้ว
 
-| URL | ใช้ทำอะไร |
+## บัญชีทดสอบ
+
+รหัสผ่านทุกบัญชีอ่านจาก `DEV_AUTH_PASSWORD` (ค่าเริ่มต้น Compose: `V3-local-only!`)
+เลือกบทบาทให้ตรงกับบัญชีในหน้า login ที่ `http://localhost:5173`
+
+| บทบาท | อีเมล |
 |---|---|
-| http://localhost:5173 | หน้าเว็บ (Frontend) |
-| http://localhost:5000/api/docs | **Swagger UI** ตรวจสอบและทดลองยิง API ทั้งหมดได้ที่นี่ |
-| http://localhost:5000/api/docs.json | สเปค OpenAPI แบบ JSON (นำเข้า Postman ได้) |
+| นักศึกษา | `student1.v3@dome.tu.ac.th` ถึง `student8.v3@dome.tu.ac.th` |
+| อาจารย์ | `advisor.v3@tu.ac.th` |
+| อาจารย์ที่ไม่ได้ดูแล | `advisor.other.v3@tu.ac.th` |
+| เจ้าหน้าที่ | `staff.v3@tu.ac.th` |
+| ผู้ประสานงาน | `company.v3@example.test` |
+| ผู้ประสานงานบริษัทอื่น | `company.other.v3@example.test` |
 
-### ตรวจสอบว่าระบบทำงานปกติ
+นักศึกษา 1–8 มีตัวอย่าง submitted, approved, rejected, accepted, declined, confirmed, released และ withdrawn ตามลำดับ
+นักศึกษา 7 มีใบ confirmed อีกตำแหน่งเพื่อสอดคล้องกับ released
+บริษัท/ตำแหน่งตัวอย่างใช้ชื่อ V3 Demo Company และ V3 Other Company
+Transcript ใน seed ยังว่าง ให้บัญชี student1 อัปโหลด PDF ในหน้าข้อมูลส่วนตัวก่อนทดลองส่ง/อนุมัติใบใหม่
+ภาค/ช่วงเวลา seed เป็นข้อมูลตัวอย่างปี 2569 หากทดสอบนอกช่วงให้ staff ปรับวันที่ในหน้าภาคการศึกษา
 
-เปิด http://localhost:5000/api/docs แล้วกด **Try it out → Execute** ที่แต่ละ endpoint
+## ทดสอบ API ผ่าน Swagger
 
-| Endpoint | ตรวจอะไร | ผลที่ควรได้ |
-|---|---|---|
-| `GET /api/health` | Backend ทำงานอยู่ไหม | `{"status":"ok"}` |
-| `GET /api/db-check` | Backend ต่อ Database ได้ไหม | `{"database":"connected","now":"..."}` |
-| `GET /api/users` | อ่านข้อมูลจากตารางได้ไหม | รายชื่อผู้ใช้ตัวอย่าง (Alice, Bob) |
+เปิด `http://localhost:<BACKEND_PORT>/api/docs` (ค่าเริ่มต้น 5000; ใช้พอร์ตจริงใน .env)
+เรียก `POST /api/auth/login` ด้วย email/password ด้านบน แล้วคัดลอก `token` ไปใส่ Authorize
+API spec แบบ JSON อยู่ที่ `/api/docs.json`; รายละเอียด endpoint และ workflow ใน [backend/README.md](backend/README.md)
 
-- Swagger เช็ก Database ได้ทางอ้อมผ่าน `/api/db-check` และ `/api/users` เท่านั้น ถ้าต้องการดูหรือแก้ตารางโดยตรง ให้ดูหัวข้อ Database ด้านล่าง
-- หน้า docs แสดงเฉพาะ endpoint ที่เขียนคำอธิบายไว้ใน `backend/src/config/swagger.js`
-- ถ้า `/api/db-check` ขึ้น error ดู `docker compose logs backend` และตรวจค่า `DB_*` ใน `.env`
-- ใช้ curl แทนได้ เช่น `curl http://localhost:5000/api/health` (PowerShell ให้ใช้ `curl.exe`)
+1. นักศึกษาเลือกหลักสูตร 61/66 กรอกเกรดรายวิชาและการรับทราบ บันทึก GPAX/เบอร์/Transcript แล้วส่งใบสมัครพร้อม Resume
+2. อาจารย์เห็นเฉพาะนักศึกษาที่ดูแล; ลองอนุมัติหรือไม่อนุมัติพร้อม comment
+3. ผู้ประสานงานเห็นเฉพาะใบที่อนุมัติแล้วของบริษัทตนเอง แล้วเลือก accepted/declined
+4. นักศึกษายืนยันหนึ่งใบ ใบอื่นในภาคเดียวกันเปลี่ยน released/withdrawn และดู history ผ่าน API
+5. ลองส่ง request ซ้ำ เปลี่ยนเป็นบัญชีอื่น หรือส่งข้อมูลผิด จะต้องได้ 401/403/404/409/422 ตามกรณี
 
-### คำสั่งที่ใช้บ่อย
+หน้าข้อมูลส่วนตัว: ลองเว้นหลักสูตร/เกรด/การรับทราบ/Transcript หรือกรอก GPAX ต่ำกว่า 2.75 หรือเกรดเฉลี่ยกลุ่มต่ำกว่า 2.50 แล้วกดบันทึก ต้องแสดง popup ระบุข้อที่ไม่ผ่าน โดยไม่อัปโหลดเอกสารหรือบันทึกข้อมูล และยังเก็บค่าที่กรอกไว้ให้แก้ต่อได้ เมื่อครบทุกเงื่อนไขจึงบันทึกได้ API ตรวจข้อมูลรวมกับค่าเดิมซ้ำและตอบ 422 หากไม่ผ่าน โดยไม่แก้ข้อมูลเดิมแม้ส่งตรงผ่าน API นักศึกษาที่ข้อมูลถูกล็อกหลังอนุมัติยังแก้เฉพาะเบอร์โทรได้
 
-```bash
-docker compose up --build -d      # รันเบื้องหลัง
-docker compose ps                 # ดูสถานะ service
-docker compose logs -f backend    # ดู log (เปลี่ยนเป็น frontend / database ได้)
-docker compose restart backend    # รีสตาร์ทเฉพาะ service
-docker compose down               # หยุดและลบ container (ข้อมูล DB ยังอยู่)
-docker compose down -v            # หยุดและลบ volume ด้วย (ข้อมูล DB หายทั้งหมด)
+เมื่อ API ยืนยันว่าบันทึกสำเร็จ ต้องขึ้น popup “บันทึกข้อมูลเรียบร้อยแล้ว” แล้วไป `/student/apply` อัตโนมัติภายใน 2 วินาที หรือกด “ถัดไป” เพื่อไปทันที หากบันทึกไม่สำเร็จต้องอยู่หน้าเดิม
+
+หน้าสมัครสหกิจศึกษา: เมื่อ API ยืนยันว่าบันทึกใบสมัครสำเร็จ ต้องขึ้น popup “บันทึกใบสมัครเรียบร้อยแล้ว” แล้วไปหน้าใบสมัครของฉัน (`/student`) อัตโนมัติภายใน 2 วินาที หรือกด “ถัดไป” เพื่อไปทันที ระหว่างบันทึกและแสดง popup ต้องส่งซ้ำไม่ได้ หาก API ตอบข้อผิดพลาดต้องอยู่หน้าเดิมพร้อมข้อมูลที่กรอกไว้
+
+หน้าเจ้าหน้าที่ใช้ตารางและแท็บแบบเดิม: หน้าผู้ใช้มีแท็บบทบาท/ยังไม่มีอาจารย์/ปิดใช้งาน พร้อมจำนวนจริง และเลือกอาจารย์จากตารางได้ หน้าสถานประกอบการแสดงโลโก้ ช่วงรับสมัคร จำนวนตำแหน่ง/ผู้ประสานงาน และแบ่งหน้าละ 15 แห่ง เปิดฟอร์มแก้ไขแล้วต้องเห็นข้อมูลจริง; ลิงก์จัดการผู้ประสานงานเปิดหน้าผู้ใช้ที่กรองตามบริษัท บันทึกและเปลี่ยนสถานะผ่าน API จริง หาก API ปฏิเสธต้องแสดงข้อผิดพลาด
+
+หน้าผู้ประสานงานใช้รูปแบบเดิม: ข้อมูลบริษัทแบ่งข้อมูลทั่วไป/ที่ตั้ง/ช่วงรับสมัคร พร้อมเลือกไฟล์โลโก้ PNG/JPG/WEBP/SVG ไม่เกิน 2 MB และปุ่ม “บันทึกและยืนยันข้อมูล”; หลังบันทึกแล้ว refresh ต้องเห็นโลโก้เดิม ตำแหน่งของเราแสดงการ์ดสถานะ จำนวนผู้สมัครที่ผ่านอนุมัติ จำนวนยืนยันสิทธิ์และแถบจำนวนรับในภาคที่ใช้งาน รวมตำแหน่งที่ไม่จำกัดภาค ฟอร์มเพิ่ม/แก้ไขและปุ่มเปิด/ปิดรับบันทึกผ่าน API จริง หน้าผู้สมัครแสดงหลักสูตรจากข้อมูลจริง และดู PDF ได้ตามสิทธิ์
+
+ดู PDF: ปุ่มดู Resume/Transcript จะดึงไฟล์ผ่าน API พร้อม token แล้วเปิดหน้าต่างอ่าน PDF ในเว็บ มีปุ่มเปิดแท็บใหม่และดาวน์โหลด ปิดแล้วเปิดซ้ำต้องอ่านได้ หากยังไม่ได้อัปโหลดจะแสดง “ยังไม่มีไฟล์”; บัญชีที่ไม่มีสิทธิ์ยังต้องถูกปฏิเสธ ไฟล์ใน seed ไม่ได้แนบเอกสารตัวอย่างไว้
+
+การทดสอบเอกสารใช้โฟลเดอร์ซ่อนเหมือน `.uploads` ของระบบ local เพื่อป้องกันปัญหาตัวส่งไฟล์ปฏิเสธโฟลเดอร์ซ่อน ตรวจว่าบัญชีเจ้าของ/อาจารย์ที่ดูแล/เจ้าหน้าที่ได้รับ PDF ครบ พร้อม header `inline` และยังปฏิเสธบัญชีอื่นหรือ path ที่ไม่ถูกต้อง
+
+## Integration tests กับ PostgreSQL จริง
+
+```sh
+python3 backend/tests/run.py
 ```
 
-### ตัวแปรใน `.env`
+สร้างฐานข้อมูล `cs361_api_test_*` แยกจากฐานข้อมูลแอป โหลด schema, migrate และ seed สองครั้ง
+แล้วรัน Node test runner ด้วย pool 8 connections ให้ transaction แข่งขันกันจริง
+จบทดสอบลบเฉพาะฐานข้อมูล/โฟลเดอร์ไฟล์ของรอบทดสอบนั้น ไม่แก้ข้อมูลในแอป
 
-| ตัวแปร | ความหมาย | ค่าตัวอย่าง |
-|---|---|---|
-| `FRONTEND_PORT` | พอร์ตของหน้าเว็บบนเครื่องเรา | `5173` |
-| `BACKEND_PORT` | พอร์ตของ Backend บนเครื่องเรา | `5000` |
-| `DB_PORT` | พอร์ตของ Postgres บนเครื่องเรา | `5432` |
-| `DB_NAME` | ชื่อฐานข้อมูล | `cs361_db` |
-| `DB_USER` | ชื่อผู้ใช้ฐานข้อมูล | `postgres` |
-| `DB_PASSWORD` | รหัสผ่านฐานข้อมูล (ต้องเปลี่ยน) | `your_secure_password_here` |
-| `CORS_ORIGIN` | URL ของหน้าเว็บที่อนุญาตให้เรียก Backend | `http://localhost:5173` |
+ครอบคลุม:
 
-- `*_PORT` คือพอร์ตฝั่งเครื่องเรา (ฝั่งซ้ายของ `ports:`) ส่วนพอร์ตภายใน container คงที่ (frontend `5173`, backend `5000`, database `5432`) การเปลี่ยน `DB_PORT` จึงไม่กระทบการเชื่อมต่อระหว่าง Backend กับ Database
-- `CORS_ORIGIN` ต้องตรงกับ URL ที่เปิดหน้าเว็บในเบราว์เซอร์ ถ้าเปลี่ยน `FRONTEND_PORT` ต้องแก้ให้ตรงกันด้วย (ถ้าไม่ตั้ง ค่าเริ่มต้นคือ `http://localhost:5173`)
-- รหัสผ่านที่มีอักขระ `$` หรือ `#` ให้ครอบด้วยเครื่องหมายคำพูด เช่น `DB_PASSWORD="pa$$word"`
-- เปลี่ยน `DB_USER` / `DB_PASSWORD` / `DB_NAME` หลังจากสร้าง volume ไปแล้ว จะไม่มีผลกับฐานข้อมูลเดิม ต้อง `docker compose down -v` ก่อน
+- API สาธารณะและ User/Student/Company/Position/Term ที่บันทึกจริง
+- รหัสผ่านผิด token ปลอม/หมดอายุ บัญชีปิด และการปลอม role
+- validation, JSON ผิดรูปแบบ, field ที่ไม่อนุญาต, GPAX/เอกสาร/ช่วงรับสมัคร
+- หลักสูตร/เกรดรายวิชา/การรับทราบบันทึกและโหลดกลับได้; เปลี่ยนเกรดหลังอนุมัติหรือแก้ของคนอื่นไม่ได้
+- บล็อกการบันทึกเมื่อคุณสมบัติไม่ครบ/ไม่ผ่านทั้งสองหลักสูตร รวมถึงการส่งเฉพาะบางช่อง; ค่าขอบเขต GPAX 2.75 และเฉลี่ยกลุ่ม 2.50 ผ่าน และการบันทึกที่ถูกปฏิเสธไม่เปลี่ยนข้อมูลใด ๆ
+- สิทธิ์ข้ามนักศึกษา อาจารย์ และบริษัท รวมถึงการเข้าถึงไฟล์
+- submission ซ้ำพร้อมกัน, approve/reject พร้อมกัน, confirm สองใบพร้อมกัน
+- ผลการตรวจ comment และประวัติตรงกับสถานะจริง; คำขอซ้ำไม่เพิ่มประวัติ
+- rollback เมื่อสร้างหลายตารางไม่สำเร็จ และการเปลี่ยน active term พร้อมกัน
+- Cognito authorizer adapter และ OpenAPI reference ทุกจุด
 
----
+ตรวจ build ของ frontend:
 
-## Backend (`backend/`)
-
-```
-backend/
-├── Dockerfile            # Node 22 alpine, รัน npm run dev
-├── .dockerignore         # ไม่ copy node_modules / .env เข้า image
-├── package.json          # dependencies และ scripts
-└── src/
-    ├── app.js            # Express server (จุดเริ่มต้น)
-    └── config/
-        └── swagger.js    # คำอธิบาย API + ตั้งค่า Swagger UI
+```sh
+docker compose exec -T frontend npm run build
+docker compose exec -T frontend npx oxlint src
 ```
 
-**Endpoint ปัจจุบัน**
+## ตรวจหลักฐานข้อมูลที่บันทึก
 
-| Method | Path | หน้าที่ |
-|---|---|---|
-| GET | `/api/health` | เช็กสถานะ server |
-| GET | `/api/db-check` | เช็กการเชื่อมต่อ Database |
-| GET | `/api/users` | ดึงรายชื่อผู้ใช้ |
-| GET | `/api/docs` | หน้า Swagger UI (ปิดเมื่อ `NODE_ENV=production`) |
-| GET | `/api/docs.json` | สเปค OpenAPI แบบ JSON |
+เข้า psql ด้วยค่าจาก env ของ container:
 
-**ข้อควรรู้**
-
-- แก้โค้ดใน `backend/` แล้ว server รีสตาร์ทเอง (`node --watch` + mount โฟลเดอร์เข้า container)
-- Backend เชื่อม Database ด้วย host ชื่อ **`database`** (ชื่อ service) ไม่ใช่ `localhost`
-- ค่าเชื่อมต่อ DB อ่านจาก environment ที่ `docker-compose.yml` ส่งให้ (`DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`)
-
-**เพิ่ม endpoint ใหม่:** เขียน route ใน `src/app.js` แล้วเพิ่มคำอธิบายใน `paths` ของ `src/config/swagger.js` เพื่อให้แสดงในหน้า `/api/docs`
-
-**เพิ่ม package ใหม่**
-
-```bash
-# แก้ package.json (หรือ npm install ใน container) แล้วรัน
-docker compose up --build -V backend
+```sh
+docker compose exec database sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
-`-V` ทำให้ volume `node_modules` ถูกสร้างใหม่ ไม่เช่นนั้น package ใหม่จะไม่ปรากฏ
-
-**ต่อยอดเมื่อโค้ดเริ่มเยอะ** แยก `src/app.js` ออกเป็นชั้นๆ โดยไม่ต้องแก้ Docker
-
-```
-backend/
-└── src/
-    ├── app.js
-    ├── config/        # swagger.js, db.js, env.js
-    ├── routes/        # กำหนด URL
-    ├── controllers/   # รับ request / ส่ง response
-    ├── services/      # business logic
-    ├── models/        # SQL queries
-    ├── middlewares/   # auth, error handler
-    └── utils/
+```sql
+SELECT application_id, student_id, term_id, position_id, status FROM applications ORDER BY application_id;
+SELECT application_id, reviewer_id, status, comment, created_at FROM application_reviews ORDER BY review_id;
+SELECT application_id, changed_by, from_status, to_status, changed_at FROM application_history ORDER BY history_id;
+SELECT student_id, term_id, count(*) FROM applications WHERE status='confirmed' GROUP BY student_id,term_id HAVING count(*) > 1;
 ```
 
----
-
-## Database (`database/`)
-
-```
-database/
-├── Dockerfile        # FROM postgres:17-alpine + copy init/
-└── init/
-    └── 01-schema.sql # สร้างตารางและข้อมูลตัวอย่าง
-```
-
-**หลักการทำงาน**
-
-- Postgres จะรันไฟล์ `.sql` ทุกไฟล์ใน `init/` **เรียงตามชื่อ** เฉพาะตอนสร้าง volume ครั้งแรก
-- ข้อมูลเก็บใน named volume `pgdata` จึงไม่หายเมื่อ `docker compose down`
-
-**ตารางปัจจุบัน**
-
-| ตาราง | คอลัมน์ |
-|---|---|
-| `users` | `id`, `name`, `email` (unique), `created_at` |
-
-### เพิ่มตารางใหม่
-
-1. สร้างไฟล์ใหม่ใน `database/init/` เช่น `02-plans.sql` (ใช้ `CREATE TABLE IF NOT EXISTS` เสมอ)
-2. ทำอย่างใดอย่างหนึ่ง
-
-| กรณี | วิธี |
-|---|---|
-| ช่วงพัฒนา ข้อมูลทิ้งได้ | `docker compose down -v` แล้ว `docker compose up --build` |
-| มีข้อมูลที่ต้องเก็บ | `docker compose exec -T database psql -U <DB_USER> -d <DB_NAME> < database/init/02-plans.sql` |
-
-> ไฟล์ใหม่ใน `init/` จะไม่ถูกรันบน volume เดิมโดยอัตโนมัติ
-
-### เข้าไปดู/แก้ฐานข้อมูลโดยตรง
-
-```bash
-docker compose exec database psql -U postgres -d cs361_db
-```
-
-คำสั่งที่ใช้บ่อยใน psql: `\dt` (ดูตาราง), `\d users` (ดูโครงสร้างตาราง), `\q` (ออก) หรือใช้โปรแกรมอย่าง DBeaver / pgAdmin ต่อที่ `localhost:5432` ด้วยค่าใน `.env`
-
----
-
-## แก้ปัญหาที่พบบ่อย
-
-| อาการ | สาเหตุ / วิธีแก้ |
-|---|---|
-| `port is already allocated` | พอร์ตชน เปลี่ยน `*_PORT` ใน `.env` (พอร์ต 80 บน Windows มักชนกับโปรแกรมอื่น เช่น IIS) |
-| เว็บเรียก API แล้วขึ้น CORS error | `CORS_ORIGIN` ไม่ตรงกับ URL ที่เปิดอยู่ ตรวจค่าใน `.env` แล้ว `docker compose up -d backend` |
-| Frontend แก้โค้ดแล้วไม่ refresh (Windows) | เพิ่มใน `vite.config.js`: `server: { host: true, watch: { usePolling: true } }` |
-| Backend ต่อ DB ไม่ได้ | ตรวจว่าใช้ host `database` และรหัสผ่านตรงกับตอนสร้าง volume (ถ้าเปลี่ยนรหัสต้อง `down -v`) |
-| แก้ `init/*.sql` แล้วไม่มีผล | สคริปต์รันแค่ครั้งแรก ดูหัวข้อ "เพิ่มตารางใหม่" |
-| เพิ่ม package แล้ว `Cannot find module` | รัน `docker compose up --build -V backend` |
+คำสั่งสุดท้ายต้องไม่มีผลลัพธ์; review/history ต้องเปลี่ยนพร้อมใบสมัครใน transaction เดียว

@@ -1,5 +1,5 @@
 // เกณฑ์คุณสมบัติผู้สมัครสหกิจศึกษา (ปีการศึกษา 2568)
-// MOCK: TODO ย้ายไปเก็บในฐานข้อมูลรายภาคการศึกษา ให้เจ้าหน้าที่แก้ได้จากหน้า "ภาคการศึกษา"
+// Keep identical to backend/src/config/coopCriteria.js; backend/tests/run.py checks parity.
 //
 // แต่ละ "ช่อง" (slot) คือรายการวิชาที่ใช้แทนกันได้ เช่น ['คพ.213', 'คพ.216'] = คพ.213 หรือ คพ.216
 // ถ้าเรียนหลายวิชาในช่องเดียวกัน หรือเรียนซ้ำ ใช้เกรดที่ดีที่สุด / ทุกวิชา 3 หน่วยกิตจึงเฉลี่ยตรง ๆ ได้
@@ -52,4 +52,24 @@ export function evaluateCourses(curriculum, grades) {
     averagePasses: average != null && average >= COOP_CRITERIA.minGroupAverage,
     inProgressAll,
   };
+}
+
+// Used by both the profile checklist and the API save guard.
+export function qualificationChecks({ gpax, curriculum, course_grades = {}, declarations = {}, transcript_s3_key }) {
+  const hasCurriculum = Object.hasOwn(COOP_CRITERIA.curricula, curriculum);
+  const courses = hasCurriculum ? evaluateCourses(curriculum, course_grades) : null;
+  const points = Number(gpax);
+  const validGpax = gpax != null && gpax !== '' && Number.isFinite(points) &&
+    points >= COOP_CRITERIA.minGpax && points <= 4 && Math.abs(points * 100 - Math.round(points * 100)) <= 1e-8;
+  return [
+    [hasCurriculum, 'เลือกหลักสูตร 61 หรือ 66'],
+    [validGpax, `GPAX ต้องอยู่ระหว่าง ${COOP_CRITERIA.minGpax.toFixed(2)}–4.00 และทศนิยมไม่เกิน 2 ตำแหน่ง`],
+    [Boolean(courses?.completedAll), 'กรอกเกรดวิชาที่ต้องเคยศึกษาให้ครบทุกกลุ่ม (วิชาทดแทนเลือกอย่างน้อย 1 วิชา)'],
+    [Boolean(courses?.averagePasses), `เกรดเฉลี่ยกลุ่มวิชาที่ต้องเคยศึกษาต้องไม่ต่ำกว่า ${COOP_CRITERIA.minGroupAverage.toFixed(2)}`],
+    [Boolean(courses?.inProgressAll), 'กรอกวิชาที่กำลังศึกษาหรือเคยศึกษาให้ครบทุกกลุ่ม'],
+    [declarations.mustPass === true, 'รับทราบวิชาที่ต้องสอบได้ก่อนออกปฏิบัติงาน'],
+    [declarations.discipline === true, 'ยืนยันว่าไม่เคยถูกลงโทษทางวินัยนักศึกษา'],
+    [declarations.accept === true, 'รับทราบเกณฑ์และยอมรับเงื่อนไขสหกิจศึกษา'],
+    [Boolean(transcript_s3_key), 'แนบใบแสดงผลการเรียนให้ผู้ตรวจตรวจสอบ'],
+  ];
 }

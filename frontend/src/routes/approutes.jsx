@@ -14,7 +14,6 @@ import MyStudents from '../pages/advisor/MyStudents';
 import StudentDetail from '../pages/advisor/StudentDetail';
 import AllApplications from '../pages/staff/AllApplications';
 import ManageCompanies from '../pages/staff/ManageCompanies';
-import ManagePositions from '../pages/staff/ManagePositions';
 import ManageTerms from '../pages/staff/ManageTerms';
 import ManageUsers from '../pages/staff/ManageUsers';
 import Applicants from '../pages/company-portal/Applicants';
@@ -55,7 +54,6 @@ export default function approutes() {
             <Route path="/staff" element={<RoleLayout />}>
               <Route index element={<AllApplications />} />
               <Route path="companies" element={<ManageCompanies />} />
-              <Route path="positions" element={<ManagePositions />} />
               <Route path="terms" element={<ManageTerms />} />
               <Route path="users" element={<ManageUsers />} />
             </Route>

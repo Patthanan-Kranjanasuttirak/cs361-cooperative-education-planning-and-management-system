@@ -1,11 +1,12 @@
 import swaggerUi from "swagger-ui-express";
+import { v3Paths, v3Schemas } from './v3OpenApi.js';
 
 // เพิ่ม endpoint ใหม่ใน app.js (หรือ routes/) แล้วมาเพิ่มคำอธิบายใน "paths" ที่นี่
 export const swaggerSpec = {
   openapi: "3.0.3",
   info: {
     title: "CS361 Cooperative Education Plan API",
-    version: "1.0.0",
+    version: "3.0.0",
     description: "REST API ของระบบ",
   },
   // url "/" = ใช้ host/port เดียวกับหน้านี้ ไม่ต้องแก้เมื่อเปลี่ยน BACKEND_PORT
@@ -202,6 +203,11 @@ export const swaggerSpec = {
     },
   },
 };
+
+for (const [path, operations] of Object.entries(v3Paths)) swaggerSpec.paths[path] = { ...swaggerSpec.paths[path], ...operations };
+Object.assign(swaggerSpec.components.schemas, v3Schemas);
+swaggerSpec.components.securitySchemes = { BearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } };
+swaggerSpec.tags.push(...['Auth','Students','Terms','Positions','Applications','Documents'].map((name) => ({ name })));
 
 // เรียกใน app.js:  setupSwagger(app)
 // ปิดอัตโนมัติเมื่อ NODE_ENV=production

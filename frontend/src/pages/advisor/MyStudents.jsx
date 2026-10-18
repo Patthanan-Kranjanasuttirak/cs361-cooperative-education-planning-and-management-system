@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
 import GpaxValue from '../../components/GpaxValue';
-import { MOCK_STUDENTS } from '../../services/advisorMock';
+import { useApi } from '../../hooks/useApi';
+import ApiState from '../../components/ApiState';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
 import '../CSS/myStudents.css';
@@ -18,7 +19,7 @@ const FILTERS = [
 const formatDate = (iso) => new Date(iso).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 
 export default function MyStudents() {
-  const [students] = useState(MOCK_STUDENTS);
+  const { data: students, loading, error } = useApi('/advisor/students');
   const navigate = useNavigate();
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -38,6 +39,7 @@ export default function MyStudents() {
         <span className="app-term">{students.length} คน</span>
       </div>
 
+      <ApiState loading={loading} error={error} />
       <div className="students-filters" role="tablist">
         {FILTERS.map((f) => (
           <button

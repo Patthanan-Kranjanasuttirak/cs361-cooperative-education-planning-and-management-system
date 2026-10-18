@@ -132,6 +132,41 @@ select.profile-input:disabled {
   background-color: #2f3a66;
 }
 
+.profile-validation-dialog {
+  width: min(36rem, calc(100% - 2rem));
+  max-height: 85dvh;
+  margin: auto;
+  padding: 1.5rem;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-top: 5px solid #f59e0b;
+  border-radius: 16px;
+  color: #334155;
+  box-shadow: 0 20px 60px #222a4b33;
+}
+
+.profile-validation-dialog::backdrop { background: #17203c80; }
+.profile-validation-dialog h2 { color: #222a4b; font-size: 1.2rem; margin-bottom: 0.75rem; }
+.profile-validation-dialog p { line-height: 1.6; }
+.profile-validation-dialog ul { list-style: disc; padding-left: 1.25rem; margin: 1rem 0 1.5rem; }
+.profile-validation-dialog li { margin-bottom: 0.5rem; line-height: 1.6; }
+.profile-validation-actions { display: flex; justify-content: flex-end; }
+
+.profile-success-dialog { border-top-color: #22a06b; text-align: center; }
+.profile-success-dialog .profile-validation-actions { justify-content: center; margin-top: 1.5rem; }
+.profile-success-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 1rem;
+  border-radius: 50%;
+  background: #e6f6ed;
+  color: #15803d;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
 .profile-readonly {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

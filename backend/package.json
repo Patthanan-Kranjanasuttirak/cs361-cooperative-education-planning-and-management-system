@@ -9,6 +9,7 @@
     "dev": "node --watch src/server.js"
   },
   "dependencies": {
+    "aws-jwt-verify": "^5.2.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "pg": "^8.16.0",

@@ -1,3 +1,6 @@
+import { useApi } from '../../hooks/useApi';
+import { api } from '../../services/api';
+import ApiState from '../../components/ApiState';
 import { useState } from 'react';
 import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
 import DocumentLink from '../../components/DocumentLink';
@@ -8,102 +11,6 @@ import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
 import '../CSS/allApplications.css';
-
-// MOCK: ยังไม่มี API — TODO: GET /api/staff/applications?term=&status=&company=&search=
-//   เจ้าหน้าที่เห็นใบสมัครทุกใบ (ไม่กรองตาม advisor_id) พร้อม history จาก application_history
-const MOCK_TERMS = ['2/2569', '1/2569'];
-const MOCK_APPLICATIONS = [
-  {
-    application_id: 4,
-    term: '2/2569',
-    student: { student_code: '6609611111', th_name: 'นักศึกษาตัวอย่าง หนึ่ง', gpax: 3.42, advisor_name: 'อาจารย์ตัวอย่าง ก' },
-    company_name: 'บริษัท ที.ซี.ซี. เทคโนโลยี จำกัด',
-    position_name: 'IT Support Intern',
-    status: 'submitted',
-    submitted_at: '2026-10-10T16:20:00+07:00',
-    history: [{ from: null, to: 'submitted', by: 'นักศึกษาตัวอย่าง หนึ่ง', at: '2026-10-10T16:20:00+07:00' }],
-  },
-  {
-    application_id: 8,
-    term: '2/2569',
-    student: { student_code: '6609633333', th_name: 'นักศึกษาตัวอย่าง สาม', gpax: null, advisor_name: 'อาจารย์ตัวอย่าง ก' },
-    company_name: 'บริษัทกสิกร บิซิเนส-เทคโนโลยี กรุ๊ป',
-    position_name: 'Software Developer Intern',
-    status: 'submitted',
-    submitted_at: '2026-10-13T20:15:00+07:00',
-    history: [{ from: null, to: 'submitted', by: 'นักศึกษาตัวอย่าง สาม', at: '2026-10-13T20:15:00+07:00' }],
-  },
-  {
-    application_id: 9,
-    term: '2/2569',
-    student: { student_code: '6609677777', th_name: 'นักศึกษาตัวอย่าง เจ็ด', gpax: 3.05, advisor_name: 'อาจารย์ตัวอย่าง ข' },
-    company_name: 'บริษัท ซีดีจี กรุ๊ป จำกัด',
-    position_name: 'QA / Software Tester Intern',
-    status: 'approved',
-    submitted_at: '2026-10-02T13:45:00+07:00',
-    history: [
-      { from: null, to: 'submitted', by: 'นักศึกษาตัวอย่าง เจ็ด', at: '2026-10-02T13:45:00+07:00' },
-      { from: 'submitted', to: 'approved', by: 'อาจารย์ตัวอย่าง ข', at: '2026-10-03T09:10:00+07:00' },
-    ],
-  },
-  {
-    application_id: 1,
-    term: '2/2569',
-    student: { student_code: '6609644444', th_name: 'นักศึกษาตัวอย่าง สี่', gpax: 3.75, advisor_name: 'อาจารย์ตัวอย่าง ก' },
-    company_name: 'ธนาคารไทยพาณิชย์ จำกัด (มหาชน)',
-    position_name: 'UX/UI Designer Intern',
-    status: 'confirmed',
-    submitted_at: '2026-09-20T10:15:00+07:00',
-    history: [
-      { from: null, to: 'submitted', by: 'นักศึกษาตัวอย่าง สี่', at: '2026-09-20T10:15:00+07:00' },
-      { from: 'submitted', to: 'approved', by: 'อาจารย์ตัวอย่าง ก', at: '2026-09-22T14:00:00+07:00' },
-      { from: 'approved', to: 'accepted', by: 'ผู้ประสานงาน ธนาคารไทยพาณิชย์', at: '2026-10-01T11:00:00+07:00' },
-      { from: 'accepted', to: 'confirmed', by: 'นักศึกษาตัวอย่าง สี่', at: '2026-10-08T11:00:00+07:00' },
-    ],
-  },
-  {
-    application_id: 2,
-    term: '2/2569',
-    student: { student_code: '6609644444', th_name: 'นักศึกษาตัวอย่าง สี่', gpax: 3.75, advisor_name: 'อาจารย์ตัวอย่าง ก' },
-    company_name: 'บริษัทกสิกร บิซิเนส-เทคโนโลยี กรุ๊ป',
-    position_name: 'Software Developer Intern',
-    status: 'released',
-    submitted_at: '2026-09-21T09:00:00+07:00',
-    history: [
-      { from: null, to: 'submitted', by: 'นักศึกษาตัวอย่าง สี่', at: '2026-09-21T09:00:00+07:00' },
-      { from: 'submitted', to: 'approved', by: 'เจ้าหน้าที่ตัวอย่าง', at: '2026-09-23T11:30:00+07:00' },
-      { from: 'approved', to: 'accepted', by: 'ผู้ประสานงาน KBTG', at: '2026-10-02T15:00:00+07:00' },
-      { from: 'accepted', to: 'released', by: 'นักศึกษาตัวอย่าง สี่', at: '2026-10-08T11:00:00+07:00' },
-    ],
-  },
-  {
-    application_id: 5,
-    term: '2/2569',
-    student: { student_code: '6609655555', th_name: 'นักศึกษาตัวอย่าง ห้า', gpax: 2.65, advisor_name: 'อาจารย์ตัวอย่าง ข' },
-    company_name: 'บริษัท ไอบอทน้อย จำกัด',
-    position_name: 'Data Analyst Intern',
-    status: 'rejected',
-    submitted_at: '2026-09-18T08:30:00+07:00',
-    history: [
-      { from: null, to: 'submitted', by: 'นักศึกษาตัวอย่าง ห้า', at: '2026-09-18T08:30:00+07:00' },
-      { from: 'submitted', to: 'rejected', by: 'อาจารย์ตัวอย่าง ข', at: '2026-09-19T10:00:00+07:00' },
-    ],
-  },
-  {
-    application_id: 3,
-    term: '1/2569',
-    student: { student_code: '6509688888', th_name: 'นักศึกษาตัวอย่าง แปด', gpax: 3.3, advisor_name: 'อาจารย์ตัวอย่าง ข' },
-    company_name: 'ธนาคารไทยพาณิชย์ จำกัด (มหาชน)',
-    position_name: 'IT Business Analyst Intern',
-    status: 'declined',
-    submitted_at: '2026-03-05T10:00:00+07:00',
-    history: [
-      { from: null, to: 'submitted', by: 'นักศึกษาตัวอย่าง แปด', at: '2026-03-05T10:00:00+07:00' },
-      { from: 'submitted', to: 'approved', by: 'เจ้าหน้าที่ตัวอย่าง', at: '2026-03-06T09:00:00+07:00' },
-      { from: 'approved', to: 'declined', by: 'ผู้ประสานงาน ธนาคารไทยพาณิชย์', at: '2026-03-20T16:00:00+07:00' },
-    ],
-  },
-];
 
 const formatDateTime = (iso) =>
   new Date(iso).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -131,15 +38,16 @@ function History({ items }) {
 }
 
 export default function AllApplications() {
-  const [applications, setApplications] = useState(MOCK_APPLICATIONS);
-  const [term, setTerm] = useState(MOCK_TERMS[0]);
+  const { data: applications, reload, loading, error } = useApi('/staff/applications');
+  const { data: terms } = useApi('/terms');
+  const [term, setTerm] = useState('');
   const [status, setStatus] = useState('');
   const [company, setCompany] = useState('');
   const [search, setSearch] = useState('');
   const [openHistory, setOpenHistory] = useState(() => new Set());
   const [notice, setNotice] = useState('');
 
-  const inTerm = applications.filter((a) => a.term === term);
+  const inTerm = applications.filter((a) => !term || a.term === term);
   const companies = [...new Set(inTerm.map((a) => a.company_name))].sort((a, b) => a.localeCompare(b, 'th'));
   const keyword = search.trim().toLowerCase();
   const visible = inTerm.filter(
@@ -158,21 +66,13 @@ export default function AllApplications() {
       return next;
     });
 
-  const submitReview = (app, decision) => {
-    // TODO: POST /api/applications/:id/reviews { status, comment } — เจ้าหน้าที่ตรวจได้ทุกใบ
-    //   backend ทำใน transaction เดียว: insert application_reviews + update status + insert application_history
-    setApplications((prev) =>
-      prev.map((a) =>
-        a.application_id === app.application_id
-          ? {
-              ...a,
-              status: decision,
-              history: [...a.history, { from: a.status, to: decision, by: 'คุณ (เจ้าหน้าที่)', at: new Date().toISOString() }],
-            }
-          : a
-      )
-    );
-    setNotice(`${decision === 'approved' ? 'อนุมัติ' : 'ไม่อนุมัติ'}ใบสมัครของ ${app.student.th_name} (${app.company_name}) แล้ว`);
+  const submitReview = async (app, decision, comment) => {
+    try {
+      await api(`/applications/${app.application_id}/reviews`, { method: 'POST', body: { status: decision, comment } });
+      await reload();
+      setNotice(`บันทึกผลการพิจารณาของ ${app.student.th_name} แล้ว`);
+      return true;
+    } catch (err) { setNotice(err.message); return false; }
   };
 
   const changeTerm = (value) => {
@@ -189,15 +89,15 @@ export default function AllApplications() {
         </span>
       </div>
 
+      <ApiState loading={loading} error={error} />
       {notice && <div className="app-banner">{notice}</div>}
 
       <div className="all-filters">
         <label className="all-filter">
           <span className="pending-label">ภาคการศึกษา</span>
           <select className="profile-input all-select" value={term} onChange={(e) => changeTerm(e.target.value)}>
-            {MOCK_TERMS.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
+            <option value="">ทุกภาคการศึกษา</option>
+            {terms.map((t) => <option key={t.term_id} value={t.code}>{t.code}</option>)}
           </select>
         </label>
         <label className="all-filter">
@@ -272,7 +172,7 @@ export default function AllApplications() {
                   <ReviewPanel
                     id={app.application_id}
                     onOpen={() => setNotice('')}
-                    onSubmit={(decision) => submitReview(app, decision)}
+                    onSubmit={(decision, comment) => submitReview(app, decision, comment)}
                   />
                 ) : (
                   <p className="app-date all-submitted">ส่งเมื่อ {formatDateTime(app.submitted_at)}</p>

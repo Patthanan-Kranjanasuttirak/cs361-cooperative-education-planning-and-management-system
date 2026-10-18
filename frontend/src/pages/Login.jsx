@@ -39,14 +39,13 @@ export default function Login() {
     setSubmitting(true);
     setNotice('');
     try {
-      // ระบบเดิมยังเป็น mock authentication; ไม่ส่งหรือบันทึกรหัสผ่าน
-      const loggedIn = await login({ email: email.trim(), role, remember });
+      const loggedIn = await login({ email: email.trim(), password, role, remember });
       const home = ROLES[loggedIn.role].home;
       const from = location.state?.from;
       const destination = from === home || from?.startsWith(`${home}/`) ? from : home;
       navigate(destination, { replace: true });
-    } catch {
-      setNotice('เข้าสู่ระบบไม่สำเร็จ กรุณาลองอีกครั้ง');
+    } catch (error) {
+      setNotice(error.message || 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองอีกครั้ง');
     } finally {
       setSubmitting(false);
     }
@@ -128,7 +127,7 @@ export default function Login() {
             <img src={googleLogo} width="35" height="35" alt="" />
             <span>เข้าสู่ระบบด้วย Google</span>
           </button>
-          <p className="login-demo-note">ระบบทดสอบ: ยังไม่ตรวจสอบรหัสผ่าน กรุณาใช้ข้อมูลสมมติ</p>
+          <p className="login-demo-note">ระบบพัฒนา: ใช้บัญชีทดสอบที่ทีมจัดเตรียมไว้</p>
           {notice && <p className="login-notice" role="status">{notice}</p>}
         </div>
       </section>
