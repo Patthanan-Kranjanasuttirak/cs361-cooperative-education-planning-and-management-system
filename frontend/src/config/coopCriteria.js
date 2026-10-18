@@ -7,6 +7,7 @@ export const COOP_CRITERIA = {
   academicYear: '2568',
   minGpax: 2.75,
   minGroupAverage: 2.5,
+  minStudyYear: 3,
   curricula: {
     61: {
       completed: [['คพ.101'], ['คพ.102'], ['คพ.111'], ['คพ.213', 'คพ.216'], ['คพ.251'], ['คพ.264']],
@@ -26,6 +27,28 @@ export const GRADE_POINTS = { A: 4, 'B+': 3.5, B: 3, 'C+': 2.5, C: 2, 'D+': 1.5,
 
 // ค่าพิเศษสำหรับวิชาที่ "กำลังศึกษา"
 export const IN_PROGRESS = 'IP';
+
+// สองหลักแรกของเลขทะเบียนคือปีที่เข้า (พ.ศ.) เช่น 6609610001 = เข้าปี 2566
+const entryYear = (studentId) => /^\d{10}$/.test(studentId ?? '') ? Number(studentId.slice(0, 2)) : null;
+
+// หลักสูตรตามปีที่เข้า: ถึงปี 65 → 61, ตั้งแต่ปี 66 → 66 (null = เลขทะเบียนไม่ถูกรูปแบบ)
+export function curriculumFor(studentId) {
+  const year = entryYear(studentId);
+  return year == null ? null : year <= 65 ? '61' : '66';
+}
+
+export const curriculumLabel = (curriculum) => (curriculum ? `หลักสูตร พ.ศ. 25${curriculum}` : '—');
+
+// ปีการศึกษา (พ.ศ.) เปิดภาคเดือนสิงหาคม
+export function academicYear(date = new Date()) {
+  return date.getFullYear() + 543 - (date.getMonth() < 7 ? 1 : 0);
+}
+
+// ชั้นปี เช่น ปีการศึกษา 2569: รหัส 69 = ปี 1, รหัส 67 = ปี 3
+export function studyYear(studentId, date = new Date()) {
+  const year = entryYear(studentId);
+  return year == null ? null : academicYear(date) % 100 - year + 1;
+}
 
 // แต้มที่ดีที่สุดของช่อง (null = ยังไม่มีเกรดในช่องนี้)
 export function bestSlotPoints(slot, grades) {
@@ -55,14 +78,16 @@ export function evaluateCourses(curriculum, grades) {
 }
 
 // Used by both the profile checklist and the API save guard.
-export function qualificationChecks({ gpax, curriculum, course_grades = {}, declarations = {}, transcript_s3_key }) {
-  const hasCurriculum = Object.hasOwn(COOP_CRITERIA.curricula, curriculum);
+export function qualificationChecks({ username, gpax, curriculum, course_grades = {}, declarations = {}, transcript_s3_key }) {
+  const expectedCurriculum = curriculumFor(username);
+  const hasCurriculum = Object.hasOwn(COOP_CRITERIA.curricula, curriculum) && curriculum === expectedCurriculum;
   const courses = hasCurriculum ? evaluateCourses(curriculum, course_grades) : null;
   const points = Number(gpax);
   const validGpax = gpax != null && gpax !== '' && Number.isFinite(points) &&
     points >= COOP_CRITERIA.minGpax && points <= 4 && Math.abs(points * 100 - Math.round(points * 100)) <= 1e-8;
   return [
-    [hasCurriculum, 'เลือกหลักสูตร 61 หรือ 66'],
+    [studyYear(username) >= COOP_CRITERIA.minStudyYear, `ต้องเป็นนักศึกษาชั้นปีที่ ${COOP_CRITERIA.minStudyYear} ขึ้นไป`],
+    [hasCurriculum, expectedCurriculum ? `หลักสูตรต้องเป็นหลักสูตร ${expectedCurriculum} ตามปีที่เข้าศึกษา` : 'ไม่พบหลักสูตรจากรหัสนักศึกษา กรุณาติดต่อเจ้าหน้าที่'],
     [validGpax, `GPAX ต้องอยู่ระหว่าง ${COOP_CRITERIA.minGpax.toFixed(2)}–4.00 และทศนิยมไม่เกิน 2 ตำแหน่ง`],
     [Boolean(courses?.completedAll), 'กรอกเกรดวิชาที่ต้องเคยศึกษาให้ครบทุกกลุ่ม (วิชาทดแทนเลือกอย่างน้อย 1 วิชา)'],
     [Boolean(courses?.averagePasses), `เกรดเฉลี่ยกลุ่มวิชาที่ต้องเคยศึกษาต้องไม่ต่ำกว่า ${COOP_CRITERIA.minGroupAverage.toFixed(2)}`],

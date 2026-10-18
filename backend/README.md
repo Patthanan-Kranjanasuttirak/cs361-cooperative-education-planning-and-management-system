@@ -60,6 +60,8 @@ Production เตรียมไว้สองแบบ:
 - `AUTH_MODE=api-gateway`: ใช้ verified claims ที่ส่งจาก Cognito/JWT authorizer ผ่าน Lambda event เท่านั้น พร้อมตรวจ issuer/client/expiry/token_use อีกครั้ง เหมาะกับ Lambda private subnet ที่ไม่มี NAT; HTTP headers/body ปลอม claims ไม่ได้
 
 ทั้งสองแบบจับคู่ `sub` กับ `users.cognito_sub` และใช้ `users.role` เป็นสิทธิ์จริง
+รับทั้ง ID token และ access token; login ครั้งแรกผูก `cognito_sub` ให้บัญชีที่ลงทะเบียนไว้ (TU ด้วย username, Google ด้วยอีเมลที่ยืนยันแล้ว)
+วิธีตั้งค่า Cognito, Google และ Lambda triggers ของ TU API: [cognito-triggers/README.md](cognito-triggers/README.md)
 ต้องผูก authorizer กับทุก protected route และจำกัดสิทธิ์ invoke Lambda ผ่าน API Gateway
 ไม่มีการสร้าง AWS resources หรือบัญชี Cognito อัตโนมัติ; staff ลงทะเบียนข้อมูลและ cognito_sub ผ่าน User API
 หน้า login local ยังไม่เปิด Google OAuth จึงไม่แสดงผลสำเร็จปลอม

@@ -3,7 +3,8 @@ import '../pages/CSS/eligibility.css';
 
 const choices = Object.keys(GRADE_POINTS);
 
-export default function CourseGradesFields({ curriculum, grades = {}, disabled = false, onCurriculumChange, onGradeChange }) {
+// หลักสูตรมาจากปีรหัส (curriculumFor) ไม่ให้เลือกเอง — แสดงอยู่ในข้อมูลทั่วไปของหน้าที่เรียกใช้
+export default function CourseGradesFields({ curriculum, grades = {}, disabled = false, onGradeChange }) {
   const rule = COOP_CRITERIA.curricula[curriculum];
   const result = rule ? evaluateCourses(curriculum, grades) : null;
   const slots = (groups, allowInProgress) => groups.map((slot) => (
@@ -22,16 +23,6 @@ export default function CourseGradesFields({ curriculum, grades = {}, disabled =
   ));
 
   return <>
-    <fieldset className="profile-section" disabled={disabled}>
-      <legend className="profile-section-title">หลักสูตร</legend>
-      <label className="profile-label" htmlFor="profile-curriculum">หลักสูตรที่ศึกษา</label>
-      <select id="profile-curriculum" className="profile-input" value={curriculum ?? ''}
-        onChange={(event) => onCurriculumChange?.(event.target.value)}>
-        <option value="">— เลือกหลักสูตร —</option>
-        <option value="61">หลักสูตร พ.ศ. 2561</option>
-        <option value="66">หลักสูตร พ.ศ. 2566</option>
-      </select>
-    </fieldset>
     {rule ? <>
       <fieldset className="profile-section" disabled={disabled}>
         <legend className="profile-section-title">วิชาที่ต้องเคยศึกษา</legend>
@@ -47,6 +38,6 @@ export default function CourseGradesFields({ curriculum, grades = {}, disabled =
         <legend className="profile-section-title">วิชาที่กำลังศึกษาหรือเคยศึกษา</legend>
         <div className="elig-grid">{slots(rule.inProgressOrCompleted, true)}</div>
       </fieldset>
-    </> : <p className="profile-hint">เลือกหลักสูตรเพื่อแสดงรายวิชาที่ต้องกรอก</p>}
+    </> : <p className="profile-hint">ไม่พบหลักสูตรจากรหัสนักศึกษา กรุณาติดต่อเจ้าหน้าที่</p>}
   </>;
 }

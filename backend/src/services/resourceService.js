@@ -97,7 +97,8 @@ export async function saveStudent(actor, studentId, body) {
   const fields = ['gpax', 'phone', 'transcript_s3_key', 'curriculum', 'course_grades', 'declarations'];
   v.object(body, actor.role === 'staff' ? [...fields, 'advisor_id'] : fields);
   return transaction(async (db) => {
-    const result = await db.query('SELECT * FROM students WHERE student_id=$1 FOR UPDATE', [studentId]);
+    // username = เลขทะเบียน ใช้ตรวจชั้นปีและหลักสูตรใน qualificationChecks
+    const result = await db.query('SELECT s.*, u.username FROM students s JOIN users u USING (user_id) WHERE s.student_id=$1 FOR UPDATE OF s', [studentId]);
     const student = result.rows[0] ?? missing();
     if (actor.role !== 'staff' && !(actor.role === 'student' && student.user_id === actor.user_id)) denied();
     const data = {};
