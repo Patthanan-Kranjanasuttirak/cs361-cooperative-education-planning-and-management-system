@@ -1,0 +1,160 @@
+.profile-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #222A4B;
+  margin-bottom: 1.25rem;
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.profile-section {
+  min-width: 0; /* fieldset ค่าเริ่มต้นเป็น min-content ทำให้ล้นจอมือถือ */
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem 0.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* หัวข้ออยู่ในกรอบ ไม่ทับเส้นขอบ (legend ปกติจะตัดเส้นกรอบ — float ทำให้ไม่ตัด) */
+.profile-section-title {
+  float: left;
+  width: 100%;
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: #222A4B;
+  padding: 0 0 0.75rem 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.profile-section-title + * {
+  clear: both;
+}
+
+.profile-label {
+  font-size: 0.9rem;
+  color: #334155;
+  margin-bottom: 0.35rem;
+}
+
+.profile-required {
+  color: #dc2626;
+}
+
+.profile-input,
+.profile-file {
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  background-color: #ffffff;
+}
+
+.profile-file {
+  padding: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+/* dropdown: ใช้ลูกศรของเราเอง เพื่อขยับเข้ามาจากขอบขวา (ลูกศรของ browser ชิดขอบเกินไป) */
+select.profile-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%2364748b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  padding-right: 2.5rem;
+  cursor: pointer;
+}
+
+select.profile-input:disabled {
+  cursor: not-allowed;
+}
+
+.profile-input:focus,
+.profile-file:focus {
+  outline: 2px solid #f59e0b;
+  outline-offset: 0;
+}
+
+.profile-input--error {
+  border-color: #dc2626;
+  margin-bottom: 0.25rem;
+}
+
+.profile-error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.profile-hint {
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.profile-hint-warn {
+  color: #b91c1c;
+}
+
+.profile-saved {
+  color: #15803d;
+  font-size: 0.9rem;
+}
+
+.profile-submit {
+  background-color: #222A4B;
+  color: #ffffff;
+  font-weight: 600;
+  border: none;
+  border-radius: 9999px;
+  padding: 0.7rem 2rem;
+  cursor: pointer;
+}
+
+.profile-submit:hover {
+  background-color: #2f3a66;
+}
+
+.profile-readonly {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.profile-readonly-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-readonly-value {
+  background-color: #eef2f6;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  color: #334155;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .profile-readonly {
+    grid-template-columns: 1fr;
+  }
+}

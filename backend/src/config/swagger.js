@@ -165,10 +165,13 @@ export const swaggerSpec = {
       User: {
         type: "object",
         properties: {
-          id: { type: "integer", example: 1 },
-          name: { type: "string", example: "Alice" },
-          email: { type: "string", example: "alice@example.com" },
-          created_at: { type: "string", format: "date-time" },
+          user_id: { type: "integer", example: 1 },
+          username: { type: "string", example: "6609611111" },
+          role: { type: "string", enum: ["student", "advisor", "staff", "company"], example: "student" },
+          th_name: { type: "string", example: "สมชาย ใจดี" },
+          en_name: { type: "string", example: "Somchai Jaidee" },
+          email: { type: "string", example: "somchai@dome.tu.ac.th" },
+          is_active: { type: "boolean", example: true },
         },
       },
       Company: {

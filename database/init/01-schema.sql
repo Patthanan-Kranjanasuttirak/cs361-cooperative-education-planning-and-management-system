@@ -1,9 +1,48 @@
--- สร้างตารางและข้อมูลเริ่มต้นของสถานประกอบการและตำแหน่งที่เปิดรับ
+-- สร้างตารางทั้งหมดของระบบและข้อมูลเริ่มต้นของสถานประกอบการและตำแหน่งที่เปิดรับ
 -- ไฟล์นี้จะถูกรันอัตโนมัติครั้งแรกที่ container PostgreSQL ถูกสร้าง (docker-entrypoint-initdb.d)
--- ข้อมูลมาจาก frontend/src/data/mockfile.json (ตำแหน่งงานและช่วงเวลาเปิดรับสมัครเป็นข้อมูลตัวอย่าง)
+-- ข้อมูลมาจาก frontend/src/data/mockfile.json (ตำแหน่งงาน ช่วงเวลาเปิดรับสมัคร และภาคการศึกษาเป็นข้อมูลตัวอย่าง)
+--
+-- ลำดับสถานะของใบสมัคร (applications.status)
+--   submitted → approved | rejected        อาจารย์ที่ปรึกษา หรือ เจ้าหน้าที่ คนใดคนหนึ่งตรวจ
+--   approved  → accepted | declined        บริษัทตัดสิน (เห็นเฉพาะใบที่ approved แล้ว)
+--   accepted  → confirmed                  นักศึกษายืนยันสิทธิ์ได้ที่เดียวต่อภาคการศึกษา
+--     เมื่อยืนยันแล้ว ใบอื่นในภาคเดียวกัน: accepted → released, submitted/approved → withdrawn
+--   submitted | approved → withdrawn       นักศึกษาถอนใบสมัครเอง
+
+-- ผู้ใช้ทุกบทบาท
+-- auth_provider = 'local' ใช้ password_hash, 'cognito' ใช้ cognito_sub
+CREATE TABLE IF NOT EXISTS users (
+    user_id       SERIAL PRIMARY KEY,
+    auth_provider VARCHAR(10)  NOT NULL DEFAULT 'local' CHECK (auth_provider IN ('local', 'cognito')),
+    username      VARCHAR(50)  NOT NULL UNIQUE,
+    password_hash VARCHAR(255),
+    cognito_sub   VARCHAR(64)  UNIQUE,
+    role          VARCHAR(20)  NOT NULL CHECK (role IN ('student', 'advisor', 'staff', 'company')),
+    th_name       VARCHAR(255) NOT NULL,
+    en_name       VARCHAR(255) NOT NULL,
+    email         VARCHAR(255) NOT NULL UNIQUE,
+    is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+    CHECK ((auth_provider = 'local' AND password_hash IS NOT NULL)
+        OR (auth_provider = 'cognito' AND cognito_sub IS NOT NULL))
+);
+
+-- ภาคการศึกษาที่เปิดรับแผนสหกิจ (เปิดใช้งานได้ทีละภาค)
+CREATE TABLE IF NOT EXISTS terms (
+    term_id       SERIAL PRIMARY KEY,
+    code          VARCHAR(20) NOT NULL UNIQUE,
+    plan_open_at  DATE        NOT NULL,
+    plan_close_at DATE        NOT NULL,
+    coop_start    DATE        NOT NULL,
+    coop_end      DATE        NOT NULL,
+    is_active     BOOLEAN     NOT NULL DEFAULT FALSE,
+    CHECK (plan_close_at >= plan_open_at),
+    CHECK (coop_end >= coop_start)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_term ON terms (is_active) WHERE is_active;
 
 CREATE TABLE IF NOT EXISTS companies (
-    id                SERIAL PRIMARY KEY,
+    company_id        SERIAL PRIMARY KEY,
     name              VARCHAR(255) NOT NULL,
     logo              VARCHAR(255),
     description       TEXT,
@@ -16,17 +55,98 @@ CREATE TABLE IF NOT EXISTS companies (
 
 CREATE INDEX IF NOT EXISTS idx_companies_province ON companies (province);
 
+-- ตำแหน่งผูกกับภาคการศึกษาเสมอ ถ้าเปิดตำแหน่งเดิมในภาคถัดไปให้สร้างแถวใหม่
+-- quota เป็นข้อมูลแสดงผลเท่านั้น บริษัทกดปิดรับเองผ่าน is_open
 CREATE TABLE IF NOT EXISTS positions (
-    id          SERIAL PRIMARY KEY,
-    company_id  INTEGER NOT NULL REFERENCES companies (id) ON DELETE CASCADE,
+    position_id SERIAL PRIMARY KEY,
+    company_id  INTEGER      NOT NULL REFERENCES companies (company_id) ON DELETE CASCADE,
+    term_id     INTEGER      NOT NULL REFERENCES terms (term_id),
     name        VARCHAR(255) NOT NULL,
     description TEXT,
-    quota       INTEGER CHECK (quota IS NULL OR quota >= 0)
+    quota       INTEGER CHECK (quota IS NULL OR quota >= 0),
+    is_open     BOOLEAN      NOT NULL DEFAULT TRUE,
+    UNIQUE (position_id, term_id) -- ให้ applications อ้างคู่ (position_id, term_id) ได้
 );
 
 CREATE INDEX IF NOT EXISTS idx_positions_company_id ON positions (company_id);
+CREATE INDEX IF NOT EXISTS idx_positions_term_id ON positions (term_id);
 
-INSERT INTO companies (id, name, logo, description, province, location, application_start, application_end) VALUES
+CREATE TABLE IF NOT EXISTS students (
+    student_id        SERIAL PRIMARY KEY,
+    user_id           INTEGER NOT NULL UNIQUE REFERENCES users (user_id) ON DELETE CASCADE,
+    gpax              NUMERIC(3, 2) CHECK (gpax IS NULL OR gpax BETWEEN 0 AND 4),
+    transcript_s3_key VARCHAR(512),
+    phone             VARCHAR(10) CHECK (phone IS NULL OR phone ~ '^0[0-9]{9}$'), -- ให้สถานประกอบการติดต่อนัดสัมภาษณ์
+    advisor_id        INTEGER REFERENCES users (user_id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_students_advisor_id ON students (advisor_id);
+
+-- ผู้ประสานงานของบริษัท (users.role = 'company')
+CREATE TABLE IF NOT EXISTS company_users (
+    user_id    INTEGER PRIMARY KEY REFERENCES users (user_id) ON DELETE CASCADE,
+    company_id INTEGER NOT NULL REFERENCES companies (company_id) ON DELETE CASCADE,
+    job_title  VARCHAR(150),
+    -- มือถือ 10 หลัก หรือเบอร์สำนักงาน 9 หลัก (เก็บเฉพาะตัวเลข)
+    phone      VARCHAR(10) NOT NULL CHECK (phone ~ '^0[0-9]{8,9}$')
+);
+
+CREATE INDEX IF NOT EXISTS idx_company_users_company_id ON company_users (company_id);
+
+-- term_id เก็บซ้ำกับ positions.term_id เพื่อใช้ทำ unique index รายภาค
+-- composite FK บังคับให้ตรงกับภาคของตำแหน่งเสมอ (backend ต้องดึง term_id จาก position ไม่รับจาก client)
+CREATE TABLE IF NOT EXISTS applications (
+    application_id SERIAL PRIMARY KEY,
+    student_id     INTEGER     NOT NULL REFERENCES students (student_id) ON DELETE CASCADE,
+    term_id        INTEGER     NOT NULL,
+    position_id    INTEGER     NOT NULL,
+    status         VARCHAR(20) NOT NULL DEFAULT 'submitted'
+                   CHECK (status IN ('submitted', 'approved', 'rejected', 'accepted',
+                                     'declined', 'confirmed', 'released', 'withdrawn')),
+    resume_s3_key  VARCHAR(512),
+    submitted_at   TIMESTAMPTZ DEFAULT NOW(),
+    FOREIGN KEY (position_id, term_id) REFERENCES positions (position_id, term_id),
+    UNIQUE (student_id, position_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_applications_position_id ON applications (position_id);
+CREATE INDEX IF NOT EXISTS idx_applications_student_term ON applications (student_id, term_id);
+
+-- นักศึกษายืนยันสิทธิ์ได้ที่เดียวต่อภาคการศึกษา
+CREATE UNIQUE INDEX IF NOT EXISTS one_confirmed_per_term
+    ON applications (student_id, term_id) WHERE status = 'confirmed';
+
+-- ผลการตรวจของอาจารย์ที่ปรึกษาหรือเจ้าหน้าที่ (ผ่าน 1 รายการก็เปลี่ยนใบสมัครเป็น approved)
+CREATE TABLE IF NOT EXISTS application_reviews (
+    review_id      SERIAL PRIMARY KEY,
+    application_id INTEGER     NOT NULL REFERENCES applications (application_id) ON DELETE CASCADE,
+    reviewer_id    INTEGER     NOT NULL REFERENCES users (user_id),
+    status         VARCHAR(20) NOT NULL CHECK (status IN ('approved', 'rejected')),
+    comment        TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_application_reviews_application_id ON application_reviews (application_id);
+
+-- ประวัติการเปลี่ยนสถานะทุกครั้ง (position_id, resume_s3_key เป็นค่า ณ ตอนเปลี่ยน)
+-- เพิ่มแถวใน transaction เดียวกับที่ update applications.status
+CREATE TABLE IF NOT EXISTS application_history (
+    history_id     SERIAL PRIMARY KEY,
+    application_id INTEGER     NOT NULL REFERENCES applications (application_id) ON DELETE CASCADE,
+    changed_by     INTEGER     REFERENCES users (user_id) ON DELETE SET NULL,
+    from_status    VARCHAR(20),
+    to_status      VARCHAR(20) NOT NULL,
+    position_id    INTEGER     NOT NULL,
+    resume_s3_key  VARCHAR(512),
+    changed_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_application_history_application_id ON application_history (application_id);
+
+INSERT INTO terms (code, plan_open_at, plan_close_at, coop_start, coop_end, is_active) VALUES
+    ('2/2569', '2026-08-01', '2027-01-15', '2027-01-18', '2027-05-14', TRUE);
+
+INSERT INTO companies (company_id, name, logo, description, province, location, application_start, application_end) VALUES
     (1, 'บริษัท ซีดีจี กรุ๊ป จำกัด', 'C01.jpg', 'ผู้ให้บริการระบบเทคโนโลยีสารสนเทศ (IT Solutions) และ System Integration ครบวงจร', 'กรุงเทพมหานคร', '202 ถนนนางลิ้นจี่ แขวงช่องนนทรี เขตยานนาวา กรุงเทพมหานคร 10120', '2026-10-01', '2026-12-31'),
     (2, 'ศูนย์เทคโนโลยีอิเล็กทรอนิกส์และคอมพิวเตอร์แห่งชาติ (NECTEC)', 'C02.png', 'หน่วยงานวิจัยและพัฒนาด้านเทคโนโลยีอิเล็กทรอนิกส์และคอมพิวเตอร์ของรัฐ', 'ปทุมธานี', 'ศูนย์เทคโนโลยีอิเล็กทรอนิกส์และคอมพิวเตอร์แห่งชาติ (NECTEC) 112 ถนนพหลโยธิน', '2026-09-01', '2026-10-31'),
     (3, 'ตลาดหลักทรัพย์แห่งประเทศไทย (SET)', 'C03.jpg', 'ศูนย์กลางการซื้อขายหลักทรัพย์และให้บริการที่เกี่ยวเนื่องกับตลาดทุนของประเทศไทย', 'กรุงเทพมหานคร', 'เลขที่ 93 ถนนรัชดาภิเษก แขวงดินแดง เขตดินแดง กรุงเทพฯ 10400', '2026-11-01', '2027-01-15'),
@@ -130,7 +250,10 @@ INSERT INTO companies (id, name, logo, description, province, location, applicat
     (102, 'บริษัท แอสเซนด์ มันนี่ จำกัด', 'c111.jpeg', 'บริษัทฟินเทคชั้นนำ ผู้ให้บริการทางการเงินและแพลตฟอร์ม e-Wallet (TrueMoney) ระดับภูมิภาค', 'กรุงเทพมหานคร', 'อาคารทรู ดิจิทัล พาร์ค อาคารฟีนิกซ์ ชั้น 7-8 ถนนสุขุมวิท เขตพระโขนง กรุงเทพฯ 10260', '2026-09-01', '2026-10-31'),
     (103, 'บริษัท เซ็นทรัล เรสตอรองส์ กรุ๊ป จำกัด', 'c112.png', 'ผู้ดำเนินธุรกิจร้านอาหารและเครือข่ายแฟรนไชส์อาหารระดับแนวหน้าของไทย ในเครือเซ็นทรัล', 'กรุงเทพมหานคร', '306 เซ็นทรัลสีลมทาวเวอร์ ชั้น 5,6,7,8 ถนนสีลม แขวงสุริยวงศ์ เขตบางรัก กรุงเทพมหานคร 10500', '2026-11-01', '2027-01-15');
 
-INSERT INTO positions (company_id, name, description, quota) VALUES
+-- ตำแหน่งตัวอย่างทั้งหมดอยู่ในภาค 2/2569
+INSERT INTO positions (company_id, term_id, name, description, quota)
+SELECT v.company_id, t.term_id, v.name, v.description, v.quota
+FROM terms t, (VALUES
     (1, 'Software Developer Intern', 'พัฒนาเว็บแอปพลิเคชันและระบบภายในร่วมกับทีมพัฒนา', 4),
     (1, 'QA / Software Tester Intern', 'ออกแบบและทดสอบระบบ เขียน test case และรายงานข้อผิดพลาด', 3),
     (2, 'Software Developer Intern', 'พัฒนาเว็บแอปพลิเคชันและระบบภายในร่วมกับทีมพัฒนา', 3),
@@ -307,7 +430,9 @@ INSERT INTO positions (company_id, name, description, quota) VALUES
     (101, 'IT Support Intern', 'ดูแลอุปกรณ์ ระบบเครือข่าย และช่วยเหลือผู้ใช้งานภายในองค์กร', 3),
     (102, 'UX/UI Designer Intern', 'ออกแบบหน้าจอและประสบการณ์ผู้ใช้ของแอปพลิเคชัน', 3),
     (102, 'IT Business Analyst Intern', 'เก็บความต้องการจากผู้ใช้และออกแบบขั้นตอนการทำงานของระบบ', 2),
-    (103, 'IT Business Analyst Intern', 'เก็บความต้องการจากผู้ใช้และออกแบบขั้นตอนการทำงานของระบบ', 2);
+    (103, 'IT Business Analyst Intern', 'เก็บความต้องการจากผู้ใช้และออกแบบขั้นตอนการทำงานของระบบ', 2)
+) AS v (company_id, name, description, quota)
+WHERE t.code = '2/2569';
 
--- ให้ id ถัดไปต่อจากข้อมูลที่ใส่ไว้ ไม่ชนกับ id เดิม
-SELECT setval(pg_get_serial_sequence('companies', 'id'), (SELECT MAX(id) FROM companies));
+-- ให้ company_id ถัดไปต่อจากข้อมูลที่ใส่ไว้ ไม่ชนกับ id เดิม
+SELECT setval(pg_get_serial_sequence('companies', 'company_id'), (SELECT MAX(company_id) FROM companies));

@@ -1,0 +1,92 @@
+.all-pending {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.all-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.all-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.all-select {
+  margin-bottom: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.all-history-toggle {
+  background-color: #ffffff;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.all-submitted {
+  margin-top: 1rem;
+}
+
+/* ประวัติการเปลี่ยนสถานะ (application_history) */
+.history-list {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.history-item {
+  position: relative;
+  display: flex;
+  gap: 0.75rem;
+}
+
+/* เส้นเชื่อมระหว่างจุด */
+.history-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 14px;
+  bottom: -0.6rem;
+  width: 2px;
+  background-color: #e2e8f0;
+}
+
+.history-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 9999px;
+  background-color: #222A4B;
+  flex-shrink: 0;
+}
+
+.history-change {
+  color: #222A4B;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.history-meta {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 768px) {
+  .all-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .all-filter--wide {
+    grid-column: 1 / -1;
+  }
+}

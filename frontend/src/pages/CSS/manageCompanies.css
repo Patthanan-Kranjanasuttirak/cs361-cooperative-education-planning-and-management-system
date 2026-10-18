@@ -1,0 +1,293 @@
+.cm-muted {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.cm-small-btn {
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+.app-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ตาราง */
+.cm-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  /* จอแคบ (เช่น แท็บเล็ต) ให้เลื่อนในกรอบแทนการตัดปุ่มทิ้ง */
+  overflow-x: auto;
+}
+
+.cm-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cm-table th {
+  background-color: #f8fafc;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.cm-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.cm-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.cm-table tbody tr:hover {
+  background-color: #fafafa;
+}
+
+.cm-num {
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+.cm-period {
+  white-space: nowrap;
+  color: #334155;
+  font-size: 0.9rem;
+}
+
+.cm-company {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cm-logo {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+}
+
+.cm-logo--empty {
+  display: inline-block;
+  background-color: #f1f5f9;
+}
+
+.cm-company-text {
+  min-width: 0;
+}
+
+.cm-company-name {
+  font-weight: 600;
+  color: #222A4B;
+}
+
+.cm-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.cm-actions .cm-small-btn + .cm-small-btn {
+  margin-left: 0.4rem;
+}
+
+.cm-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+/* หน้าต่างเพิ่ม / แก้ไข */
+.cm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.cm-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.55);
+  animation: modalBackdropFadeIn 0.2s ease forwards;
+}
+
+.cm-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  animation: modalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cm-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.cm-dialog-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #222A4B;
+}
+
+.cm-close {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+}
+
+.cm-close:hover {
+  background-color: #f1f5f9;
+}
+
+.cm-dialog-body {
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cm-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.85rem 1.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.cm-textarea {
+  font-family: inherit;
+  resize: vertical;
+}
+
+.cm-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1rem;
+}
+
+.cm-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cm-empty {
+  color: #94a3b8;
+  margin-bottom: 0.75rem;
+}
+
+.cm-coordinators {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.cm-coordinator {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+
+.cm-coordinator-info {
+  min-width: 0;
+}
+
+.cm-coordinator-name {
+  color: #222A4B;
+  font-weight: 500;
+}
+
+.cm-add-coordinator {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.cm-add-coordinator .profile-input {
+  margin-bottom: 0.5rem;
+}
+
+.cm-add-coordinator .cm-small-btn {
+  padding: 0.6rem 1rem;
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+/* ตารางแบบการ์ด: จอที่แคบกว่านี้ตารางจะล้นกรอบ (เนื้อหาข้างในกว้างแค่ราว 570px ที่ 1024px) */
+@media (max-width: 1100px) {
+  .cm-table thead {
+    display: none;
+  }
+
+  .cm-table,
+  .cm-table tbody,
+  .cm-table tr,
+  .cm-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .cm-table tr {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0.5rem 0;
+  }
+
+  .cm-table td {
+    border-bottom: none;
+    padding: 0.3rem 1rem;
+    text-align: left !important;
+  }
+
+  .cm-table td[data-label]:not(:first-child)::before {
+    content: attr(data-label) ': ';
+    color: #94a3b8;
+    font-size: 0.8rem;
+  }
+
+  .cm-actions {
+    text-align: left;
+  }
+}
+
+@media (max-width: 768px) {
+  .cm-row,
+  .cm-add-coordinator {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

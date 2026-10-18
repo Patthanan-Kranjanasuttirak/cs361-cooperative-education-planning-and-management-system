@@ -1,0 +1,147 @@
+/* ===== ข้อมูลบริษัท ===== */
+.cp-notice {
+  background-color: #fef3c7;
+  color: #92400e;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.cp-logo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.cp-logo {
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.cp-logo--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  background-color: #f8fafc;
+}
+
+.cp-logo-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.cp-half {
+  max-width: 320px;
+}
+
+/* ===== ตำแหน่งของเรา ===== */
+.cp-dialog {
+  max-width: 560px;
+}
+
+.cp-quota-input {
+  max-width: 160px;
+}
+
+.cp-card--closed {
+  background-color: #f8fafc;
+}
+
+.cp-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.cp-stat {
+  background-color: #f8fafc;
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+}
+
+.cp-card--closed .cp-stat {
+  background-color: #ffffff;
+}
+
+.cp-stat-value {
+  color: #222A4B;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.cp-bar {
+  height: 6px;
+  border-radius: 9999px;
+  background-color: #e2e8f0;
+  margin-top: 0.4rem;
+  overflow: hidden;
+}
+
+.cp-bar-fill {
+  height: 100%;
+  background-color: #222A4B;
+  border-radius: 9999px;
+}
+
+.cp-bar-fill--full {
+  background-color: #15803d;
+}
+
+.cp-full-hint {
+  margin-top: 0.75rem;
+  color: #15803d;
+  font-size: 0.9rem;
+}
+
+/* ===== ผู้สมัคร ===== */
+/* ใช้ selector 2 class เพื่อชนะ .all-select { margin-bottom: 0 } ไม่ว่าไฟล์ CSS จะโหลดลำดับไหน */
+.all-select.cp-position-filter {
+  max-width: 320px;
+  margin-bottom: 1.25rem;
+}
+
+.cp-released {
+  margin-top: 0.75rem;
+  color: #64748b;
+  background-color: #f1f5f9;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .cp-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cp-logo-row {
+    flex-direction: column;
+  }
+}
+
+/* ข้อมูลติดต่อนักศึกษา (หน้าผู้สมัคร) */
+.cp-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin-top: 0.4rem;
+}
+
+.cp-contact-item {
+  color: #1d4ed8;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.cp-contact-item:hover {
+  text-decoration: underline;
+}

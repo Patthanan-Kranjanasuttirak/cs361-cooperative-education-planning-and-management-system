@@ -1,0 +1,68 @@
+.file-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  background-color: #ffffff;
+  font-weight: 400;
+  cursor: pointer;
+  margin-bottom: 0.25rem;
+}
+
+/* ซ่อน input จริงแต่ยังกด Tab มาโฟกัสได้ */
+.file-input-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.file-input:focus-within {
+  outline: 2px solid #f59e0b;
+  outline-offset: 0;
+}
+
+.file-input-button {
+  flex-shrink: 0;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.25rem 0.8rem;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.file-input:hover .file-input-button {
+  background-color: #e2e8f0;
+}
+
+.file-input-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  color: #94a3b8;
+}
+
+.file-input-name--chosen {
+  color: #334155;
+}
+
+.file-input--error {
+  border-color: #dc2626;
+}
+
+.file-input--disabled {
+  cursor: not-allowed;
+  background-color: #f8fafc;
+}
+
+.file-input--disabled:hover .file-input-button {
+  background-color: #f1f5f9;
+}
