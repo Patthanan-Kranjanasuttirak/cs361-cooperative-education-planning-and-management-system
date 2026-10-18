@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useApi } from '../../hooks/useApi';
 import { api } from '../../services/api';
 import ApiState from '../../components/ApiState';
+import PositionCard from '../../components/PositionCard';
 import { formatApplicationPeriod } from '../../utils/applicationPeriod';
 import { getImageUrl } from '../../utils/image';
 import { validateCompany } from '../../utils/companyValidation';
@@ -15,10 +16,9 @@ import '../CSS/manageCompanies.css';
 const PAGE_SIZE = 15;
 const EMPTY_FORM = { logo: '', name: '', description: '', province: '', location: '', application_start: '', application_end: '' };
 
-function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, onSave, onClose }) {
+function CompanyDialog({ initial, provinces, onSave, onClose }) {
   const isNew = !initial;
   const [form, setForm] = useState(() => (initial ? { ...EMPTY_FORM, ...pick(initial) } : EMPTY_FORM));
-  const coordinators = initialCoordinators ?? [];
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -99,12 +99,80 @@ function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, 
             </div>
             {errors.period && <p className="profile-error">{errors.period}</p>}
           </fieldset>
+          {isNew && <p className="profile-hint">บันทึกสถานประกอบการก่อน แล้วกด "ดูข้อมูล" เพื่อเพิ่มผู้ประสานงาน</p>}
+        </div>
 
-          <fieldset className="profile-section" disabled={saving}>
+        <div className="cm-dialog-foot">
+          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose} disabled={saving}>ยกเลิก</button>
+          {errors.submit && <p className="profile-error" role="alert">{errors.submit}</p>}
+          <button type="submit" className="app-btn app-btn--primary" disabled={saving}>{saving ? 'กำลังบันทึก…' : 'บันทึก'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ดูข้อมูลบริษัท: ตำแหน่งงาน (อ่านอย่างเดียว — บริษัทเป็นผู้จัดการเอง) และผู้ประสานงาน (จัดการที่หน้าผู้ใช้งาน)
+function CompanyInfoDialog({ company, coordinators, coordinatorsLoading, onClose }) {
+  const { data: activeTerm, loading: termLoading, error: termError } = useApi('/terms/active', null);
+  const { data: allPositions, loading: positionsLoading, error: positionsError } = useApi(`/positions?company_id=${company.id}`);
+  const { data: applications, loading: appsLoading, error: appsError } = useApi(activeTerm ? `/staff/applications?term_id=${activeTerm.term_id}` : null);
+  // ตำแหน่งของภาคที่ active หรือไม่ผูกภาค — ตรงกับที่ผู้ประสานงานเห็นในหน้า "ตำแหน่งของเรา"
+  const positions = allPositions.filter((p) => p.term_id == null || p.term_id === activeTerm?.term_id);
+  const loading = termLoading || positionsLoading || appsLoading;
+  const error = termError || positionsError || appsError;
+
+  // นับแบบเดียวกับหน้าผู้ประสานงาน: ผู้สมัคร = ใบที่ผ่านการอนุมัติจากอาจารย์แล้ว, ยืนยันสิทธิ์ = confirmed
+  const statsOf = (positionId) => {
+    const apps = applications.filter((a) => a.position_id === positionId && a.approved_at);
+    return { applicants: apps.length, confirmed: apps.filter((a) => a.status === 'confirmed').length };
+  };
+
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="cm-overlay" role="dialog" aria-modal="true" aria-labelledby="cm-info-title">
+      <div className="cm-backdrop" onClick={onClose} />
+      <div className="cm-dialog">
+        <div className="cm-dialog-head">
+          <div>
+            <h2 id="cm-info-title" className="cm-dialog-title">{company.name}</h2>
+            <p className="cm-muted">{company.province || 'ไม่ระบุจังหวัด'} · {formatApplicationPeriod(company)}</p>
+          </div>
+          <button type="button" className="cm-close" onClick={onClose} aria-label="ปิด">✕</button>
+        </div>
+
+        <div className="cm-dialog-body">
+          <fieldset className="profile-section">
+            <legend className="profile-section-title">ตำแหน่งงาน{activeTerm && ` · ภาคการศึกษา ${activeTerm.code}`}</legend>
+            {loading ? (
+              <p className="cm-empty">กำลังโหลด...</p>
+            ) : error ? (
+              <p className="profile-error">{error}</p>
+            ) : positions.length === 0 ? (
+              <p className="cm-empty">ยังไม่มีตำแหน่งในภาคการศึกษานี้</p>
+            ) : (
+              <ul className="app-list">
+                {positions.map((p) => <PositionCard key={p.id} position={p} stats={statsOf(p.id)} />)}
+              </ul>
+            )}
+          </fieldset>
+
+          <fieldset className="profile-section">
             <legend className="profile-section-title">ผู้ประสานงาน</legend>
             <p className="profile-hint">อีเมลที่ผู้ประสานงานใช้สำหรับเข้าสู่ระบบ</p>
 
-            {coordinators.length === 0 ? (
+            {coordinatorsLoading ? (
+              <p className="cm-empty">กำลังโหลด...</p>
+            ) : coordinators.length === 0 ? (
               <p className="cm-empty">ยังไม่มีผู้ประสานงาน</p>
             ) : (
               <ul className="cm-coordinators">
@@ -114,24 +182,21 @@ function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, 
                       <p className="cm-coordinator-name">{c.th_name}{c.job_title && <span className="cm-muted"> · {c.job_title}</span>}</p>
                       <p className="cm-muted">{c.email}{c.phone && ` · ${formatPhone(c.phone)}`}</p>
                     </div>
-                    <Link className="app-btn pending-btn-cancel cm-small-btn" to={`/staff/users?company=${initial.id}`}>จัดการ</Link>
+                    <Link className="app-btn pending-btn-cancel cm-small-btn" to={`/staff/users?company=${company.id}`}>จัดการ</Link>
                   </li>
                 ))}
               </ul>
             )}
 
-            {isNew ? <p className="profile-hint">บันทึกสถานประกอบการก่อนเพิ่มบัญชีผู้ประสานงาน</p> :
-              <Link className="app-btn app-btn--primary cm-small-btn" to={`/staff/users?company=${initial.id}`}>จัดการผู้ประสานงาน</Link>}
+            <Link className="app-btn app-btn--primary cm-small-btn" to={`/staff/users?company=${company.id}`}>จัดการผู้ประสานงาน</Link>
           </fieldset>
         </div>
 
         <div className="cm-dialog-foot">
-          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose} disabled={saving}>ยกเลิก</button>
-          {errors.submit && <p className="profile-error" role="alert">{errors.submit}</p>}
-          <button type="submit" className="app-btn app-btn--primary" disabled={saving}>{saving ? 'กำลังบันทึก…' : 'บันทึก'}</button>
+          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose}>ปิด</button>
         </div>
+      </div>
     </div>
-    </div >
   );
 }
 
@@ -158,7 +223,7 @@ export default function ManageCompanies() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(null);
-  // บริษัทที่กำลังดูตำแหน่ง (null = ปิด)
+  // บริษัทที่กำลังดูข้อมูล (null = ปิด)
   const [viewing, setViewing] = useState(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -254,6 +319,7 @@ export default function ManageCompanies() {
                       {usersLoading || usersError ? '—' : (coordinators[c.id]?.length ?? 0) || <span className="cm-muted" title="ยังไม่มีผู้ประสานงาน">-</span>}
                     </td>
                     <td className="cm-actions">
+                      <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setViewing(c); setNotice(''); }} disabled={busy}>ดูข้อมูล</button>
                       <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => edit(c)} disabled={busy}>แก้ไข</button>
                       <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => handleDelete(c)} disabled={busy}>ลบ</button>
                     </td>
@@ -277,7 +343,7 @@ export default function ManageCompanies() {
         <CompanyInfoDialog
           company={viewing}
           coordinators={coordinators[viewing.id] ?? []}
-          onCoordinatorsChange={(next) => handleCoordinatorsChange(viewing.id, next)}
+          coordinatorsLoading={usersLoading}
           onClose={() => setViewing(null)}
         />
       )}
@@ -285,7 +351,6 @@ export default function ManageCompanies() {
       {editing && (
         <CompanyDialog
           initial={editing === 'new' ? null : editing}
-          coordinators={editing === 'new' ? [] : editing.coordinators}
           provinces={provinces}
           onSave={handleSave}
           onClose={() => setEditing(null)}

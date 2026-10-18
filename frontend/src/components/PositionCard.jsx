@@ -1,13 +1,13 @@
-import { getPositionStats } from '../services/companyPortalMock';
 import '../pages/CSS/myApplications.css';
 import '../pages/CSS/pendingApplications.css';
 import '../pages/CSS/companyPortal.css';
 import './CSS/ApplicationStatusBadge.css';
 
 // การ์ดตำแหน่งงาน: สถานะเปิด/ปิดรับ + ยืนยันสิทธิ์แล้ว / จำนวนที่เปิดรับ + จำนวนผู้สมัคร
+// stats = { applicants, confirmed } นับจากใบสมัครที่ผู้เรียกโหลดมา
 // ใช้ทั้งหน้าผู้ประสานงาน (ส่งปุ่มจัดการมาเป็น children) และเจ้าหน้าที่ (ดูอย่างเดียว ไม่ส่ง children)
-export default function PositionCard({ position: p, fullHint, children }) {
-  const { applicants, confirmed } = getPositionStats(p.id);
+export default function PositionCard({ position: p, stats, fullHint, children }) {
+  const { applicants = 0, confirmed = 0 } = stats ?? {};
   const full = p.quota != null && confirmed >= p.quota;
   const percent = p.quota ? Math.min(100, Math.round((confirmed / p.quota) * 100)) : 0;
 
