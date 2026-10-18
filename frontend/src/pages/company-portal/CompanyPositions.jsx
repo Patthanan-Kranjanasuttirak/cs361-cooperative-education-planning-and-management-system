@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/useAuth';
-import { fetchCompany } from '../../services/companyApi';
-import { MOCK_ACTIVE_TERM, MOCK_COMPANY_APPLICANTS } from '../../services/companyPortalMock';
+import { useApi } from '../../hooks/useApi';
+import { api } from '../../services/api';
+import PositionCard from '../../components/PositionCard';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
@@ -21,21 +22,22 @@ function validate(form, positions, editingId) {
   return errors;
 }
 
-function PositionDialog({ initial, positions, onSave, onClose }) {
+function PositionDialog({ initial, positions, termLabel, onSave, onClose }) {
   const [form, setForm] = useState(() =>
     initial ? { name: initial.name, description: initial.description ?? '', quota: initial.quota == null ? '' : String(initial.quota) } : EMPTY_FORM
   );
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose();
+    const onKey = (e) => e.key === 'Escape' && !saving && onClose();
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKey);
     return () => {
       document.body.style.overflow = '';
       window.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
+  }, [onClose, saving]);
 
   const change = (e) => {
     const { name, value } = e.target;
@@ -43,27 +45,30 @@ function PositionDialog({ initial, positions, onSave, onClose }) {
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
-  const submit = (e) => {
-    e.preventDefault();
+  const submit = async (e) => {
+    e.preventDefault(); if (saving) return;
     const nextErrors = validate(form, positions, initial?.id);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    onSave({ name: form.name.trim(), description: form.description.trim() || null, quota: form.quota === '' ? null : Number(form.quota) });
+    setSaving(true);
+    try { await onSave({ name: form.name.trim(), description: form.description.trim() || null, quota: form.quota === '' ? null : Number(form.quota) }); }
+    catch (error) { setErrors((previous) => ({ ...previous, submit: error.message })); }
+    finally { setSaving(false); }
   };
 
   return (
     <div className="cm-overlay" role="dialog" aria-modal="true" aria-labelledby="pos-dialog-title">
-      <div className="cm-backdrop" onClick={onClose} />
+      <div className="cm-backdrop" onClick={saving ? undefined : onClose} />
       <form className="cm-dialog cp-dialog" onSubmit={submit} noValidate>
         <div className="cm-dialog-head">
           <h2 id="pos-dialog-title" className="cm-dialog-title">{initial ? 'แก้ไขตำแหน่ง' : 'เพิ่มตำแหน่ง'}</h2>
-          <button type="button" className="cm-close" onClick={onClose} aria-label="ปิด">✕</button>
+          <button type="button" className="cm-close" onClick={onClose} disabled={saving} aria-label="ปิด">✕</button>
         </div>
         <div className="cm-dialog-body">
-          <fieldset className="profile-section">
-            <legend className="profile-section-title">ข้อมูลตำแหน่ง · ภาคการศึกษา {MOCK_ACTIVE_TERM}</legend>
+          <fieldset className="profile-section" disabled={saving}>
+            <legend className="profile-section-title">ข้อมูลตำแหน่ง · ภาคการศึกษา {termLabel}</legend>
             <label className="profile-label" htmlFor="pos-name">ชื่อตำแหน่ง <span className="profile-required">*</span></label>
-            <input id="pos-name" name="name" className={`profile-input${errors.name ? ' profile-input--error' : ''}`} value={form.name} onChange={change} placeholder="เช่น Software Developer Intern" autoFocus />
+            <input id="pos-name" name="name" className={`profile-input${errors.name ? ' profile-input--error' : ''}`} value={form.name} onChange={change} placeholder="เช่น Software Developer Intern" maxLength={255} autoFocus />
             {errors.name && <p className="profile-error">{errors.name}</p>}
 
             <label className="profile-label" htmlFor="pos-description">รายละเอียดงาน</label>
@@ -75,8 +80,9 @@ function PositionDialog({ initial, positions, onSave, onClose }) {
           </fieldset>
         </div>
         <div className="cm-dialog-foot">
-          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose}>ยกเลิก</button>
-          <button type="submit" className="app-btn app-btn--primary">บันทึก</button>
+          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose} disabled={saving}>ยกเลิก</button>
+          {errors.submit && <p className="profile-error" role="alert">{errors.submit}</p>}
+          <button type="submit" className="app-btn app-btn--primary" disabled={saving}>{saving ? 'กำลังบันทึก…' : 'บันทึก'}</button>
         </div>
       </form>
     </div>
@@ -85,65 +91,40 @@ function PositionDialog({ initial, positions, onSave, onClose }) {
 
 export default function CompanyPositions() {
   const { user } = useAuth();
-  const [positions, setPositions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  // null = ปิด, 'new' = เพิ่มใหม่, object = แก้ไขตำแหน่งนั้น
+  const { data: allPositions, reload, loading: positionsLoading, error: positionsError } = useApi('/company/positions');
+  const { data: activeTerm, loading: termLoading, error: termError } = useApi('/terms/active', null);
+  const { data: applicants, loading: applicantsLoading, error: applicantsError } = useApi(activeTerm ? `/company/applications?term_id=${activeTerm.term_id}` : null);
+  const positions = allPositions.filter((p) => p.term_id == null || p.term_id === activeTerm?.term_id);
+  const loading = positionsLoading || termLoading || applicantsLoading;
+  const loadError = !user.company_id ? 'บัญชีนี้ยังไม่ได้ผูกกับสถานประกอบการ กรุณาติดต่อเจ้าหน้าที่' : positionsError || termError || applicantsError;
   const [editing, setEditing] = useState(null);
   const [notice, setNotice] = useState('');
-
-  // API คืนเฉพาะตำแหน่งของภาคที่ active อยู่แล้ว
-  useEffect(() => {
-    // ผู้ประสานงานที่ยังไม่ถูกผูกกับบริษัท (company_users) — ไม่ต้องเรียก API
-    if (!user.company_id) {
-      setLoadError('บัญชีนี้ยังไม่ได้ผูกกับสถานประกอบการ กรุณาติดต่อเจ้าหน้าที่');
-      setLoading(false);
-      return undefined;
-    }
-    const controller = new AbortController();
-    fetchCompany(user.company_id, controller.signal)
-      .then((c) => setPositions(c?.positions ?? []))
-      .catch((error) => {
-        if (error.name !== 'AbortError') setLoadError('โหลดตำแหน่งไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
-      })
-      .finally(() => {
-        // คำขอที่ถูกยกเลิก (ออกจากหน้า หรือ StrictMode รัน effect ซ้ำ) ไม่ต้องปิดสถานะโหลด
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [user.company_id]);
+  const [busy, setBusy] = useState(false);
 
   const statsOf = (positionId) => {
-    const apps = MOCK_COMPANY_APPLICANTS.filter((a) => a.position_id === positionId);
+    const apps = applicants.filter((a) => a.position_id === positionId);
     return { applicants: apps.length, confirmed: apps.filter((a) => a.status === 'confirmed').length };
   };
-
-  const handleSave = (data) => {
-    if (editing === 'new') {
-      // TODO: POST /api/company/positions — backend ใส่ company_id จากผู้ login และ term_id จากภาคที่ active
-      const id = `new-${Date.now()}`;
-      setPositions((prev) => [...prev, { id, is_open: true, ...data }]);
-      setNotice(`เพิ่มตำแหน่ง ${data.name} แล้ว`);
-    } else {
-      // TODO: PUT /api/company/positions/:id
-      setPositions((prev) => prev.map((p) => (p.id === editing.id ? { ...p, ...data } : p)));
-      setNotice(`บันทึกตำแหน่ง ${data.name} แล้ว`);
-    }
-    setEditing(null);
+  const handleSave = async (data) => {
+    const body = editing === 'new' ? { ...data, term_id: activeTerm.term_id } : data;
+    await api(editing === 'new' ? '/company/positions' : `/company/positions/${editing.id}`, { method: editing === 'new' ? 'POST' : 'PUT', body });
+    await reload(); setEditing(null); setNotice(`บันทึกตำแหน่ง ${data.name} แล้ว`);
   };
-
-  const toggleOpen = (p) => {
-    if (p.is_open && !window.confirm(`ปิดรับสมัครตำแหน่ง ${p.name}?\n\nนักศึกษาจะสมัครตำแหน่งนี้เพิ่มไม่ได้ แต่ผู้สมัครเดิมยังพิจารณาได้ตามปกติ`)) return;
-    // TODO: PATCH /api/company/positions/:id { is_open }
-    setPositions((prev) => prev.map((x) => (x.id === p.id ? { ...x, is_open: !x.is_open } : x)));
-    setNotice(`${p.is_open ? 'ปิด' : 'เปิด'}รับสมัครตำแหน่ง ${p.name} แล้ว`);
+  const toggleOpen = async (p) => {
+    if (busy || (p.is_open && !window.confirm(`ปิดรับสมัครตำแหน่ง ${p.name}?\n\nนักศึกษาจะสมัครตำแหน่งนี้เพิ่มไม่ได้ แต่ผู้สมัครเดิมยังพิจารณาได้ตามปกติ`))) return;
+    setBusy(true);
+    try {
+      await api(`/company/positions/${p.id}`, { method: 'PATCH', body: { is_open: !p.is_open } });
+      await reload(); setNotice(`${p.is_open ? 'ปิด' : 'เปิด'}รับสมัครตำแหน่ง ${p.name} แล้ว`);
+    } catch (error) { setNotice(error.message); }
+    finally { setBusy(false); }
   };
-
-  const remove = (p) => {
-    if (!window.confirm(`ลบตำแหน่ง ${p.name}?`)) return;
-    // TODO: DELETE /api/company/positions/:id — backend ตอบ 409 ถ้ามีใบสมัครแล้ว
-    setPositions((prev) => prev.filter((x) => x.id !== p.id));
-    setNotice(`ลบตำแหน่ง ${p.name} แล้ว`);
+  const remove = async (p) => {
+    if (busy || !window.confirm(`ลบตำแหน่ง ${p.name}?`)) return;
+    setBusy(true);
+    try { await api(`/company/positions/${p.id}`, { method: 'DELETE' }); await reload(); setNotice(`ลบตำแหน่ง ${p.name} แล้ว`); }
+    catch (error) { setNotice(error.message); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -151,14 +132,15 @@ export default function CompanyPositions() {
       <div className="app-header">
         <div>
           <h1 className="app-title">ตำแหน่งของเรา</h1>
-          <p className="app-term">ภาคการศึกษา {MOCK_ACTIVE_TERM}</p>
+          <p className="app-term">ภาคการศึกษา {activeTerm?.code ?? '—'}</p>
         </div>
-        <button type="button" className="app-btn app-btn--primary" onClick={() => { setEditing('new'); setNotice(''); }} disabled={loading || !!loadError}>
+        <button type="button" className="app-btn app-btn--primary" onClick={() => { setEditing('new'); setNotice(''); }} disabled={loading || !!loadError || busy || !activeTerm}>
           + เพิ่มตำแหน่ง
         </button>
       </div>
 
-      {notice && <div className="app-banner">{notice}</div>}
+      {notice && <div className="app-banner" role="status">{notice}</div>}
+      {!termLoading && !activeTerm && !termError && <div className="cp-notice">ยังไม่มีภาคการศึกษาที่เปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่ก่อนเพิ่มตำแหน่ง</div>}
 
       {loading ? (
         <div className="app-empty"><p>กำลังโหลด...</p></div>
@@ -168,58 +150,25 @@ export default function CompanyPositions() {
         <div className="app-empty"><p>ยังไม่มีตำแหน่งในภาคการศึกษานี้</p></div>
       ) : (
         <ul className="app-list">
-          {positions.map((p) => {
-            const { applicants, confirmed } = statsOf(p.id);
-            const full = p.quota != null && confirmed >= p.quota;
-            const percent = p.quota ? Math.min(100, Math.round((confirmed / p.quota) * 100)) : 0;
-            return (
-              <li key={p.id} className={`app-card${p.is_open ? '' : ' cp-card--closed'}`}>
-                <div className="app-card-head">
-                  <div>
-                    <p className="app-company">{p.name}</p>
-                    {p.description && <p className="app-position">{p.description}</p>}
-                  </div>
-                  <span className={`status-badge status-badge--${p.is_open ? 'success' : 'muted'}`}>{p.is_open ? 'เปิดรับสมัคร' : 'ปิดรับสมัคร'}</span>
-                </div>
-
-                <div className="cp-stats">
-                  <div className="cp-stat">
-                    <p className="pending-label">ยืนยันสิทธิ์แล้ว / จำนวนที่เปิดรับ</p>
-                    <p className="cp-stat-value">
-                      {confirmed} / {p.quota ?? 'ไม่ระบุ'}
-                    </p>
-                    {p.quota ? (
-                      <div className="cp-bar" aria-hidden="true">
-                        <div className={`cp-bar-fill${full ? ' cp-bar-fill--full' : ''}`} style={{ width: `${percent}%` }} />
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="cp-stat">
-                    <p className="pending-label">ผู้สมัครที่ผ่านการอนุมัติ</p>
-                    <p className="cp-stat-value">{applicants} คน</p>
-                  </div>
-                </div>
-
-                {full && p.is_open && <p className="cp-full-hint">ยืนยันสิทธิ์ครบตามจำนวนแล้ว — ถ้าไม่รับเพิ่ม กด "ปิดรับสมัคร" ได้</p>}
-
-                <div className="app-actions pending-actions">
-                  {/* ลบได้เฉพาะตำแหน่งที่ยังไม่มีผู้สมัคร (มีแล้วให้ปิดรับสมัครแทน) */}
-                  {applicants === 0 && (
-                    <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => remove(p)}>ลบ</button>
-                  )}
-                  <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setEditing(p); setNotice(''); }}>แก้ไข</button>
-                  <button type="button" className={`app-btn cm-small-btn ${p.is_open ? 'pending-btn-cancel' : 'app-btn--primary'}`} onClick={() => toggleOpen(p)}>
-                    {p.is_open ? 'ปิดรับสมัคร' : 'เปิดรับสมัคร'}
-                  </button>
-                </div>
-              </li>
-            );
-          })}
+          {positions.map((p) => (
+            <PositionCard key={p.id} position={p} stats={statsOf(p.id)} fullHint={'ยืนยันสิทธิ์ครบตามจำนวนแล้ว — ถ้าไม่รับเพิ่ม กด "ปิดรับสมัคร" ได้'}>
+              <div className="app-actions pending-actions">
+                {/* ลบได้เฉพาะตำแหน่งที่ยังไม่มีผู้สมัคร (มีแล้วให้ปิดรับสมัครแทน) */}
+                {p.applicant_count === 0 && (
+                  <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => remove(p)} disabled={busy}>ลบ</button>
+                )}
+                <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setEditing(p); setNotice(''); }} disabled={busy}>แก้ไข</button>
+                <button type="button" className={`app-btn cm-small-btn ${p.is_open ? 'pending-btn-cancel' : 'app-btn--primary'}`} onClick={() => toggleOpen(p)} disabled={busy}>
+                  {p.is_open ? 'ปิดรับสมัคร' : 'เปิดรับสมัคร'}
+                </button>
+              </div>
+            </PositionCard>
+          ))}
         </ul>
       )}
 
       {editing && (
-        <PositionDialog initial={editing === 'new' ? null : editing} positions={positions} onSave={handleSave} onClose={() => setEditing(null)} />
+        <PositionDialog initial={editing === 'new' ? null : editing} positions={positions} termLabel={editing !== 'new' && editing.term_id == null ? 'ไม่จำกัดภาค' : activeTerm?.code ?? '—'} onSave={handleSave} onClose={() => setEditing(null)} />
       )}
     </section>
   );

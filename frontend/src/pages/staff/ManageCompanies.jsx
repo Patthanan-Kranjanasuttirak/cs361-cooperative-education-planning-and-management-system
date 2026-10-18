@@ -1,45 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchCompanies } from '../../services/companyApi';
+import { Link } from 'react-router-dom';
+import { useApi } from '../../hooks/useApi';
+import { api } from '../../services/api';
+import ApiState from '../../components/ApiState';
+import PositionCard from '../../components/PositionCard';
 import { formatApplicationPeriod } from '../../utils/applicationPeriod';
 import { getImageUrl } from '../../utils/image';
 import { validateCompany } from '../../utils/companyValidation';
-import { formatPhone, isPhone, normalizePhone } from '../../utils/phone';
+import { formatPhone } from '../../utils/phone';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
 import '../CSS/manageCompanies.css';
 
 const PAGE_SIZE = 15;
-const EMPTY_FORM = { name: '', description: '', province: '', location: '', application_start: '', application_end: '' };
+const EMPTY_FORM = { logo: '', name: '', description: '', province: '', location: '', application_start: '', application_end: '' };
 
-// MOCK: ยังไม่มี API ผู้ประสานงาน — TODO: GET /api/companies/:id/coordinators (users role company + company_users)
-const MOCK_COORDINATORS = {
-  1: [{ user_id: 201, th_name: 'ผู้ประสานงานตัวอย่าง ซีดีจี', email: 'hr@cdg.example.com', job_title: 'HR Officer', phone: '021234567' }],
-  6: [
-    { user_id: 202, th_name: 'ผู้ประสานงานตัวอย่าง SCB 1', email: 'intern1@scb.example.com', job_title: 'Talent Acquisition', phone: '0891112233' },
-    { user_id: 203, th_name: 'ผู้ประสานงานตัวอย่าง SCB 2', email: 'intern2@scb.example.com', job_title: null, phone: '0892223344' },
-  ],
-};
-
-const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-
-function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, onSave, onClose }) {
+function CompanyDialog({ initial, provinces, onSave, onClose }) {
   const isNew = !initial;
   const [form, setForm] = useState(() => (initial ? { ...EMPTY_FORM, ...pick(initial) } : EMPTY_FORM));
-  const [coordinators, setCoordinators] = useState(initialCoordinators ?? []);
-  const [newCoordinator, setNewCoordinator] = useState({ th_name: '', email: '', phone: '', job_title: '' });
   const [errors, setErrors] = useState({});
-  const [coordinatorError, setCoordinatorError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose();
+    const onKey = (e) => e.key === 'Escape' && !saving && onClose();
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKey);
     return () => {
       document.body.style.overflow = '';
       window.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
+  }, [onClose, saving]);
 
   const change = (e) => {
     const { name, value } = e.target;
@@ -47,43 +38,30 @@ function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, 
     setErrors((prev) => ({ ...prev, [name]: undefined, period: name.startsWith('application_') ? undefined : prev.period }));
   };
 
-  const addCoordinator = () => {
-    const c = {
-      th_name: newCoordinator.th_name.trim(),
-      email: newCoordinator.email.trim().toLowerCase(),
-      phone: newCoordinator.phone,
-      job_title: newCoordinator.job_title.trim() || null,
-    };
-    if (!c.th_name || !c.email || !c.phone) return setCoordinatorError('กรุณากรอกชื่อ อีเมล และเบอร์โทรศัพท์ของผู้ประสานงาน');
-    if (!isEmail(c.email)) return setCoordinatorError('รูปแบบอีเมลไม่ถูกต้อง');
-    if (!isPhone(c.phone)) return setCoordinatorError('เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลัก ขึ้นต้นด้วย 0');
-    if (coordinators.some((x) => x.email === c.email)) return setCoordinatorError('อีเมลนี้เป็นผู้ประสานงานของบริษัทนี้อยู่แล้ว');
-    setCoordinators((prev) => [...prev, { ...c, user_id: `new-${Date.now()}` }]);
-    setNewCoordinator({ th_name: '', email: '', phone: '', job_title: '' });
-    setCoordinatorError('');
-  };
-
-  const submit = (e) => {
-    e.preventDefault();
+  const submit = async (e) => {
+    e.preventDefault(); if (saving) return;
     const nextErrors = validateCompany(form);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    onSave({ ...form, name: form.name.trim(), province: form.province.trim() }, coordinators);
+    setSaving(true);
+    try { await onSave({ ...form, name: form.name.trim(), province: form.province.trim() }); }
+    catch (error) { setErrors((previous) => ({ ...previous, submit: error.message })); }
+    finally { setSaving(false); }
   };
 
   const inputClass = (name) => `profile-input${errors[name] ? ' profile-input--error' : ''}`;
 
   return (
     <div className="cm-overlay" role="dialog" aria-modal="true" aria-labelledby="cm-dialog-title">
-      <div className="cm-backdrop" onClick={onClose} />
+      <div className="cm-backdrop" onClick={saving ? undefined : onClose} />
       <form className="cm-dialog" onSubmit={submit} noValidate>
         <div className="cm-dialog-head">
           <h2 id="cm-dialog-title" className="cm-dialog-title">{isNew ? 'เพิ่มสถานประกอบการ' : 'แก้ไขสถานประกอบการ'}</h2>
-          <button type="button" className="cm-close" onClick={onClose} aria-label="ปิด">✕</button>
+          <button type="button" className="cm-close" onClick={onClose} disabled={saving} aria-label="ปิด">✕</button>
         </div>
 
         <div className="cm-dialog-body">
-          <fieldset className="profile-section">
+          <fieldset className="profile-section" disabled={saving}>
             <legend className="profile-section-title">ข้อมูลสถานประกอบการ</legend>
 
             <label className="profile-label" htmlFor="cm-name">ชื่อสถานประกอบการ <span className="profile-required">*</span></label>
@@ -92,6 +70,9 @@ function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, 
 
             <label className="profile-label" htmlFor="cm-description">รายละเอียด</label>
             <textarea id="cm-description" name="description" rows={3} className="profile-input cm-textarea" value={form.description} onChange={change} />
+
+            <label className="profile-label" htmlFor="cm-logo">โลโก้ (ชื่อไฟล์หรือ URL)</label>
+            <input id="cm-logo" name="logo" className="profile-input" maxLength={255} value={form.logo} onChange={change} />
 
             <div className="cm-row">
               <div className="cm-col">
@@ -118,12 +99,80 @@ function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, 
             </div>
             {errors.period && <p className="profile-error">{errors.period}</p>}
           </fieldset>
+          {isNew && <p className="profile-hint">บันทึกสถานประกอบการก่อน แล้วกด "ดูข้อมูล" เพื่อเพิ่มผู้ประสานงาน</p>}
+        </div>
+
+        <div className="cm-dialog-foot">
+          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose} disabled={saving}>ยกเลิก</button>
+          {errors.submit && <p className="profile-error" role="alert">{errors.submit}</p>}
+          <button type="submit" className="app-btn app-btn--primary" disabled={saving}>{saving ? 'กำลังบันทึก…' : 'บันทึก'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ดูข้อมูลบริษัท: ตำแหน่งงาน (อ่านอย่างเดียว — บริษัทเป็นผู้จัดการเอง) และผู้ประสานงาน (จัดการที่หน้าผู้ใช้งาน)
+function CompanyInfoDialog({ company, coordinators, coordinatorsLoading, onClose }) {
+  const { data: activeTerm, loading: termLoading, error: termError } = useApi('/terms/active', null);
+  const { data: allPositions, loading: positionsLoading, error: positionsError } = useApi(`/positions?company_id=${company.id}`);
+  const { data: applications, loading: appsLoading, error: appsError } = useApi(activeTerm ? `/staff/applications?term_id=${activeTerm.term_id}` : null);
+  // ตำแหน่งของภาคที่ active หรือไม่ผูกภาค — ตรงกับที่ผู้ประสานงานเห็นในหน้า "ตำแหน่งของเรา"
+  const positions = allPositions.filter((p) => p.term_id == null || p.term_id === activeTerm?.term_id);
+  const loading = termLoading || positionsLoading || appsLoading;
+  const error = termError || positionsError || appsError;
+
+  // นับแบบเดียวกับหน้าผู้ประสานงาน: ผู้สมัคร = ใบที่ผ่านการอนุมัติจากอาจารย์แล้ว, ยืนยันสิทธิ์ = confirmed
+  const statsOf = (positionId) => {
+    const apps = applications.filter((a) => a.position_id === positionId && a.approved_at);
+    return { applicants: apps.length, confirmed: apps.filter((a) => a.status === 'confirmed').length };
+  };
+
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="cm-overlay" role="dialog" aria-modal="true" aria-labelledby="cm-info-title">
+      <div className="cm-backdrop" onClick={onClose} />
+      <div className="cm-dialog">
+        <div className="cm-dialog-head">
+          <div>
+            <h2 id="cm-info-title" className="cm-dialog-title">{company.name}</h2>
+            <p className="cm-muted">{company.province || 'ไม่ระบุจังหวัด'} · {formatApplicationPeriod(company)}</p>
+          </div>
+          <button type="button" className="cm-close" onClick={onClose} aria-label="ปิด">✕</button>
+        </div>
+
+        <div className="cm-dialog-body">
+          <fieldset className="profile-section">
+            <legend className="profile-section-title">ตำแหน่งงาน{activeTerm && ` · ภาคการศึกษา ${activeTerm.code}`}</legend>
+            {loading ? (
+              <p className="cm-empty">กำลังโหลด...</p>
+            ) : error ? (
+              <p className="profile-error">{error}</p>
+            ) : positions.length === 0 ? (
+              <p className="cm-empty">ยังไม่มีตำแหน่งในภาคการศึกษานี้</p>
+            ) : (
+              <ul className="app-list">
+                {positions.map((p) => <PositionCard key={p.id} position={p} stats={statsOf(p.id)} />)}
+              </ul>
+            )}
+          </fieldset>
 
           <fieldset className="profile-section">
             <legend className="profile-section-title">ผู้ประสานงาน</legend>
             <p className="profile-hint">อีเมลที่ผู้ประสานงานใช้สำหรับเข้าสู่ระบบ</p>
 
-            {coordinators.length === 0 ? (
+            {coordinatorsLoading ? (
+              <p className="cm-empty">กำลังโหลด...</p>
+            ) : coordinators.length === 0 ? (
               <p className="cm-empty">ยังไม่มีผู้ประสานงาน</p>
             ) : (
               <ul className="cm-coordinators">
@@ -133,38 +182,20 @@ function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, 
                       <p className="cm-coordinator-name">{c.th_name}{c.job_title && <span className="cm-muted"> · {c.job_title}</span>}</p>
                       <p className="cm-muted">{c.email}{c.phone && ` · ${formatPhone(c.phone)}`}</p>
                     </div>
-                    <button
-                      type="button"
-                      className="app-btn app-btn--ghost cm-small-btn"
-                      onClick={() => setCoordinators((prev) => prev.filter((x) => x.user_id !== c.user_id))}
-                    >
-                      นำออก
-                    </button>
+                    <Link className="app-btn pending-btn-cancel cm-small-btn" to={`/staff/users?company=${company.id}`}>จัดการ</Link>
                   </li>
                 ))}
               </ul>
             )}
 
-            <div className="cm-add-coordinator">
-              <input className="profile-input" placeholder="ชื่อ-นามสกุล" value={newCoordinator.th_name}
-                onChange={(e) => { setNewCoordinator((p) => ({ ...p, th_name: e.target.value })); setCoordinatorError(''); }} />
-              <input className="profile-input" type="email" placeholder="อีเมล" value={newCoordinator.email}
-                onChange={(e) => { setNewCoordinator((p) => ({ ...p, email: e.target.value })); setCoordinatorError(''); }} />
-              <input className="profile-input" type="tel" inputMode="numeric" placeholder="เบอร์โทรศัพท์" value={newCoordinator.phone}
-                onChange={(e) => { setNewCoordinator((p) => ({ ...p, phone: normalizePhone(e.target.value) })); setCoordinatorError(''); }} />
-              <input className="profile-input" placeholder="ตำแหน่งงาน (ไม่บังคับ)" value={newCoordinator.job_title}
-                onChange={(e) => setNewCoordinator((p) => ({ ...p, job_title: e.target.value }))} />
-              <button type="button" className="app-btn app-btn--primary cm-small-btn" onClick={addCoordinator}>เพิ่ม</button>
-            </div>
-            {coordinatorError && <p className="profile-error">{coordinatorError}</p>}
+            <Link className="app-btn app-btn--primary cm-small-btn" to={`/staff/users?company=${company.id}`}>จัดการผู้ประสานงาน</Link>
           </fieldset>
         </div>
 
         <div className="cm-dialog-foot">
-          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose}>ยกเลิก</button>
-          <button type="submit" className="app-btn app-btn--primary">บันทึก</button>
+          <button type="button" className="app-btn pending-btn-cancel" onClick={onClose}>ปิด</button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }
@@ -172,6 +203,7 @@ function CompanyDialog({ initial, coordinators: initialCoordinators, provinces, 
 function pick(c) {
   return {
     name: c.name ?? '',
+    logo: c.logo ?? '',
     description: c.description ?? '',
     province: c.province ?? '',
     location: c.location ?? '',
@@ -181,29 +213,29 @@ function pick(c) {
 }
 
 export default function ManageCompanies() {
-  const [companies, setCompanies] = useState([]);
-  const [coordinators, setCoordinators] = useState(MOCK_COORDINATORS);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
+  const { data: result, reload, loading, error: loadError } = useApi('/companies', { data: [] });
+  const { data: users, loading: usersLoading, error: usersError } = useApi('/users');
+  const companies = result.data;
+  const coordinators = users.filter((u) => u.role === 'company').reduce((groups, user) => {
+    (groups[user.company_id] ??= []).push(user);
+    return groups;
+  }, {});
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  // null = ปิด, 'new' = เพิ่มใหม่, object = แก้ไขบริษัทนั้น
   const [editing, setEditing] = useState(null);
+  // บริษัทที่กำลังดูข้อมูล (null = ปิด)
+  const [viewing, setViewing] = useState(null);
   const [notice, setNotice] = useState('');
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchCompanies({}, controller.signal)
-      .then(setCompanies)
-      .catch((error) => {
-        if (error.name !== 'AbortError') setLoadError('โหลดรายชื่อสถานประกอบการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
-      })
-      .finally(() => {
-        // คำขอที่ถูกยกเลิก (ออกจากหน้า หรือ StrictMode รัน effect ซ้ำ) ไม่ต้องปิดสถานะโหลด
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
+  const [busy, setBusy] = useState(false);
+  const edit = async (company) => {
+    if (busy) return;
+    setBusy(true); setNotice('');
+    try {
+      const detail = await api(`/staff/companies/${company.id}`);
+      setEditing({ ...detail, id: detail.company_id });
+    } catch (err) { setNotice(err.message); }
+    finally { setBusy(false); }
+  };
 
   const provinces = useMemo(
     () => [...new Set(companies.map((c) => c.province).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'th')),
@@ -218,46 +250,29 @@ export default function ManageCompanies() {
   const currentPage = Math.min(page, pageCount);
   const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  const handleSave = (form, nextCoordinators) => {
-    if (editing === 'new') {
-      // TODO: POST /api/companies แล้วใช้ id ที่ได้จาก backend
-      const id = Math.max(0, ...companies.map((c) => c.id)) + 1;
-      setCompanies((prev) => [...prev, { id, logo: null, positions: [], ...form }]);
-      setCoordinators((prev) => ({ ...prev, [id]: nextCoordinators }));
-      setNotice(`เพิ่ม ${form.name} แล้ว`);
-      setSearch('');
-      setPage(Math.ceil((companies.length + 1) / PAGE_SIZE));
-    } else {
-      // TODO: PUT /api/companies/:id และ POST/DELETE /api/companies/:id/coordinators
-      //   เพิ่มผู้ประสานงาน = สร้าง users (role company) ถ้ายังไม่มี แล้ว insert company_users
-      setCompanies((prev) => prev.map((c) => (c.id === editing.id ? { ...c, ...form } : c)));
-      setCoordinators((prev) => ({ ...prev, [editing.id]: nextCoordinators }));
-      setNotice(`บันทึก ${form.name} แล้ว`);
-    }
-    setEditing(null);
+  const handleSave = async (form) => {
+    await api(editing === 'new' ? '/companies' : `/companies/${editing.id}`, { method: editing === 'new' ? 'POST' : 'PUT', body: form });
+    await reload(); setEditing(null); setNotice(`บันทึก ${form.name} แล้ว`);
   };
-
-  const handleDelete = (company) => {
-    const ok = window.confirm(
-      `ลบ ${company.name}?\n\nตำแหน่งงานของบริษัทนี้จะถูกลบไปด้วย และผู้ประสานงานจะเข้าจัดการบริษัทนี้ไม่ได้อีก\n` +
-        'ถ้ามีนักศึกษาสมัครตำแหน่งของบริษัทนี้แล้ว ระบบจะไม่ให้ลบ (ให้ปิดรับสมัครแทน)'
-    );
-    if (!ok) return;
-    // TODO: DELETE /api/companies/:id — backend ตอบ 409 ถ้ามีใบสมัครอยู่ (FK ของ applications → positions)
-    setCompanies((prev) => prev.filter((c) => c.id !== company.id));
-    setNotice(`ลบ ${company.name} แล้ว`);
+  const handleDelete = async (company) => {
+    if (busy || !window.confirm(`ลบ ${company.name}?\n\nถ้ามีผู้ประสานงาน ตำแหน่งงาน หรือใบสมัครที่ใช้งานอยู่ ระบบจะไม่ให้ลบ`)) return;
+    setBusy(true);
+    try { await api(`/companies/${company.id}`, { method: 'DELETE' }); await reload(); setNotice(`ลบ ${company.name} แล้ว`); }
+    catch (err) { setNotice(err.message); }
+    finally { setBusy(false); }
   };
 
   return (
     <section>
       <div className="app-header">
         <h1 className="app-title">จัดการสถานประกอบการ</h1>
-        <button type="button" className="app-btn app-btn--primary" onClick={() => { setEditing('new'); setNotice(''); }} disabled={loading}>
+        <button type="button" className="app-btn app-btn--primary" onClick={() => { setEditing('new'); setNotice(''); }} disabled={loading || busy}>
           + เพิ่มสถานประกอบการ
         </button>
       </div>
 
-      {notice && <div className="app-banner">{notice}</div>}
+      <ApiState loading={false} error={usersError} />
+      {notice && <div className="app-banner" role="status">{notice}</div>}
 
       <input
         className="pending-search"
@@ -301,11 +316,12 @@ export default function ManageCompanies() {
                     <td data-label="ช่วงรับสมัคร" className="cm-period">{formatApplicationPeriod(c)}</td>
                     <td data-label="ตำแหน่ง" className="cm-num">{c.positions?.length ?? 0}</td>
                     <td data-label="ผู้ประสานงาน" className="cm-num">
-                      {(coordinators[c.id]?.length ?? 0) || <span className="cm-muted" title="ยังไม่มีผู้ประสานงาน">-</span>}
+                      {usersLoading || usersError ? '—' : (coordinators[c.id]?.length ?? 0) || <span className="cm-muted" title="ยังไม่มีผู้ประสานงาน">-</span>}
                     </td>
                     <td className="cm-actions">
-                      <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setEditing(c); setNotice(''); }}>แก้ไข</button>
-                      <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => handleDelete(c)}>ลบ</button>
+                      <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => { setViewing(c); setNotice(''); }} disabled={busy}>ดูข้อมูล</button>
+                      <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => edit(c)} disabled={busy}>แก้ไข</button>
+                      <button type="button" className="app-btn app-btn--ghost cm-small-btn" onClick={() => handleDelete(c)} disabled={busy}>ลบ</button>
                     </td>
                   </tr>
                 ))}
@@ -323,10 +339,18 @@ export default function ManageCompanies() {
         </>
       )}
 
+      {viewing && (
+        <CompanyInfoDialog
+          company={viewing}
+          coordinators={coordinators[viewing.id] ?? []}
+          coordinatorsLoading={usersLoading}
+          onClose={() => setViewing(null)}
+        />
+      )}
+
       {editing && (
         <CompanyDialog
           initial={editing === 'new' ? null : editing}
-          coordinators={editing === 'new' ? [] : coordinators[editing.id]}
           provinces={provinces}
           onSave={handleSave}
           onClose={() => setEditing(null)}

@@ -1,24 +1,18 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AuthContext } from './authContext';
 import { ROLES } from '../config/roles';
+import { api } from '../services/api';
 
 const STORAGE_KEY = 'coop-auth';
 // เพิ่มเลขนี้เมื่อรูปแบบข้อมูลผู้ใช้เปลี่ยน — session เก่าจะถูกทิ้งและต้อง login ใหม่ แทนที่หน้าเว็บจะพังเพราะข้อมูลไม่ครบ
-const SESSION_VERSION = 2;
+const SESSION_VERSION = 3;
 
 // อ่าน session เดิมเพื่อให้ refresh หน้าแล้วยังไม่หลุด (localStorage อาจใช้ไม่ได้ เช่น private mode)
 function loadSession() {
   try {
     const session = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(STORAGE_KEY));
-    if (session?.version !== SESSION_VERSION || !session.user || !ROLES[session.user.role]) return null;
-
-    // ปรับ session จำลองเดิมที่เคยเก็บอีเมลเป็นชื่อและใช้อีเมลตัวอย่างตายตัว
-    const user = { ...session.user };
-    if (user.user_id === 0 && user.username?.includes('@')) {
-      if (user.email === 'sample@dome.tu.ac.th') user.email = user.username.trim();
-      if (user.th_name === user.username) user.th_name = user.username.split('@')[0];
-    }
-    return { ...session, user };
+    if (session?.version !== SESSION_VERSION || !session.token || !session.user || !ROLES[session.user.role]) return null;
+    return session;
   } catch {
     return null;
   }
@@ -40,33 +34,25 @@ function saveSession(session) {
 export default function AuthProvider({ children }) {
   const [session, setSession] = useState(loadSession);
 
-  // MOCK: ยังไม่มี backend auth จึงให้เลือกบทบาทเองได้
-  // TODO: เปลี่ยนเป็น POST /api/auth/login แล้วเก็บ { user, token } ที่ได้จาก API
-  const login = useCallback(async ({ email, role, remember = true }) => {
-    const accountEmail = email.trim();
-    const next = {
-      version: SESSION_VERSION,
-      remember,
-      // ค่าตัวอย่าง — ของจริงจะมาจาก TU API / ฐานข้อมูล
-      user: {
-        user_id: 0,
-        username: accountEmail,
-        role,
-        // ชื่อชั่วคราวของบัญชีจำลอง — ใช้ชื่อจริงจาก API เมื่อเชื่อมระบบยืนยันตัวตน
-        th_name: accountEmail.split('@')[0],
-        en_name: 'Sample User',
-        email: accountEmail,
-        advisor_name: role === 'student' ? 'อาจารย์ตัวอย่าง' : undefined,
-        gpax: null, // นักศึกษากรอกในหน้าข้อมูลส่วนตัว
-        curriculum: role === 'student' ? '66' : undefined, // หลักสูตร 61 / 66 — ของจริงมาจาก TU API
-        company_id: role === 'company' ? 6 : undefined, // ผู้ประสานงานของธนาคารไทยพาณิชย์ — ของจริงมาจาก company_users
-      },
-      token: null,
-    };
+  const login = useCallback(async ({ email, password, role, remember = true }) => {
+    const result = await api('/auth/login', { method: 'POST', body: { email: email.trim(), password }, anonymous: true });
+    if (result.user.role !== role) throw new Error('บทบาทที่เลือกไม่ตรงกับบัญชีนี้');
+    const next = { version: SESSION_VERSION, remember, ...result };
     saveSession(next);
     setSession(next);
     return next.user;
   }, []);
+
+  useEffect(() => {
+    if (!session?.token) return;
+    const controller = new AbortController();
+    api('/auth/me', { signal: controller.signal }).then((user) => {
+      setSession((prev) => { if (!prev) return prev; const next = { ...prev, user }; saveSession(next); return next; });
+    }).catch((error) => {
+      if (error.status === 401 || error.status === 403) { saveSession(null); setSession(null); }
+    });
+    return () => controller.abort();
+  }, [session?.token]);
 
   // อัปเดตข้อมูลผู้ใช้หลังบันทึกสำเร็จ (เช่น GPAX จากหน้าข้อมูลส่วนตัว)
   const updateUser = useCallback((changes) => {

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import FileInput from '../../components/FileInput';
-import { useAuth } from '../../context/useAuth';
-import { fetchCompany } from '../../services/companyApi';
+import { useApi } from '../../hooks/useApi';
+import { api } from '../../services/api';
+import ApiState from '../../components/ApiState';
 import { validateCompany } from '../../utils/companyValidation';
 import { getImageUrl } from '../../utils/image';
 import '../CSS/studentProfile.css';
@@ -16,6 +17,7 @@ const formatDateTime = (iso) =>
   new Date(iso).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 const toForm = (c) => ({
+  logo: c.logo ?? '',
   name: c.name ?? '',
   description: c.description ?? '',
   province: c.province ?? '',
@@ -24,51 +26,27 @@ const toForm = (c) => ({
   application_end: c.application_end ?? '',
 });
 
-export default function CompanyProfile() {
-  const { user } = useAuth();
-  const [company, setCompany] = useState(null);
-  const [form, setForm] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
+function CompanyProfileForm({ company, onSaved }) {
+  const [form, setForm] = useState(() => toForm(company));
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [confirmedAt, setConfirmedAt] = useState(null);
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [logoError, setLogoError] = useState('');
-  // MOCK: TODO เก็บเวลายืนยันล่าสุดในฐานข้อมูล (เช่น companies.confirmed_at, confirmed_by)
-  const [confirmedAt, setConfirmedAt] = useState(null);
+  const [uploadedLogo, setUploadedLogo] = useState(null);
+  useEffect(() => () => { if (logoPreview) URL.revokeObjectURL(logoPreview); }, [logoPreview]);
 
-  useEffect(() => {
-    // ผู้ประสานงานที่ยังไม่ถูกผูกกับบริษัท (company_users) — ไม่ต้องเรียก API
-    if (!user.company_id) {
-      setLoadError('บัญชีนี้ยังไม่ได้ผูกกับสถานประกอบการ กรุณาติดต่อเจ้าหน้าที่');
-      setLoading(false);
-      return undefined;
+  const handleLogo = (event) => {
+    const file = event.target.files[0] ?? null;
+    setLogoError('');
+    if (file && (!LOGO_TYPES.includes(file.type) || file.size === 0 || file.size > MAX_LOGO_MB * 1024 * 1024)) {
+      setLogoError('เลือกไฟล์ PNG, JPG, WEBP หรือ SVG ที่ไม่ว่างและขนาดไม่เกิน 2 MB');
+      event.target.value = '';
+      return;
     }
-    const controller = new AbortController();
-    fetchCompany(user.company_id, controller.signal)
-      .then((c) => {
-        if (!c) {
-          setLoadError('ไม่พบข้อมูลบริษัทของคุณ กรุณาติดต่อเจ้าหน้าที่');
-          return;
-        }
-        setCompany(c);
-        setForm(toForm(c));
-      })
-      .catch((error) => {
-        if (error.name !== 'AbortError') setLoadError('โหลดข้อมูลบริษัทไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
-      })
-      .finally(() => {
-        // คำขอที่ถูกยกเลิก (ออกจากหน้า หรือ StrictMode รัน effect ซ้ำ) ไม่ต้องปิดสถานะโหลด
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [user.company_id]);
-
-  // คืน URL ของรูปตัวอย่างเมื่อเปลี่ยนรูปหรือออกจากหน้า
-  useEffect(() => () => logoPreview && URL.revokeObjectURL(logoPreview), [logoPreview]);
-
-  if (loading || (!company && !loadError)) return <div className="app-empty"><p>กำลังโหลด...</p></div>;
-  if (loadError) return <div className="app-empty"><p className="profile-error">{loadError}</p></div>;
+    setLogoFile(file); setLogoPreview(file ? URL.createObjectURL(file) : null); setUploadedLogo(null);
+  };
 
   const change = (e) => {
     const { name, value } = e.target;
@@ -76,36 +54,28 @@ export default function CompanyProfile() {
     setErrors((prev) => ({ ...prev, [name]: undefined, ...(name.startsWith('application_') && { period: undefined }) }));
   };
 
-  const handleLogo = (e) => {
-    const file = e.target.files[0] ?? null;
-    setLogoError('');
-    if (file && !LOGO_TYPES.includes(file.type)) {
-      setLogoError('รองรับเฉพาะไฟล์ PNG, JPG, WEBP หรือ SVG');
-      e.target.value = '';
-      return;
-    }
-    if (file && file.size > MAX_LOGO_MB * 1024 * 1024) {
-      setLogoError(`ไฟล์ต้องไม่เกิน ${MAX_LOGO_MB} MB`);
-      e.target.value = '';
-      return;
-    }
-    setLogoFile(file);
-    setLogoPreview(file ? URL.createObjectURL(file) : null);
-  };
-
-  const submit = (e) => {
-    e.preventDefault();
+  const submit = async (e) => {
+    e.preventDefault(); if (saving) return;
     const nextErrors = validateCompany(form);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    // TODO: PUT /api/company/profile — backend ใช้ company_id จาก company_users ของคนที่ login (ไม่รับจาก client)
-    //   โลโก้: ขอ presigned URL แล้วอัปโหลดไป S3 จากนั้นบันทึก companies.logo
-    setCompany((prev) => ({ ...prev, ...form }));
-    setConfirmedAt(new Date().toISOString());
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setSaving(true);
+    try {
+      let logo = form.logo;
+      if (logoFile) {
+        const upload = uploadedLogo?.file === logoFile ? uploadedLogo : await api('/company/logo', { method:'POST', body:logoFile, headers:{'Content-Type':logoFile.type} });
+        setUploadedLogo({ ...upload, file:logoFile });
+        logo = upload.url;
+      }
+      const result = await api('/company/profile', { method:'PUT', body:{ ...form, logo, name:form.name.trim() } });
+      onSaved(result); setForm(toForm(result)); setConfirmedAt(new Date().toISOString());
+      setLogoFile(null); setLogoPreview(null); setUploadedLogo(null);
+      window.scrollTo({ top:0, behavior:'smooth' });
+    } catch (error) { setErrors((previous) => ({ ...previous, submit:error.message })); }
+    finally { setSaving(false); }
   };
 
-  const logoSrc = logoPreview ?? (company.logo ? getImageUrl(company.logo) : null);
+  const logoSrc = logoPreview ?? (form.logo ? getImageUrl(form.logo) : null);
   const inputClass = (name) => `profile-input${errors[name] ? ' profile-input--error' : ''}`;
 
   return (
@@ -115,20 +85,20 @@ export default function CompanyProfile() {
       </div>
 
       {confirmedAt ? (
-        <div className="app-banner">บันทึกและยืนยันข้อมูลแล้วเมื่อ {formatDateTime(confirmedAt)}</div>
+        <div className="app-banner" role="status">บันทึกและยืนยันข้อมูลแล้วเมื่อ {formatDateTime(confirmedAt)}</div>
       ) : (
         <div className="cp-notice">กรุณาตรวจสอบข้อมูลบริษัท แก้ไขส่วนที่ไม่ถูกต้อง แล้วกด "บันทึกและยืนยันข้อมูล"</div>
       )}
 
       <form className="profile-form" onSubmit={submit} noValidate>
-        <fieldset className="profile-section">
+        <fieldset className="profile-section" disabled={saving}>
           <legend className="profile-section-title">ข้อมูลทั่วไป</legend>
 
           <p className="profile-label">โลโก้</p>
           <div className="cp-logo-row">
             {logoSrc ? <img src={logoSrc} alt="โลโก้บริษัท" className="cp-logo" /> : <span className="cp-logo cp-logo--empty">ไม่มีโลโก้</span>}
             <div className="cp-logo-input">
-              <FileInput id="logo" accept={LOGO_TYPES.join(',')} onChange={handleLogo} error={logoError} fileName={logoFile?.name} />
+              <FileInput id="logo" accept={LOGO_TYPES.join(',')} onChange={handleLogo} disabled={saving} error={logoError} fileName={logoFile?.name} />
               {logoError ? <p className="profile-error">{logoError}</p> : <p className="profile-hint">PNG, JPG, WEBP หรือ SVG ขนาดไม่เกิน {MAX_LOGO_MB} MB</p>}
             </div>
           </div>
@@ -141,7 +111,7 @@ export default function CompanyProfile() {
           <textarea id="cp-description" name="description" rows={4} className="profile-input cm-textarea" value={form.description} onChange={change} />
         </fieldset>
 
-        <fieldset className="profile-section">
+        <fieldset className="profile-section" disabled={saving}>
           <legend className="profile-section-title">ที่ตั้ง</legend>
           <label className="profile-label" htmlFor="cp-province">จังหวัด</label>
           <input id="cp-province" name="province" className="profile-input cp-half" value={form.province} onChange={change} />
@@ -149,7 +119,7 @@ export default function CompanyProfile() {
           <textarea id="cp-location" name="location" rows={3} className="profile-input cm-textarea" value={form.location} onChange={change} />
         </fieldset>
 
-        <fieldset className="profile-section">
+        <fieldset className="profile-section" disabled={saving}>
           <legend className="profile-section-title">ช่วงเวลารับสมัคร</legend>
           <div className="cm-row">
             <div className="cm-col">
@@ -165,9 +135,16 @@ export default function CompanyProfile() {
         </fieldset>
 
         <div className="profile-actions">
-          <button type="submit" className="profile-submit">บันทึกและยืนยันข้อมูล</button>
+          {errors.submit && <p className="profile-error" role="alert">{errors.submit}</p>}
+          <button type="submit" className="profile-submit" disabled={saving}>{saving ? 'กำลังบันทึก…' : 'บันทึกและยืนยันข้อมูล'}</button>
         </div>
       </form>
     </section>
   );
+}
+
+export default function CompanyProfile() {
+  const { data, setData, loading, error } = useApi('/company/profile', null);
+  if (!data) return <section><h1 className="app-title">ข้อมูลบริษัท</h1><ApiState loading={loading} error={error} /></section>;
+  return <CompanyProfileForm key={data.company_id} company={data} onSaved={setData} />;
 }
