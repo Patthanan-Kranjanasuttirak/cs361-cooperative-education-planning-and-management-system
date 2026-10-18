@@ -7,7 +7,7 @@ import updateIcon from '../assets/calendar.png';
 import PersonIcon from '../assets/user.png';
 import DocIcon from '../assets/document.png';
 import CaseIcon from '../assets/briefcase.png';
-import './CSS/studenthandbook.css';
+import './CSS/studentHandbook.css';
 
 export default function Studenthandbook() {
   const [activeTab, setActiveTab] = useState('section1');
