@@ -18,7 +18,7 @@ def sql(database, statement):
 
 sql('postgres', f'CREATE DATABASE {name};')
 try:
-    sql(name, (ROOT / 'database/init/01-schema.sql').read_text())
+    sql(name, (ROOT / 'database/init/001_schema.sql').read_text())
     # Exercise rerunnable migration on V3 as well as API operations below.
     sql(name, (ROOT / 'database/migrations/003_v3_schema.sql').read_text())
     # Simulate the prior V3 schema, then verify the additive upgrade is rerunnable.
@@ -26,7 +26,7 @@ try:
     course_migration = (ROOT / 'database/migrations/004_student_course_grades.sql').read_text()
     sql(name, course_migration)
     sql(name, course_migration)
-    seed = (ROOT / 'database/seeds/v3-demo.sql').read_text()
+    seed = (ROOT / 'database/seeds/005_v3-demo.sql').read_text()
     sql(name, seed)
     sql(name, seed)
     subprocess.run(['docker', 'compose', 'exec', '-T', '-e', f'DB_NAME={name}',

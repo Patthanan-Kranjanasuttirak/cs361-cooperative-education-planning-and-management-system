@@ -12,7 +12,7 @@ docker compose up -d --build
 ถ้ามี volume เก่าต้องรัน [migration V3](database/README.md) ก่อน แล้ว seed บัญชีสำหรับ local:
 
 ```sh
-docker compose exec -T database sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/seeds/v3-demo.sql
+docker compose exec -T database sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/seeds/005_v3-demo.sql
 docker compose up -d --build -V --no-deps backend
 docker compose restart frontend
 ```

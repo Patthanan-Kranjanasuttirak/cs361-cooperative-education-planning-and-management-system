@@ -29,3 +29,6 @@ Thumbs.db
 **/postgres_data/
 **/.uploads/
 **/data/
+
+backend/build
+backend/function.zip

@@ -26,10 +26,10 @@ Browser ──HTTPS──▶ Amplify Hosting (frontend)
 
 ```sh
 export PGHOST=<rds-endpoint> PGUSER=<user> PGPASSWORD=<password> PGDATABASE=<db> PGSSLMODE=require
-psql -X -v ON_ERROR_STOP=1 -f database/init/01-schema.sql
+psql -X -v ON_ERROR_STOP=1 -f database/init/001_schema.sql
 psql -X -v ON_ERROR_STOP=1 -f database/migrations/003_v3_schema.sql
 psql -X -v ON_ERROR_STOP=1 -f database/migrations/004_student_course_grades.sql
-psql -X -v ON_ERROR_STOP=1 -f database/seeds/v3-demo.sql   # บัญชี mock และข้อมูลตัวอย่าง
+psql -X -v ON_ERROR_STOP=1 -f database/seeds/005_v3-demo.sql   # บัญชี mock และข้อมูลตัวอย่าง
 ```
 
 บัญชี mock ใน seed: `staff.v3@tu.ac.th`, `advisor.v3@tu.ac.th`, `advisor.other.v3@tu.ac.th`, `company.v3@example.test`, `company.other.v3@example.test`

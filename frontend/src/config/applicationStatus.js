@@ -1,4 +1,4 @@
-// สถานะใบสมัคร (ตรงกับ applications.status ใน database/init/01-schema.sql)
+// สถานะใบสมัคร (ตรงกับ applications.status ใน database/init/001_schema.sql)
 // tone ใช้เลือกสีของป้าย: pending | info | success | danger | muted
 export const APPLICATION_STATUS = {
   submitted: { label: 'รออนุมัติ', tone: 'pending', hint: 'รออาจารย์ที่ปรึกษาหรือเจ้าหน้าที่ตรวจใบสมัคร' },
