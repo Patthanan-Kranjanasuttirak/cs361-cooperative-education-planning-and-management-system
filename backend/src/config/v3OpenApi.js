@@ -75,7 +75,7 @@ add('/applications/{id}','get','Applications','รายละเอียดพ
 add('/applications/{id}/reviews','post','Applications','Advisor ที่ดูแล/staff: อนุมัติหรือปฏิเสธพร้อม comment',ref('Application'),'ReviewWrite');
 add('/company/applications/{id}/decision','patch','Applications','Company owner: approved → accepted/declined',ref('Application'),'DecisionWrite');
 for (const action of ['confirm','withdraw']) add(`/applications/{id}/${action}`,'post','Applications',`Student owner: ${action} แบบ atomic และรันซ้ำได้`,ref('Application'));
-add('/documents','post','Documents','Student: อัปโหลด PDF local ไม่เกิน 10 MB (development only)',{type:'object',properties:{key:string(512),url:string()}},'unused',{status:201,binary:true,parameters:[{name:'kind',in:'query',required:true,schema:{type:'string',enum:['transcript','resume']}}]});
+add('/documents','post','Documents','Student: อัปโหลด PDF ไม่เกิน 4 MB (local ในโหมดพัฒนา หรือ S3 เมื่อตั้ง FILE_BUCKET)',{type:'object',properties:{key:string(512),url:string()}},'unused',{status:201,binary:true,parameters:[{name:'kind',in:'query',required:true,schema:{type:'string',enum:['transcript','resume']}}]});
 add('/documents/{key}','get','Documents','ดาวน์โหลดเอกสารตามสิทธิ์ (development only)',null,null,{parameters:[{name:'key',in:'path',required:true,schema:{type:'string'}}]});
 paths['/api/documents/{key}'].get.responses[200] = {description:'PDF preview (inline; authenticated)',content:{'application/pdf':{schema:{type:'string',format:'binary'}}}};
 export const v3Paths = paths;

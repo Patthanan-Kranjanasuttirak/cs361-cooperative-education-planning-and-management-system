@@ -1,11 +1,14 @@
 # เข้าสู่ระบบด้วย Amplify + Cognito
 
+ขั้นตอน deploy ทั้งระบบดู [DEPLOY_AWS.md](../../DEPLOY_AWS.md)
+
 | ผู้ใช้ | วิธีเข้าสู่ระบบ | ตรวจตัวตน | ตรวจสิทธิ์ |
 |---|---|---|---|
-| นักศึกษา / อาจารย์ / เจ้าหน้าที่ | ชื่อผู้ใช้ + รหัสผ่าน TU | Lambda `verify-auth-challenge` ส่งไปตรวจกับ TU API ทุกครั้ง | backend: `users.username` ตรงกับชื่อผู้ใช้ TU |
-| ผู้ประสานงานสถานประกอบการ | ปุ่ม Google (Cognito Hosted UI) | Google | backend: `users.email` ตรงกับอีเมลที่ Google ยืนยันแล้ว |
+| นักศึกษา | ชื่อผู้ใช้ TU (รหัสนักศึกษา) + รหัสผ่าน TU | Lambda `verify-auth-challenge` ส่งไปตรวจกับ TU API ทุกครั้ง รับเฉพาะรหัส `YY0961` / `YY0965` | backend สร้างบัญชีให้ตอนเข้าครั้งแรก จากชื่อ/อีเมลที่ Verify เก็บใน Cognito |
+| อาจารย์ / เจ้าหน้าที่ / ผู้ประสานงาน (mock) | อีเมลบัญชี mock + `MOCK_PASSWORD` | `verify-auth-challenge` เทียบกับ env (ไม่ถาม TU) | backend: อีเมลอยู่ใน `MOCK_LOGINS` และตรงกับบัญชีใน users |
+| ผู้ประสานงานสถานประกอบการ (ทางเลือก) | ปุ่ม Google (Cognito Hosted UI) | Google | backend: `users.email` ตรงกับอีเมลที่ Google ยืนยันแล้ว |
 
-ระบบไม่เก็บรหัสผ่านของใครเลย เจ้าหน้าที่ต้องลงทะเบียนผู้ใช้ในหน้า "จัดการผู้ใช้งาน" ก่อน
+ระบบไม่เก็บรหัสผ่านใน DB (รหัส mock อยู่ใน env ของ Lambda) ผู้ใช้ที่ไม่ใช่นักศึกษาต้องมีบัญชีใน users ก่อน
 login ครั้งแรก backend จะผูก `users.cognito_sub` ให้อัตโนมัติ (ดู `bindCognitoUser` ใน `src/models/userModel.js`)
 ถ้าไม่พบบัญชี อีเมลซ้ำหลายบัญชี หรือบัญชีถูกปิด จะตอบ 403 และหน้าเว็บ signOut ให้
 
@@ -80,9 +83,8 @@ VITE_COGNITO_DOMAIN=<prefix>.auth.<region>.amazoncognito.com
   ถ้าบริษัทไม่ได้ใช้ Google ผู้ประสานงานสร้างบัญชี Google ด้วยอีเมลงานที่ accounts.google.com ได้ (ไม่ต้องเป็น Gmail)
 - บัญชี `dev` ใน seed ใช้ได้เฉพาะ `AUTH_MODE=development` และจะไม่ถูกผูกกับ Cognito
 
-## ยังไม่รวมในงานนี้
+## ข้อจำกัด
 
-- `verify-auth-challenge` ปฏิเสธนักศึกษานอกสาขาวิทยาการคอมพิวเตอร์ และ Cognito username ต้องตรงกับ username ที่ TU ตอบ ในโหมด Cognito นักศึกษาจึงต้องกรอกรหัสนักศึกษา (อีเมลที่เป็นชื่อใช้ได้เฉพาะโหมด development ซึ่งใช้ username ที่ TU ตอบเป็นตัวตน)
-- โหมด development สร้างบัญชีนักศึกษาให้อัตโนมัติตอนเข้าครั้งแรก และให้อาจารย์/เจ้าหน้าที่จับคู่ด้วยอีเมลได้ แต่โหมด Cognito ยังไม่ทำ (`bindCognitoUser` ผูกด้วย username ของบัญชีที่ลงทะเบียนไว้เท่านั้น)
-- บัญชี mock ของผู้ประสานงานและบัญชีทดสอบใช้ได้เฉพาะโหมด development
-- ยังไม่ได้ทดสอบกับ Cognito และ TU API จริง ทดสอบไปแค่ backend integration กับ claims จำลอง และ trigger กับ TU API จำลอง
+- อาจารย์/เจ้าหน้าที่ที่ใช้ชื่อผู้ใช้ TU จริงผ่าน Verify ได้ แต่ backend ผูกด้วย username เท่านั้น (โหมด development จับคู่อีเมลได้ด้วย) ตอนนี้ให้ใช้บัญชี mock
+- ชื่อนักศึกษาจาก TU เก็บใน Cognito ตอน login ถ้า `AdminUpdateUserAttributes` ไม่ได้รับอนุญาต ชื่อจะเป็นรหัสนักศึกษาแทน
+- ยังไม่ได้ทดสอบกับ Cognito จริง ทดสอบ backend integration กับ claims จำลอง (ทั้ง HTTP API และ REST API) และ trigger กับ TU API จำลอง

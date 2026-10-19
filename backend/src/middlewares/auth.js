@@ -40,7 +40,9 @@ export async function authenticate(req, _res, next) {
       const issuer = `https://cognito-idp.${pool.split('_')[0]}.amazonaws.com/${pool}`;
       // ID token ระบุ client ใน aud ส่วน access token ใช้ client_id
       const audience = claims?.token_use === 'id' ? claims.aud : claims?.token_use === 'access' ? claims.client_id : undefined;
-      if (!claims || claims.iss !== issuer || audience !== client || !Number.isFinite(Number(claims.exp)) || Number(claims.exp) <= Date.now() / 1000 || typeof claims.sub !== 'string') throw new Error('invalid authorizer claims');
+      // HTTP API ส่ง exp เป็นวินาที ส่วน REST API (Cognito authorizer) ส่งเป็นข้อความวันที่ เช่น "Mon Oct 19 02:00:00 UTC 2026"
+      const exp = /^\d+$/.test(String(claims?.exp)) ? Number(claims.exp) : Date.parse(claims?.exp) / 1000;
+      if (!claims || claims.iss !== issuer || audience !== client || !Number.isFinite(exp) || exp <= Date.now() / 1000 || typeof claims.sub !== 'string') throw new Error('invalid authorizer claims');
       user = await userBySubject(claims.sub) ?? await bindCognitoUser(claims);
     } else {
       if (!process.env.COGNITO_USER_POOL_ID || !process.env.COGNITO_CLIENT_ID) throw new HttpError(503, 'ยังไม่ได้ตั้งค่า Cognito', 'AUTH_NOT_CONFIGURED');

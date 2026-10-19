@@ -1,8 +1,11 @@
 // Cognito trigger: Verify auth challenge response
 // คำตอบของ challenge คือรหัสผ่าน TU — ส่งไปตรวจกับ TU API แล้วตอบแค่ถูก/ผิด ห้าม log หรือเก็บรหัสผ่าน
-// env: TU_API_KEY (Application-Key จาก TU), TU_API_URL (ไม่บังคับ)
+// env: TU_API_KEY (Application-Key จาก TU), TU_API_URL (ไม่บังคับ),
+//      MOCK_LOGINS (อีเมลบัญชี mock คั่นด้วย ,) และ MOCK_PASSWORD — ใช้ค่าเดียวกับ backend
 // Lambda นี้ต้องออก internet ได้ (ไม่ใส่ใน VPC ที่ไม่มี NAT) และ Cognito รอ trigger ได้ไม่เกิน 5 วินาที
 // backend โหมด development import ไฟล์นี้ไปใช้ตรวจ TU ตอน login บนเครื่อง — เกณฑ์สาขาจึงอยู่ที่เดียว
+import { timingSafeEqual } from 'node:crypto';
+
 const TU_API_URL = process.env.TU_API_URL || 'https://restapi.tu.ac.th/api/v1/auth/Ad/verify';
 const TIMEOUT_MS = 4000;
 
@@ -48,10 +51,44 @@ export async function verifyWithTu(username, password) {
   };
 }
 
+// บัญชี mock (อาจารย์ เจ้าหน้าที่ ผู้ประสานงาน): Cognito username = อีเมลที่อยู่ใน MOCK_LOGINS ใช้รหัส MOCK_PASSWORD ไม่ถาม TU
+export const isMockLogin = (username) => (process.env.MOCK_LOGINS ?? '').split(',')
+  .map((login) => login.trim().toLowerCase()).filter(Boolean).includes(username?.toLowerCase());
+
+function mockPasswordMatches(answer) {
+  const expected = Buffer.from(process.env.MOCK_PASSWORD ?? ''), supplied = Buffer.from(answer);
+  return expected.length > 0 && expected.length === supplied.length && timingSafeEqual(expected, supplied);
+}
+
+// เก็บชื่อ/อีเมลจาก TU ไว้ใน Cognito ให้มากับ ID token — backend ใช้สร้างบัญชีนักศึกษาตอนเข้าครั้งแรก
+// ต้องเพิ่ม custom attribute en_name ใน User Pool และ execution role ต้องเรียก cognito-idp:AdminUpdateUserAttributes ได้
+let writeAttributes = async (event, attributes) => {
+  const { CognitoIdentityProviderClient, AdminUpdateUserAttributesCommand } = await import('@aws-sdk/client-cognito-identity-provider');
+  await new CognitoIdentityProviderClient({}).send(new AdminUpdateUserAttributesCommand({ UserPoolId: event.userPoolId, Username: event.userName, UserAttributes: attributes }));
+};
+export function setAttributeWriterForTests(writer) { writeAttributes = writer; }
+
+async function saveTuProfile(event, profile) {
+  const current = event.request.userAttributes ?? {};
+  const attributes = [['name', profile.th_name], ['custom:en_name', profile.en_name], ...(profile.email ? [['email', profile.email], ['email_verified', 'true']] : [])]
+    .filter(([name, value]) => current[name] !== value).map(([Name, Value]) => ({ Name, Value }));
+  if (!attributes.length) return;
+  try {
+    await writeAttributes(event, attributes);
+  } catch (error) {
+    // ไม่ให้ login ล้มเพราะเก็บชื่อไม่ได้ — backend ใช้รหัสนักศึกษาเป็นชื่อแทน
+    console.error('Saving TU profile failed:', error.name, error.message);
+  }
+}
+
 export const handler = async (event) => {
   const answer = event.request.challengeAnswer;
   if (typeof answer !== 'string' || !answer || isOtherStudentId(event.userName)) {
     event.response.answerCorrect = false;
+    return event;
+  }
+  if (isMockLogin(event.userName)) {
+    event.response.answerCorrect = mockPasswordMatches(answer);
     return event;
   }
   try {
@@ -60,6 +97,7 @@ export const handler = async (event) => {
     // อาจารย์/เจ้าหน้าที่ผ่านที่นี่ได้ — backend ตรวจกับตาราง users ว่าลงทะเบียนไว้หรือไม่
     event.response.answerCorrect = Boolean(profile) && profile.username === event.userName.toLowerCase() &&
       (profile.type !== 'student' || isCsStudentId(profile.username));
+    if (event.response.answerCorrect && profile.type === 'student') await saveTuProfile(event, profile);
   } catch (error) {
     // log เฉพาะสาเหตุ ไม่มีรหัสผ่านหรือ response ของ TU
     console.error('TU verify failed:', error.name, error.message);

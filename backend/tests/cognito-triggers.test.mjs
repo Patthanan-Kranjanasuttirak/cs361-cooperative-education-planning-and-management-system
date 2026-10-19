@@ -4,15 +4,17 @@ import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { handler as define } from '../cognito-triggers/define-auth-challenge/index.mjs';
 import { handler as create } from '../cognito-triggers/create-auth-challenge/index.mjs';
-import { handler as verify, tuLoginName, verifyWithTu } from '../cognito-triggers/verify-auth-challenge/index.mjs';
+import { handler as verify, setAttributeWriterForTests, tuLoginName, verifyWithTu } from '../cognito-triggers/verify-auth-challenge/index.mjs';
 import { handler as preSignUp } from '../cognito-triggers/pre-sign-up/index.mjs';
 import { curriculumFor, qualificationChecks, studyYear } from '../src/config/coopCriteria.js';
 
 const realFetch = globalThis.fetch;
-afterEach(() => { globalThis.fetch = realFetch; delete process.env.TU_API_KEY; });
+const written = [];
+setAttributeWriterForTests(async (event, attributes) => { written.push({ user: event.userName, attributes }); });
+afterEach(() => { globalThis.fetch = realFetch; delete process.env.TU_API_KEY; delete process.env.MOCK_LOGINS; delete process.env.MOCK_PASSWORD; written.length = 0; });
 
 const defineEvent = (session, userNotFound = false) => ({ request: { session, userNotFound }, response: {} });
-const verifyEvent = (userName, challengeAnswer) => ({ userName, request: { challengeAnswer }, response: {} });
+const verifyEvent = (userName, challengeAnswer, userAttributes = {}) => ({ userName, userPoolId: 'us-east-1_Test', request: { challengeAnswer, userAttributes }, response: {} });
 function mockTu(status, body) {
   const calls = [];
   globalThis.fetch = async (url, init) => { calls.push({ url, init }); return new Response(JSON.stringify(body), { status }); };
@@ -117,4 +119,69 @@ test('curriculum by entry year and coop eligibility from year 3', () => {
   assert.ok(failed('6909611111', '66').some((label) => label.includes('ชั้นปีที่ 3')));
   assert.ok(failed('6109611111', '66').some((label) => label.includes('หลักสูตร 61')));
   assert.ok(!failed('6109611111', '61').some((label) => label.includes('หลักสูตร') || label.includes('ชั้นปี')));
+});
+
+test('verify: saves the TU name/email of a CS student into Cognito once, never blocks login on failure', async () => {
+  process.env.TU_API_KEY = 'test-key';
+  const tu = { status: true, type: 'student', username: '6609611111', displayname_th: 'สมชาย ใจดี', displayname_en: 'Somchai Jaidee', email: 'somchai.jai@dome.tu.ac.th' };
+  mockTu(200, tu);
+  assert.equal((await verify(verifyEvent('6609611111', 'secret'))).response.answerCorrect, true);
+  assert.deepEqual(written, [{ user: '6609611111', attributes: [
+    { Name: 'name', Value: 'สมชาย ใจดี' }, { Name: 'custom:en_name', Value: 'Somchai Jaidee' },
+    { Name: 'email', Value: 'somchai.jai@dome.tu.ac.th' }, { Name: 'email_verified', Value: 'true' },
+  ] }]);
+  written.length = 0;
+  mockTu(200, tu);
+  const saved = { name: 'สมชาย ใจดี', 'custom:en_name': 'Somchai Jaidee', email: 'somchai.jai@dome.tu.ac.th', email_verified: 'true' };
+  await verify(verifyEvent('6609611111', 'secret', saved));
+  assert.equal(written.length, 0, 'unchanged attributes are not rewritten');
+  mockTu(200, { status: true, type: 'employee', username: 'somchai.j' });
+  await verify(verifyEvent('somchai.j', 'secret'));
+  assert.equal(written.length, 0, 'staff profiles are not stored');
+
+  setAttributeWriterForTests(async () => { throw Object.assign(new Error('denied'), { name: 'AccessDeniedException' }); });
+  try {
+    mockTu(200, tu);
+    assert.equal((await verify(verifyEvent('6609611111', 'secret'))).response.answerCorrect, true);
+  } finally {
+    setAttributeWriterForTests(async (event, attributes) => { written.push({ user: event.userName, attributes }); });
+  }
+});
+
+test('verify: mock accounts listed in MOCK_LOGINS use MOCK_PASSWORD and never reach TU', async () => {
+  process.env.TU_API_KEY = 'test-key';
+  process.env.MOCK_LOGINS = 'staff.v3@tu.ac.th, Company.V3@example.test';
+  process.env.MOCK_PASSWORD = 'mock-secret';
+  const calls = mockTu(200, { status: true, username: 'staff.v3@tu.ac.th' });
+  assert.equal((await verify(verifyEvent('staff.v3@tu.ac.th', 'mock-secret'))).response.answerCorrect, true);
+  assert.equal((await verify(verifyEvent('company.v3@example.test', 'mock-secret'))).response.answerCorrect, true);
+  assert.equal((await verify(verifyEvent('staff.v3@tu.ac.th', 'wrong'))).response.answerCorrect, false);
+  assert.equal(calls.length, 0);
+  delete process.env.MOCK_PASSWORD;
+  assert.equal((await verify(verifyEvent('staff.v3@tu.ac.th', 'mock-secret'))).response.answerCorrect, false, 'no password configured = no mock login');
+  assert.equal((await preSignUp({ triggerSource: 'PreSignUp_SignUp', userName: 'staff.v3@tu.ac.th', response: {} })).response.autoConfirmUser, true);
+});
+
+test('S3 storage writes without overwriting and maps a missing object to null', async () => {
+  const { getFile, putFile, setS3ForTests } = await import('../src/services/storage.js');
+  const sent = [];
+  class Command { constructor(input) { this.input = input; } }
+  const commands = { PutObjectCommand: class extends Command {}, GetObjectCommand: class extends Command {} };
+  setS3ForTests({ send: async (command) => {
+    sent.push(command);
+    if (command instanceof commands.GetObjectCommand) {
+      if (command.input.Key === 'missing.pdf') throw Object.assign(new Error('missing'), { name: 'NoSuchKey' });
+      return { Body: { transformToByteArray: async () => new Uint8Array([37, 80, 68, 70]) } };
+    }
+    return {};
+  } }, commands);
+  process.env.FILE_BUCKET = 'coop-files';
+  try {
+    await putFile('12/transcript-x.pdf', Buffer.from('%PDF'), 'application/pdf');
+    assert.deepEqual(sent[0].input, { Bucket: 'coop-files', Key: '12/transcript-x.pdf', Body: Buffer.from('%PDF'), ContentType: 'application/pdf', IfNoneMatch: '*' });
+    assert.equal((await getFile('12/transcript-x.pdf')).toString(), '%PDF');
+    assert.equal(await getFile('missing.pdf'), null);
+  } finally {
+    delete process.env.FILE_BUCKET;
+  }
 });

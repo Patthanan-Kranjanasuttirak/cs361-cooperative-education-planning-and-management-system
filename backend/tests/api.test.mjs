@@ -452,6 +452,54 @@ test('first Cognito login binds a pre-registered account once by TU username or 
   }
 });
 
+test('Cognito: CS students are created on first login from TU claims, mock emails bind to their seeded accounts', async () => {
+  const previous = Object.fromEntries(['AUTH_MODE','COGNITO_USER_POOL_ID','COGNITO_CLIENT_ID','MOCK_LOGINS'].map((key) => [key, process.env[key]]));
+  try {
+    process.env.AUTH_MODE = 'api-gateway'; process.env.COGNITO_USER_POOL_ID = 'us-east-1_Integration'; process.env.COGNITO_CLIENT_ID = 'integration-client';
+    process.env.MOCK_LOGINS = 'mock.advisor@tu.ac.th';
+    const { handler } = await import('../src/lambda.js');
+    const idToken = (sub, extra) => ({ iss:'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_Integration', exp:String(Math.floor(Date.now()/1000)+60), sub, aud:'integration-client', token_use:'id', ...extra });
+    const me = async (claims) => {
+      const event = {version:'2.0',rawPath:'/api/auth/me',rawQueryString:'',headers:{authorization:'Bearer gateway-verified-token'},requestContext:{stage:'$default',http:{method:'GET',path:'/api/auth/me',protocol:'HTTP/1.1',sourceIp:'127.0.0.1'},authorizer:{jwt:{claims}}},isBase64Encoded:false};
+      const response = await handler(event, {getRemainingTimeInMillis:() => 10000});
+      return { status: response.statusCode, body: JSON.parse(response.body) };
+    };
+
+    // Verify เก็บชื่อจาก TU ไว้ใน token: name, custom:en_name, email
+    let result = await me(idToken('cognito-cs-1', { 'cognito:username':'6509617777', name:'นักศึกษา คอกนิโต', 'custom:en_name':'Cognito Student', email:'cognito.student@dome.tu.ac.th' }));
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    assert.equal(result.body.role, 'student'); assert.equal(result.body.username, '6509617777'); assert.equal(result.body.auth_provider, 'cognito');
+    assert.equal(result.body.th_name, 'นักศึกษา คอกนิโต'); assert.equal(result.body.en_name, 'Cognito Student');
+    assert.equal(result.body.email, 'cognito.student@dome.tu.ac.th'); assert.equal(result.body.curriculum, '61');
+    assert.equal((await me(idToken('cognito-cs-1', { 'cognito:username':'6509617777' }))).body.user_id, result.body.user_id);
+    // ไม่มีชื่อใน token (เก็บไม่ได้) ใช้รหัสนักศึกษาแทน
+    result = await me(idToken('cognito-cs-2', { 'cognito:username':'6709617777' }));
+    assert.equal(result.body.th_name, '6709617777'); assert.equal(result.body.email, '6709617777@dome.tu.ac.th'); assert.equal(result.body.curriculum, '66');
+    // sub ใหม่ของรหัสเดิม นอกสาขา หรือบัญชีที่ไม่ใช่นักศึกษา: ไม่สร้าง
+    assert.equal((await me(idToken('cognito-cs-3', { 'cognito:username':'6509617777' }))).status, 403);
+    assert.equal((await me(idToken('cognito-cs-4', { 'cognito:username':'6509627777' }))).status, 403);
+    assert.equal((await me(idToken('cognito-cs-5', { 'cognito:username':'unknown.staff' }))).status, 403);
+    assert.equal((await query("SELECT count(*)::int AS n FROM users WHERE username IN ('6509627777','unknown.staff')")).rows[0].n, 0);
+
+    // บัญชี mock: seed ใส่ cognito_sub เป็น dev:... ไว้ ผูกได้เฉพาะอีเมลที่อยู่ใน MOCK_LOGINS
+    const mock = (await query("INSERT INTO users (auth_provider,username,cognito_sub,role,th_name,en_name,email) VALUES ('dev','mock.advisor','dev:mock:advisor','advisor','อาจารย์ mock','Mock Advisor','mock.advisor@tu.ac.th') RETURNING user_id")).rows[0].user_id;
+    result = await me(idToken('cognito-mock-1', { 'cognito:username':'mock.advisor@tu.ac.th' }));
+    assert.equal(result.status, 200); assert.equal(result.body.user_id, mock); assert.equal(result.body.role, 'advisor');
+    assert.equal((await me(idToken('cognito-mock-2', { 'cognito:username':'mock.advisor@tu.ac.th' }))).status, 403, 'a bound mock cannot be rebound');
+    assert.equal((await me(idToken('cognito-mock-3', { 'cognito:username':'advisor.v3@tu.ac.th' }))).status, 403, 'unlisted seeded accounts stay unbindable');
+
+    // REST API (payload v1): claims อยู่ที่ authorizer.claims และ exp เป็นข้อความวันที่
+    const rest = async (exp) => handler({ resource:'/{proxy+}', path:'/api/auth/me', httpMethod:'GET', headers:{ Authorization:'Bearer rest-verified-token' }, multiValueHeaders:{}, queryStringParameters:null, isBase64Encoded:false, body:null,
+      requestContext:{ stage:'prod', httpMethod:'GET', path:'/prod/api/auth/me', identity:{ sourceIp:'127.0.0.1' }, authorizer:{ claims:{ ...idToken('cognito-mock-1', { 'cognito:username':'mock.advisor@tu.ac.th' }), exp } } } }, {getRemainingTimeInMillis:() => 10000});
+    const later = new Date(Date.now() + 60_000).toUTCString().replace(/^(\w+), (\d+) (\w+) (\d+) ([\d:]+) GMT$/, '$1 $3 $2 $5 UTC $4');
+    const restMe = await rest(later);
+    assert.equal(restMe.statusCode, 200, `${later} ${restMe.body}`); assert.equal(JSON.parse(restMe.body).user_id, mock);
+    assert.equal((await rest('Mon Jan 01 00:00:00 UTC 2024')).statusCode, 401);
+  } finally {
+    for (const [key,value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key]=value; }
+  }
+});
+
 test('OpenAPI describes V3 endpoints and every schema reference resolves', async () => {
   const spec = await ok('/docs.json');
   for (const path of ['/api/auth/login','/api/students/me','/api/users','/api/positions','/api/terms','/api/applications/{id}/reviews','/api/applications/{id}/confirm']) assert.ok(spec.paths[path],path);

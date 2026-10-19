@@ -55,7 +55,7 @@ function ProfileForm({ profile, onSaved }) {
     if (saving || saved) return;
     setNotice('');
     const errors = locked ? [] : checks.filter(([passed]) => !passed).map(([, label]) => label);
-    if (file && (file.type !== 'application/pdf' || file.size === 0 || file.size > 10 * 1024 * 1024)) errors.push('เลือกไฟล์ PDF ที่ไม่ว่างและมีขนาดไม่เกิน 10 MB');
+    if (file && (file.type !== 'application/pdf' || file.size === 0 || file.size > 4 * 1024 * 1024)) errors.push('เลือกไฟล์ PDF ที่ไม่ว่างและมีขนาดไม่เกิน 4 MB');
     if (errors.length) { setValidationErrors(errors); return; }
     setSaving(true);
     try {
@@ -94,7 +94,7 @@ function ProfileForm({ profile, onSaved }) {
         <label className="profile-label" htmlFor="profile-gpax">GPAX</label>
         <input id="profile-gpax" className="profile-input" type="number" min="0" max="4" step="0.01" value={gpax} onChange={(e) => setGpax(e.target.value)} />
         <p className="profile-hint">เกณฑ์ขั้นต่ำ {COOP_CRITERIA.minGpax.toFixed(2)}</p>
-        <label className="profile-label" htmlFor="profile-transcript">ใบแสดงผลการเรียน (PDF ไม่เกิน 10 MB)</label>
+        <label className="profile-label" htmlFor="profile-transcript">ใบแสดงผลการเรียน (PDF ไม่เกิน 4 MB)</label>
         <FileInput id="profile-transcript" accept="application/pdf" fileName={file?.name} onChange={(e) => setFile(e.target.files[0] ?? null)} disabled={saving || locked} />
         <DocumentLink url={profile.transcript_s3_key ? `/documents/${encodeURIComponent(profile.transcript_s3_key)}` : null} label="ดูเอกสารที่บันทึกไว้" />
       </fieldset>

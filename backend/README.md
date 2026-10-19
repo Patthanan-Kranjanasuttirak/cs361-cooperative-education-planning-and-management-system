@@ -68,9 +68,9 @@ Production เตรียมไว้สองแบบ:
 
 ## เอกสารและไฟล์
 
-Local PDF เก็บใน `.uploads/` ที่ไม่เข้า git มีขนาดไม่เกิน 10 MB ตรวจชนิดและ header PDF
+PDF และโลโก้เก็บใน S3 เมื่อตั้ง `FILE_BUCKET` (โหมดพัฒนาเก็บใน `.uploads/` ที่ไม่เข้า git) ไฟล์ไม่เกิน 4 MB ตามข้อจำกัดของ Lambda ตรวจชนิดและ header ของไฟล์
 คีย์ผูก namespace ตาม user_id; download ใช้ Bearer token และตรวจเจ้าของ/อาจารย์/company owner
-Production endpoint เก็บไฟล์ local ตอบ `503 STORAGE_NOT_CONFIGURED`; ต้องต่อ S3/presigned upload แยกก่อนใช้ไฟล์บน AWS
+ถ้าไม่ได้ตั้ง `FILE_BUCKET` นอกโหมดพัฒนา endpoint เอกสาร/โลโก้ตอบ `503 STORAGE_NOT_CONFIGURED` วิธีตั้งค่า S3 ดู [DEPLOY_AWS.md](../DEPLOY_AWS.md)
 ฟิลด์ `transcript_s3_key` และ `resume_s3_key` ใช้รูปแบบคีย์ตามเจ้าของที่ API กำหนด
 
 ## Error contract

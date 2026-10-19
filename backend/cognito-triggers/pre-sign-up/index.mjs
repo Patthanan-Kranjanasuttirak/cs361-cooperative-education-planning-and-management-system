@@ -3,7 +3,8 @@
 // จึงยืนยันให้อัตโนมัติ ไม่ต้องส่งอีเมล — สิทธิ์จริงอยู่ที่ Verify (ตรวจกับ TU ทุกครั้ง) และตาราง users ใน backend
 // App client ต้องเปิดเฉพาะ ALLOW_CUSTOM_AUTH + ALLOW_REFRESH_TOKEN_AUTH รหัสสุ่มนี้จึงใช้ login ไม่ได้
 // Google (PreSignUp_ExternalProvider) ปล่อยผ่าน — backend ตรวจอีเมลกับตาราง users ก่อนให้ใช้งาน
-const TU_USERNAME = /^[a-z0-9._-]{3,50}$/;
+// ชื่อผู้ใช้ TU / รหัสนักศึกษา หรืออีเมลของบัญชี mock (ตรวจรหัสที่ Verify)
+const TU_USERNAME = /^[a-z0-9._@-]{3,100}$/;
 
 export const handler = async (event) => {
   if (event.triggerSource === 'PreSignUp_SignUp') {

@@ -76,8 +76,9 @@ export default function AuthProvider({ children }) {
 
   const login = useCallback(async ({ email, password, role, remember = true }) => {
     if (cognitoEnabled) {
-      // กรอกอีเมล มธ. ได้ — Cognito username คือชื่อหน้า @
-      await signInWithTu(email.trim().toLowerCase().replace(/@(dome\.)?tu\.ac\.th$/, ''), password, remember);
+      // นักศึกษา: Cognito username = ชื่อผู้ใช้ TU (ตัดโดเมนอีเมล มธ. ออก), บัญชี mock: Cognito username = อีเมล
+      const identifier = email.trim().toLowerCase();
+      await signInWithTu(role === 'student' ? identifier.replace(/@(dome\.)?tu\.ac\.th$/, '') : identifier, password, remember);
       return start(await fetchCognitoUser(role), { remember });
     }
     const result = await api('/auth/login', { method: 'POST', body: { email: email.trim(), password }, anonymous: true });

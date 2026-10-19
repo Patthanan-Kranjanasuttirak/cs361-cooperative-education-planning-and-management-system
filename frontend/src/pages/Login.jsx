@@ -30,9 +30,8 @@ export default function Login() {
 
   if (user) return <Navigate to={ROLES[user.role].home} replace />;
 
-  // Cognito: นักศึกษา/อาจารย์/เจ้าหน้าที่ใช้บัญชี TU, ผู้ประสานงานใช้ Google เท่านั้น
-  const googleOnly = cognitoEnabled && role === 'company';
-  const tuLogin = cognitoEnabled && role !== 'company';
+  // นักศึกษาใช้บัญชี TU, บทบาทอื่นใช้อีเมลบัญชี mock ไปก่อน, ผู้ประสานงานเข้าด้วย Google ได้อีกทาง (Cognito)
+  const tuLogin = role === 'student';
 
   const handleGoogle = async () => {
     if (!cognitoEnabled) {
@@ -95,11 +94,9 @@ export default function Login() {
         <div className="login-form-content">
           <header className="login-heading">
             <h1 id="login-title">เข้าสู่ระบบ</h1>
-            <p>{googleOnly
-              ? 'สำหรับผู้ประสานงานสถานประกอบการ ใช้บัญชี Google ที่ลงทะเบียนกับเจ้าหน้าที่ไว้'
-              : role === 'company'
-                ? 'สำหรับผู้ประสานงานสถานประกอบการ ใช้อีเมลทั่วไปหรือ Google'
-                : tuLogin ? 'สำหรับนักศึกษา อาจารย์ และเจ้าหน้าที่ ใช้บัญชีมหาวิทยาลัย (TU)' : 'สำหรับนักศึกษา อาจารย์ และเจ้าหน้าที่'}</p>
+            <p>{role === 'company'
+              ? 'สำหรับผู้ประสานงานสถานประกอบการ ใช้อีเมลทั่วไปหรือ Google'
+              : tuLogin ? 'สำหรับนักศึกษา ใช้บัญชีมหาวิทยาลัย (TU)' : 'สำหรับอาจารย์และเจ้าหน้าที่'}</p>
           </header>
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="login-role-field">
@@ -113,7 +110,7 @@ export default function Login() {
                 </svg>
               </div>
             </div>
-            {!googleOnly && <div className="login-credentials">
+            <div className="login-credentials">
               <div className="login-field">
                 <label className="login-label" htmlFor="login-email">{role === 'student' ? 'ชื่อผู้ใช้ TU' : 'อีเมล'}</label>
                 {/* นักศึกษาตรวจกับ TU API ด้วยรหัสนักศึกษา; อาจารย์/เจ้าหน้าที่/ผู้ประสานงานใช้บัญชี mock ไปก่อน */}
@@ -133,26 +130,26 @@ export default function Login() {
                   </button>
                 </div>
               </div>
-            </div>}
+            </div>
             <label className="login-remember" htmlFor="login-remember">
               <input id="login-remember" type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
               <span>จดจำการเข้าสู่ระบบ</span>
             </label>
-            {!googleOnly && <div className="login-actions">
+            <div className="login-actions">
               <button className="login-submit" type="submit" disabled={submitting}>
                 {submitting ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
               </button>
               <button className="login-forgot" type="button" onClick={() => setNotice(tuLogin
                 ? 'ใช้รหัสผ่านเดียวกับบัญชีมหาวิทยาลัย (TU) หากลืมรหัสผ่านให้ดำเนินการผ่านช่องทางของมหาวิทยาลัย หรือติดต่อสาขาวิชาวิทยาการคอมพิวเตอร์ที่ scitu_cs@sci.tu.ac.th'
                 : 'กรุณาติดต่อผู้ดูแลบัญชีของคุณ หรือสาขาวิชาวิทยาการคอมพิวเตอร์ที่ scitu_cs@sci.tu.ac.th เพื่อขอความช่วยเหลือเรื่องรหัสผ่าน')}>ลืมรหัสผ่าน?</button>
-            </div>}
+            </div>
           </form>
-          {!tuLogin && (
+          {role === 'company' && (
             <>
-              {!googleOnly && <div className="login-divider"><span>หรือ</span></div>}
+              <div className="login-divider"><span>หรือ</span></div>
               <button className="login-tu-button" type="button" onClick={handleGoogle} disabled={submitting}>
                 <img src={googleLogo} width="35" height="35" alt="" />
-                <span>{googleOnly && submitting ? 'กำลังไปที่ Google…' : 'เข้าสู่ระบบด้วย Google'}</span>
+                <span>เข้าสู่ระบบด้วย Google</span>
               </button>
             </>
           )}
