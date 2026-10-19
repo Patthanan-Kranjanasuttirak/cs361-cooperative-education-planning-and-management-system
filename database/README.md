@@ -1,6 +1,6 @@
 # Database V3
 
-Schema ที่รีวิวแล้วมี 9 ตาราง อยู่ใน `init/01-schema.sql` และคงข้อมูลตัวอย่างบริษัท/ตำแหน่งเดิมไว้
+Schema ที่รีวิวแล้วมี 9 ตาราง อยู่ใน `init/001_schema.sql` และคงข้อมูลตัวอย่างบริษัท/ตำแหน่งเดิมไว้
 ไฟล์ init ทำงานเฉพาะตอน volume ว่าง; การ rebuild ไม่อัปเกรดฐานข้อมูลเดิม
 
 ## อัปเกรด volume เดิมโดยเก็บข้อมูล
@@ -25,7 +25,7 @@ Migration รองรับ V1/V2 และรันซ้ำได้ ย้�
 ใช้เฉพาะ local; ไม่รวม seed บัญชีทดสอบในการ init อัตโนมัติของ production
 
 ```sh
-docker compose exec -T database sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/seeds/v3-demo.sql
+docker compose exec -T database sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/seeds/005_v3-demo.sql
 ```
 
 Seed ครบ 4 บทบาทและ 8 สถานะ รันซ้ำไม่เพิ่มข้อมูลเดิม ไม่เปลี่ยนข้อมูลบริษัทเดิม

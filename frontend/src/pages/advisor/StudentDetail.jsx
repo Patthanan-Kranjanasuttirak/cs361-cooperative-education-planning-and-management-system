@@ -2,7 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
 import DocumentLink from '../../components/DocumentLink';
 import GpaxValue from '../../components/GpaxValue';
-import { COOP_CRITERIA } from '../../config/coopCriteria';
+import { COOP_CRITERIA, curriculumLabel } from '../../config/coopCriteria';
 import { useApi } from '../../hooks/useApi';
 import ApiState from '../../components/ApiState';
 import CourseGradesFields from '../../components/CourseGradesFields';
@@ -39,6 +39,7 @@ export default function StudentDetail() {
   const pending = detail.applications.filter((a) => a.status === 'submitted').length;
   const info = [
     ['รหัสนักศึกษา', summary.student_code],
+    ['หลักสูตร', curriculumLabel(detail.curriculum)],
     ['GPAX', <GpaxValue key="gpax" gpax={summary.gpax} />],
     ['อีเมล', <a key="email" href={`mailto:${detail.email}`} className="sd-link">{detail.email}</a>],
     ['เบอร์โทรศัพท์', detail.phone ? <a key="phone" href={`tel:${detail.phone}`} className="sd-link">{formatPhone(detail.phone)}</a> : <span key="phone" className="sd-muted">ยังไม่กรอก</span>],

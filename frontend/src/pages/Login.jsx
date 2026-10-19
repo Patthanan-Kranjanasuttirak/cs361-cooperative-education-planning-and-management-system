@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/useAuth';
 import { ROLES } from '../config/roles';
+import { cognitoEnabled } from '../services/cognito';
 import campusPhoto from '../assets/login-campus.png';
 import whiteLogo from '../assets/W-CSTU-LOGO.png';
 import googleLogo from '../assets/google-g.svg';
@@ -16,7 +17,7 @@ const LOGIN_ROLES = [
 ];
 
 export default function Login() {
-  const { user, login } = useAuth();
+  const { user, login, loginWithGoogle, authError } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('');
@@ -28,6 +29,24 @@ export default function Login() {
   const [notice, setNotice] = useState('');
 
   if (user) return <Navigate to={ROLES[user.role].home} replace />;
+
+  // นักศึกษาใช้บัญชี TU, บทบาทอื่นใช้อีเมลบัญชี mock ไปก่อน, ผู้ประสานงานเข้าด้วย Google ได้อีกทาง (Cognito)
+  const tuLogin = role === 'student';
+
+  const handleGoogle = async () => {
+    if (!cognitoEnabled) {
+      setNotice('การเข้าสู่ระบบด้วย Google ยังไม่เปิดให้ใช้งานในระบบทดสอบ');
+      return;
+    }
+    setSubmitting(true);
+    setNotice('');
+    try {
+      await loginWithGoogle({ remember });
+    } catch (error) {
+      setNotice(error.message || 'เข้าสู่ระบบด้วย Google ไม่สำเร็จ กรุณาลองอีกครั้ง');
+      setSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -77,7 +96,7 @@ export default function Login() {
             <h1 id="login-title">เข้าสู่ระบบ</h1>
             <p>{role === 'company'
               ? 'สำหรับผู้ประสานงานสถานประกอบการ ใช้อีเมลทั่วไปหรือ Google'
-              : 'สำหรับนักศึกษา อาจารย์ และเจ้าหน้าที่'}</p>
+              : tuLogin ? 'สำหรับนักศึกษา ใช้บัญชีมหาวิทยาลัย (TU)' : 'สำหรับอาจารย์และเจ้าหน้าที่'}</p>
           </header>
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="login-role-field">
@@ -93,9 +112,10 @@ export default function Login() {
             </div>
             <div className="login-credentials">
               <div className="login-field">
-                <label className="login-label" htmlFor="login-email">อีเมล</label>
-                <input id="login-email" className="login-input" type="email" autoComplete="username"
-                  placeholder={role === 'company' ? 'name@company.com' : '@dome.tu.ac.th'} required value={email}
+                <label className="login-label" htmlFor="login-email">{role === 'student' ? 'ชื่อผู้ใช้ TU' : 'อีเมล'}</label>
+                {/* นักศึกษาตรวจกับ TU API ด้วยรหัสนักศึกษา; อาจารย์/เจ้าหน้าที่/ผู้ประสานงานใช้บัญชี mock ไปก่อน */}
+                <input id="login-email" className="login-input" type={role === 'student' ? 'text' : 'email'} autoComplete="username"
+                  placeholder={role === 'student' ? 'รหัสนักศึกษา เช่น 6609611234' : role === 'company' ? 'name@company.com' : 'name@tu.ac.th'} required value={email}
                   onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div className="login-field">
@@ -119,16 +139,22 @@ export default function Login() {
               <button className="login-submit" type="submit" disabled={submitting}>
                 {submitting ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
               </button>
-              <button className="login-forgot" type="button" onClick={() => setNotice('กรุณาติดต่อผู้ดูแลบัญชีของคุณ หรือสาขาวิชาวิทยาการคอมพิวเตอร์ที่ scitu_cs@sci.tu.ac.th เพื่อขอความช่วยเหลือเรื่องรหัสผ่าน')}>ลืมรหัสผ่าน?</button>
+              <button className="login-forgot" type="button" onClick={() => setNotice(tuLogin
+                ? 'ใช้รหัสผ่านเดียวกับบัญชีมหาวิทยาลัย (TU) หากลืมรหัสผ่านให้ดำเนินการผ่านช่องทางของมหาวิทยาลัย หรือติดต่อสาขาวิชาวิทยาการคอมพิวเตอร์ที่ scitu_cs@sci.tu.ac.th'
+                : 'กรุณาติดต่อผู้ดูแลบัญชีของคุณ หรือสาขาวิชาวิทยาการคอมพิวเตอร์ที่ scitu_cs@sci.tu.ac.th เพื่อขอความช่วยเหลือเรื่องรหัสผ่าน')}>ลืมรหัสผ่าน?</button>
             </div>
           </form>
-          <div className="login-divider"><span>หรือ</span></div>
-          <button className="login-tu-button" type="button" onClick={() => setNotice('การเข้าสู่ระบบด้วย Google ยังไม่เปิดให้ใช้งานในระบบทดสอบ')}>
-            <img src={googleLogo} width="35" height="35" alt="" />
-            <span>เข้าสู่ระบบด้วย Google</span>
-          </button>
-          <p className="login-demo-note">ระบบพัฒนา: ใช้บัญชีทดสอบที่ทีมจัดเตรียมไว้</p>
-          {notice && <p className="login-notice" role="status">{notice}</p>}
+          {role === 'company' && (
+            <>
+              <div className="login-divider"><span>หรือ</span></div>
+              <button className="login-tu-button" type="button" onClick={handleGoogle} disabled={submitting}>
+                <img src={googleLogo} width="35" height="35" alt="" />
+                <span>เข้าสู่ระบบด้วย Google</span>
+              </button>
+            </>
+          )}
+          {!cognitoEnabled && <p className="login-demo-note">ระบบพัฒนา: นักศึกษาใช้รหัสนักศึกษาและรหัสผ่าน TU บทบาทอื่นใช้อีเมลบัญชีทดสอบที่ทีมจัดเตรียมไว้</p>}
+          {(notice || authError) && <p className="login-notice" role="status">{notice || authError}</p>}
         </div>
       </section>
     </main>

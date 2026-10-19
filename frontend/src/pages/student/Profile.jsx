@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/useAuth';
 import { useApi } from '../../hooks/useApi';
 import { api, uploadDocument } from '../../services/api';
-import { COOP_CRITERIA, qualificationChecks } from '../../config/coopCriteria';
+import { COOP_CRITERIA, curriculumFor, curriculumLabel, qualificationChecks } from '../../config/coopCriteria';
 import ApiState from '../../components/ApiState';
 import FileInput from '../../components/FileInput';
 import DocumentLink from '../../components/DocumentLink';
@@ -32,7 +32,8 @@ function QualificationAlert({ errors, onClose }) {
 function ProfileForm({ profile, onSaved }) {
   const [gpax, setGpax] = useState(profile.gpax ?? '');
   const [phone, setPhone] = useState(profile.phone ?? '');
-  const [curriculum, setCurriculum] = useState(profile.curriculum ?? '');
+  // หลักสูตรตามปีรหัส: ถึงปี 65 → 61, ตั้งแต่ปี 66 → 66
+  const curriculum = curriculumFor(profile.username);
   const [grades, setGrades] = useState(profile.course_grades ?? {});
   const [declarations, setDeclarations] = useState({ mustPass: false, discipline: false, accept: false, ...profile.declarations });
   const [file, setFile] = useState(null);
@@ -42,14 +43,7 @@ function ProfileForm({ profile, onSaved }) {
   const [validationErrors, setValidationErrors] = useState(null);
   const locked = profile.qualification_locked;
   const rule = COOP_CRITERIA.curricula[curriculum];
-  const checks = qualificationChecks({ gpax, curriculum, course_grades: grades, declarations, transcript_s3_key: file || profile.transcript_s3_key });
-  const changeCurriculum = (value) => {
-    setCurriculum(value);
-    setDeclarations((previous) => ({ ...previous, mustPass: false, accept: false }));
-    const nextRule = COOP_CRITERIA.curricula[value];
-    const allowed = new Set(nextRule ? [...nextRule.completed, ...nextRule.inProgressOrCompleted].flat() : []);
-    setGrades((previous) => Object.fromEntries(Object.entries(previous).filter(([code]) => allowed.has(code))));
-  };
+  const checks = qualificationChecks({ username: profile.username, gpax, curriculum, course_grades: grades, declarations, transcript_s3_key: file || profile.transcript_s3_key });
   const changeGrade = (code, value) => setGrades((previous) => {
     const next = { ...previous };
     if (value) next[code] = value;
@@ -61,7 +55,7 @@ function ProfileForm({ profile, onSaved }) {
     if (saving || saved) return;
     setNotice('');
     const errors = locked ? [] : checks.filter(([passed]) => !passed).map(([, label]) => label);
-    if (file && (file.type !== 'application/pdf' || file.size === 0 || file.size > 10 * 1024 * 1024)) errors.push('เลือกไฟล์ PDF ที่ไม่ว่างและมีขนาดไม่เกิน 10 MB');
+    if (file && (file.type !== 'application/pdf' || file.size === 0 || file.size > 4 * 1024 * 1024)) errors.push('เลือกไฟล์ PDF ที่ไม่ว่างและมีขนาดไม่เกิน 4 MB');
     if (errors.length) { setValidationErrors(errors); return; }
     setSaving(true);
     try {
@@ -86,7 +80,7 @@ function ProfileForm({ profile, onSaved }) {
       <fieldset className="profile-section">
         <legend className="profile-section-title">ข้อมูลทั่วไป</legend>
         <dl className="profile-readonly">{[
-          ['รหัสนักศึกษา', profile.username], ['ชื่อ-นามสกุล', profile.th_name], ['ชื่อภาษาอังกฤษ', profile.en_name],
+          ['รหัสนักศึกษา', profile.username], ['หลักสูตร', curriculumLabel(curriculum)], ['ชื่อ-นามสกุล', profile.th_name], ['ชื่อภาษาอังกฤษ', profile.en_name],
           ['อีเมล', profile.email], ['อาจารย์ที่ปรึกษา', profile.advisor_name],
         ].map(([label, value]) => <div key={label} className="profile-readonly-row"><dt>{label}</dt><dd>{value || '—'}</dd></div>)}</dl>
       </fieldset>
@@ -100,11 +94,11 @@ function ProfileForm({ profile, onSaved }) {
         <label className="profile-label" htmlFor="profile-gpax">GPAX</label>
         <input id="profile-gpax" className="profile-input" type="number" min="0" max="4" step="0.01" value={gpax} onChange={(e) => setGpax(e.target.value)} />
         <p className="profile-hint">เกณฑ์ขั้นต่ำ {COOP_CRITERIA.minGpax.toFixed(2)}</p>
-        <label className="profile-label" htmlFor="profile-transcript">ใบแสดงผลการเรียน (PDF ไม่เกิน 10 MB)</label>
+        <label className="profile-label" htmlFor="profile-transcript">ใบแสดงผลการเรียน (PDF ไม่เกิน 4 MB)</label>
         <FileInput id="profile-transcript" accept="application/pdf" fileName={file?.name} onChange={(e) => setFile(e.target.files[0] ?? null)} disabled={saving || locked} />
         <DocumentLink url={profile.transcript_s3_key ? `/documents/${encodeURIComponent(profile.transcript_s3_key)}` : null} label="ดูเอกสารที่บันทึกไว้" />
       </fieldset>
-      <CourseGradesFields curriculum={curriculum} grades={grades} onCurriculumChange={changeCurriculum} onGradeChange={changeGrade} disabled={saving || locked} />
+      <CourseGradesFields curriculum={curriculum} grades={grades} onGradeChange={changeGrade} disabled={saving || locked} />
       {rule && <fieldset className="profile-section" disabled={saving || locked}>
         <legend className="profile-section-title">การรับทราบและยอมรับ</legend>
         {[

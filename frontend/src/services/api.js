@@ -1,3 +1,5 @@
+import { cognitoEnabled, cognitoIdToken } from './cognito';
+
 export const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
 export function savedToken() {
@@ -5,8 +7,14 @@ export function savedToken() {
   catch { return null; }
 }
 
+// Cognito: ขอ token จาก Amplify ทุกครั้ง (ต่ออายุให้เอง), development: token ที่ backend ออกให้ตอน login
+async function authToken() {
+  if (!cognitoEnabled) return savedToken();
+  try { return await cognitoIdToken(); } catch { return null; }
+}
+
 export async function api(path, { method = 'GET', body, signal, headers = {}, anonymous = false, blob = false } = {}) {
-  const token = anonymous ? null : savedToken();
+  const token = anonymous ? null : await authToken();
   const raw = body instanceof Blob;
   const response = await fetch(`${API_URL}${path}`, {
     method, signal,

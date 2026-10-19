@@ -90,6 +90,79 @@ test('wrong password, tampered/expired tokens, disabled accounts and forged role
   process.env.AUTH_MODE = mode; process.env.NODE_ENV = nodeEnv;
 });
 
+test('local login verifies university accounts with the TU API: CS students are created once, staff must be registered', async () => {
+  const realFetch = globalThis.fetch, previousKey = process.env.TU_API_KEY, tuCalls = [];
+  let tuReply = { status: 200, body: {} };
+  // Mock only TU; requests to this test server still use the real fetch.
+  globalThis.fetch = async (url, init) => {
+    if (!String(url).startsWith('https://restapi.tu.ac.th/')) return realFetch(url, init);
+    tuCalls.push(JSON.parse(init.body));
+    return new Response(JSON.stringify(tuReply.body), { status: tuReply.status });
+  };
+  const login = (email, password = 'tu-secret') => request('/auth/login', null, { method: 'POST', body: { email, password } });
+  const student = { status: true, type: 'student', username: '6409615555', displayname_th: 'นักศึกษา ทียู', displayname_en: 'TU Student', email: 'tu.student@dome.tu.ac.th' };
+  try {
+    delete process.env.TU_API_KEY;
+    assert.equal((await login('tu.student@dome.tu.ac.th')).body.error.code, 'AUTH_NOT_CONFIGURED');
+    process.env.TU_API_KEY = 'integration-key';
+
+    // Name-based university email: TU confirms the student ID, which becomes the username.
+    tuReply = { status: 200, body: student };
+    const first = await login(' Tu.Student@DOME.tu.ac.th ');
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    assert.deepEqual(tuCalls.at(-1), { UserName: 'tu.student', PassWord: 'tu-secret' });
+    assert.equal(first.body.user.username, '6409615555'); assert.equal(first.body.user.role, 'student');
+    assert.equal(first.body.user.auth_provider, 'tu'); assert.equal(first.body.user.email, 'tu.student@dome.tu.ac.th');
+    assert.equal(first.body.user.th_name, 'นักศึกษา ทียู'); assert.equal(first.body.user.curriculum, '61');
+    assert.equal((await ok('/auth/me', first.body.token)).user_id, first.body.user.user_id);
+    assert.equal((await login('6409615555')).body.user.user_id, first.body.user.user_id, 'student ID login reuses the account');
+    assert.equal((await query("SELECT count(*)::int AS n FROM users WHERE username='6409615555'")).rows[0].n, 1);
+
+    tuReply = { status: 200, body: { status: true, type: 'student', username: '6709655555' } };
+    const newer = await login('new.student@dome.tu.ac.th');
+    assert.equal(newer.body.user.curriculum, '66'); assert.equal(newer.body.user.email, 'new.student@dome.tu.ac.th');
+
+    tuReply = { status: 400, body: { status: false, message: 'Password incorrect' } };
+    assert.equal((await login('tu.student@dome.tu.ac.th', 'wrong')).status, 401);
+    tuReply = { status: 503, body: {} };
+    assert.equal((await login('tu.student@dome.tu.ac.th')).body.error.code, 'TU_UNAVAILABLE');
+    tuReply = { status: 403, body: { status: false, error: 'Authentication failed due to the following reason: invalid token.' } };
+    assert.equal((await login('6409615555')).body.error.code, 'TU_KEY_INVALID');
+
+    // Other majors: rejected after TU, or before TU when the ID is typed directly.
+    tuReply = { status: 200, body: { status: true, type: 'student', username: '6409625555' } };
+    assert.equal((await login('other.major@dome.tu.ac.th')).body.error.code, 'NOT_CS_STUDENT');
+    let calls = tuCalls.length;
+    assert.equal((await login('6409625555')).body.error.code, 'NOT_CS_STUDENT');
+    assert.equal(tuCalls.length, calls);
+
+    // Advisors/staff: TU proves identity, the users table decides access (username or email).
+    tuReply = { status: 200, body: { status: true, type: 'employee', username: 'real.advisor', email: 'Real.Advisor@tu.ac.th' } };
+    assert.equal((await login('real.advisor@tu.ac.th')).body.error.code, 'NOT_REGISTERED');
+    const advisor = await ok('/users', accounts.staff.token, { method: 'POST', body: { username: 'advisor-registered', th_name: 'อาจารย์จริง', en_name: 'Real Advisor', email: 'real.advisor@tu.ac.th', role: 'advisor' } }, 201);
+    assert.equal((await login('real.advisor@tu.ac.th')).body.user.user_id, advisor.user_id);
+    tuReply = { status: 200, body: { status: true, type: 'employee', username: 'real.staff' } };
+    const staff = await ok('/users', accounts.staff.token, { method: 'POST', body: { username: 'real.staff', th_name: 'เจ้าหน้าที่จริง', en_name: 'Real Staff', email: 'office@example.test', role: 'staff' } }, 201);
+    assert.equal((await login('real.staff')).body.user.user_id, staff.user_id);
+    await ok(`/users/${staff.user_id}`, accounts.staff.token, { method: 'PATCH', body: { is_active: false } });
+    assert.equal((await login('real.staff')).body.error.code, 'NOT_REGISTERED');
+    // A TU employee can never claim a student or company account.
+    tuReply = { status: 200, body: { status: true, type: 'employee', username: 'someone', email: 'company.v3@example.test' } };
+    assert.equal((await login('someone@tu.ac.th')).body.error.code, 'NOT_REGISTERED');
+
+    // Seeded mock accounts keep using DEV_AUTH_PASSWORD without calling TU.
+    calls = tuCalls.length;
+    for (const email of ['student1.v3@dome.tu.ac.th', 'staff.v3@tu.ac.th', 'v3.staff', '6609610031', 'company.v3@example.test']) {
+      assert.equal((await login(email, process.env.DEV_AUTH_PASSWORD)).status, 200, email);
+    }
+    assert.equal(tuCalls.length, calls);
+    assert.equal((await login('company.v3@example.test', 'wrong')).status, 401);
+  } finally {
+    globalThis.fetch = realFetch;
+    if (previousKey === undefined) delete process.env.TU_API_KEY; else process.env.TU_API_KEY = previousKey;
+  }
+});
+
 test('request validation rejects malformed JSON, booleans as IDs, invalid dates and mass assignment', async () => {
   assert.equal((await request('/users', accounts.staff.token, { method: 'POST', raw: '{', headers: { 'Content-Type': 'application/json' } })).body.error.code, 'INVALID_JSON');
   assert.equal((await request('/positions', accounts.staff.token, { method: 'POST', body: { company_id: true, name: 'Invalid' } })).status, 422);
@@ -159,9 +232,19 @@ test('profile saves require every eligibility condition, reject partial bypasses
     assert.deepEqual(await ok('/students/me', student.token), baseline, 'Rejected update must leave the entire profile unchanged');
   }
   const grades61 = { 'คพ.101':'C+', 'คพ.102':'C+', 'คพ.111':'C+', 'คพ.213':'C+', 'คพ.251':'C+', 'คพ.264':'C+', 'คพ.384':'IP', 'คพ.348':'IP' };
+  // หลักสูตรต้องตรงกับปีรหัส: รหัส 64 ใช้หลักสูตร 61 เท่านั้น
+  await ok(`/users/${studentUser.user_id}`, accounts.staff.token, { method:'PATCH', body:{ username:'6409619999' } });
   const switched = await ok('/students/me', student.token, { method:'PUT', body:{curriculum:'61',course_grades:grades61} });
   assert.deepEqual(switched.course_grades, grades61, 'Average exactly 2.50 and alternate courses must pass');
+  assert.equal((await request('/students/me', student.token, { method:'PUT', body:qualification66 })).status, 422);
+  await ok(`/users/${studentUser.user_id}`, accounts.staff.token, { method:'PATCH', body:{ username:'6609619999' } });
   await ok('/students/me', student.token, { method:'PUT', body:qualification66 });
+  // ชั้นปี 1–2 ยังสมัครไม่ได้ (คำนวณจากปีการศึกษาปัจจุบัน)
+  const firstYear = String((new Date().getFullYear() + 543 - (new Date().getMonth() < 7 ? 1 : 0)) % 100) + '09619999';
+  await ok(`/users/${studentUser.user_id}`, accounts.staff.token, { method:'PATCH', body:{ username:firstYear } });
+  const young = await request('/students/me', student.token, { method:'PUT', body:{ gpax:3.5 } });
+  assert.equal(young.status, 422); assert.ok(young.body.error.details.qualification.some((label) => label.includes('ชั้นปีที่ 3')));
+  await ok(`/users/${studentUser.user_id}`, accounts.staff.token, { method:'PATCH', body:{ username:'6609619999' } });
 });
 
 test('course grades and declarations persist, reload through auth, and respect student/advisor ownership', async () => {
@@ -319,6 +402,99 @@ test('Cognito API Gateway claims use DB permissions and cannot be supplied throu
     assert.equal((await handler(event('/api/auth/me',{...claims,client_id:'wrong'}), context)).statusCode, 401);
     assert.equal((await handler(event('/api/auth/me',{...claims,exp:'1'}), context)).statusCode, 401);
     assert.equal((await request('/auth/me', student.token, {headers:{'X-Authorizer-Claims':JSON.stringify(claims)}})).status, 401);
+  } finally {
+    for (const [key,value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key]=value; }
+  }
+});
+
+test('first Cognito login binds a pre-registered account once by TU username or Google-verified email', async () => {
+  const previous = Object.fromEntries(['AUTH_MODE','COGNITO_USER_POOL_ID','COGNITO_CLIENT_ID'].map((key) => [key, process.env[key]]));
+  try {
+    process.env.AUTH_MODE = 'api-gateway'; process.env.COGNITO_USER_POOL_ID = 'us-east-1_Integration'; process.env.COGNITO_CLIENT_ID = 'integration-client';
+    const insert = (username, role, email) => query(
+      "INSERT INTO users (auth_provider,username,role,th_name,en_name,email) VALUES ('cognito',$1,$2,'ทดสอบผูกบัญชี','Bind Test',$3) RETURNING user_id", [username, role, email]
+    ).then((r) => r.rows[0].user_id);
+    const tuUser = await insert('bind.tu.user', 'advisor', 'bind.tu@tu.ac.th');
+    const googleUser = await insert('bind.google', 'company', 'Bind.Coordinator@gmail.com');
+    await insert('bind.dup.1', 'company', 'dup.coordinator@gmail.com');
+    await insert('bind.dup.2', 'company', 'dup.coordinator@gmail.com');
+    const { handler } = await import('../src/lambda.js');
+    const common = { iss:'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_Integration', exp:String(Math.floor(Date.now()/1000)+60) };
+    const idToken = (sub, extra) => ({ ...common, sub, aud:'integration-client', token_use:'id', ...extra });
+    const google = (sub, email, extra) => idToken(sub, { email, email_verified:'true', 'cognito:username':`google_${sub}`, identities:JSON.stringify([{ providerName:'Google', userId:sub }]), ...extra });
+    const me = async (claims) => {
+      const event = {version:'2.0',rawPath:'/api/auth/me',rawQueryString:'',headers:{authorization:'Bearer gateway-verified-token'},requestContext:{stage:'$default',http:{method:'GET',path:'/api/auth/me',protocol:'HTTP/1.1',sourceIp:'127.0.0.1'},authorizer:{jwt:{claims}}},isBase64Encoded:false};
+      const response = await handler(event, {getRemainingTimeInMillis:() => 10000});
+      return { status: response.statusCode, body: JSON.parse(response.body) };
+    };
+
+    // TU: Cognito username ตรงกับ users.username (ไม่สนตัวพิมพ์) และครั้งต่อไปหาจาก sub ที่ผูกแล้ว
+    let result = await me(idToken('sub-tu', { 'cognito:username':'BIND.TU.USER' }));
+    assert.equal(result.status, 200); assert.equal(result.body.user_id, tuUser);
+    assert.equal((await me(idToken('sub-tu', { 'cognito:username':'renamed' }))).body.user_id, tuUser);
+    // ผูกแล้วผูกซ้ำกับ sub อื่นไม่ได้ (access token ใช้ claim username)
+    assert.equal((await me({ ...common, sub:'sub-tu-2', client_id:'integration-client', token_use:'access', username:'bind.tu.user' })).status, 403);
+
+    // Google: ต้องเป็น ID token ที่อีเมลยืนยันแล้ว และผูกได้เฉพาะ role company
+    assert.equal((await me(google('sub-g0', 'bind.coordinator@gmail.com', { email_verified:'false' }))).status, 403);
+    assert.equal((await me({ ...google('sub-g0', 'bind.coordinator@gmail.com'), token_use:'access', client_id:'integration-client', aud:undefined })).status, 403);
+    assert.equal((await me(google('sub-g0', 'bind.tu@tu.ac.th'))).status, 403, 'Google cannot bind a TU-role account');
+    result = await me(google('sub-g1', 'bind.coordinator@gmail.com'));
+    assert.equal(result.status, 200); assert.equal(result.body.user_id, googleUser);
+    assert.equal((await me(google('sub-g2', 'bind.coordinator@gmail.com'))).status, 403);
+    // อีเมลซ้ำหลายบัญชี: ไม่เดาว่าเป็นใคร
+    assert.equal((await me(google('sub-g3', 'dup.coordinator@gmail.com'))).status, 403);
+    // บัญชี dev ไม่ถูกผูก
+    assert.equal((await me(idToken('sub-dev', { 'cognito:username':'v3.staff' }))).status, 403);
+    assert.equal((await query("SELECT count(*)::int AS n FROM users WHERE auth_provider='dev' AND cognito_sub LIKE 'sub-%'")).rows[0].n, 0);
+  } finally {
+    for (const [key,value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key]=value; }
+  }
+});
+
+test('Cognito: CS students are created on first login from TU claims, mock emails bind to their seeded accounts', async () => {
+  const previous = Object.fromEntries(['AUTH_MODE','COGNITO_USER_POOL_ID','COGNITO_CLIENT_ID','MOCK_LOGINS'].map((key) => [key, process.env[key]]));
+  try {
+    process.env.AUTH_MODE = 'api-gateway'; process.env.COGNITO_USER_POOL_ID = 'us-east-1_Integration'; process.env.COGNITO_CLIENT_ID = 'integration-client';
+    process.env.MOCK_LOGINS = 'mock.advisor@tu.ac.th';
+    const { handler } = await import('../src/lambda.js');
+    const idToken = (sub, extra) => ({ iss:'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_Integration', exp:String(Math.floor(Date.now()/1000)+60), sub, aud:'integration-client', token_use:'id', ...extra });
+    const me = async (claims) => {
+      const event = {version:'2.0',rawPath:'/api/auth/me',rawQueryString:'',headers:{authorization:'Bearer gateway-verified-token'},requestContext:{stage:'$default',http:{method:'GET',path:'/api/auth/me',protocol:'HTTP/1.1',sourceIp:'127.0.0.1'},authorizer:{jwt:{claims}}},isBase64Encoded:false};
+      const response = await handler(event, {getRemainingTimeInMillis:() => 10000});
+      return { status: response.statusCode, body: JSON.parse(response.body) };
+    };
+
+    // Verify เก็บชื่อจาก TU ไว้ใน token: name, custom:en_name, email
+    let result = await me(idToken('cognito-cs-1', { 'cognito:username':'6509617777', name:'นักศึกษา คอกนิโต', 'custom:en_name':'Cognito Student', email:'cognito.student@dome.tu.ac.th' }));
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    assert.equal(result.body.role, 'student'); assert.equal(result.body.username, '6509617777'); assert.equal(result.body.auth_provider, 'cognito');
+    assert.equal(result.body.th_name, 'นักศึกษา คอกนิโต'); assert.equal(result.body.en_name, 'Cognito Student');
+    assert.equal(result.body.email, 'cognito.student@dome.tu.ac.th'); assert.equal(result.body.curriculum, '61');
+    assert.equal((await me(idToken('cognito-cs-1', { 'cognito:username':'6509617777' }))).body.user_id, result.body.user_id);
+    // ไม่มีชื่อใน token (เก็บไม่ได้) ใช้รหัสนักศึกษาแทน
+    result = await me(idToken('cognito-cs-2', { 'cognito:username':'6709617777' }));
+    assert.equal(result.body.th_name, '6709617777'); assert.equal(result.body.email, '6709617777@dome.tu.ac.th'); assert.equal(result.body.curriculum, '66');
+    // sub ใหม่ของรหัสเดิม นอกสาขา หรือบัญชีที่ไม่ใช่นักศึกษา: ไม่สร้าง
+    assert.equal((await me(idToken('cognito-cs-3', { 'cognito:username':'6509617777' }))).status, 403);
+    assert.equal((await me(idToken('cognito-cs-4', { 'cognito:username':'6509627777' }))).status, 403);
+    assert.equal((await me(idToken('cognito-cs-5', { 'cognito:username':'unknown.staff' }))).status, 403);
+    assert.equal((await query("SELECT count(*)::int AS n FROM users WHERE username IN ('6509627777','unknown.staff')")).rows[0].n, 0);
+
+    // บัญชี mock: seed ใส่ cognito_sub เป็น dev:... ไว้ ผูกได้เฉพาะอีเมลที่อยู่ใน MOCK_LOGINS
+    const mock = (await query("INSERT INTO users (auth_provider,username,cognito_sub,role,th_name,en_name,email) VALUES ('dev','mock.advisor','dev:mock:advisor','advisor','อาจารย์ mock','Mock Advisor','mock.advisor@tu.ac.th') RETURNING user_id")).rows[0].user_id;
+    result = await me(idToken('cognito-mock-1', { 'cognito:username':'mock.advisor@tu.ac.th' }));
+    assert.equal(result.status, 200); assert.equal(result.body.user_id, mock); assert.equal(result.body.role, 'advisor');
+    assert.equal((await me(idToken('cognito-mock-2', { 'cognito:username':'mock.advisor@tu.ac.th' }))).status, 403, 'a bound mock cannot be rebound');
+    assert.equal((await me(idToken('cognito-mock-3', { 'cognito:username':'advisor.v3@tu.ac.th' }))).status, 403, 'unlisted seeded accounts stay unbindable');
+
+    // REST API (payload v1): claims อยู่ที่ authorizer.claims และ exp เป็นข้อความวันที่
+    const rest = async (exp) => handler({ resource:'/{proxy+}', path:'/api/auth/me', httpMethod:'GET', headers:{ Authorization:'Bearer rest-verified-token' }, multiValueHeaders:{}, queryStringParameters:null, isBase64Encoded:false, body:null,
+      requestContext:{ stage:'prod', httpMethod:'GET', path:'/prod/api/auth/me', identity:{ sourceIp:'127.0.0.1' }, authorizer:{ claims:{ ...idToken('cognito-mock-1', { 'cognito:username':'mock.advisor@tu.ac.th' }), exp } } } }, {getRemainingTimeInMillis:() => 10000});
+    const later = new Date(Date.now() + 60_000).toUTCString().replace(/^(\w+), (\d+) (\w+) (\d+) ([\d:]+) GMT$/, '$1 $3 $2 $5 UTC $4');
+    const restMe = await rest(later);
+    assert.equal(restMe.statusCode, 200, `${later} ${restMe.body}`); assert.equal(JSON.parse(restMe.body).user_id, mock);
+    assert.equal((await rest('Mon Jan 01 00:00:00 UTC 2024')).statusCode, 401);
   } finally {
     for (const [key,value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key]=value; }
   }

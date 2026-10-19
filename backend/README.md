@@ -60,15 +60,17 @@ Production เตรียมไว้สองแบบ:
 - `AUTH_MODE=api-gateway`: ใช้ verified claims ที่ส่งจาก Cognito/JWT authorizer ผ่าน Lambda event เท่านั้น พร้อมตรวจ issuer/client/expiry/token_use อีกครั้ง เหมาะกับ Lambda private subnet ที่ไม่มี NAT; HTTP headers/body ปลอม claims ไม่ได้
 
 ทั้งสองแบบจับคู่ `sub` กับ `users.cognito_sub` และใช้ `users.role` เป็นสิทธิ์จริง
+รับทั้ง ID token และ access token; login ครั้งแรกผูก `cognito_sub` ให้บัญชีที่ลงทะเบียนไว้ (TU ด้วย username, Google ด้วยอีเมลที่ยืนยันแล้ว)
+วิธีตั้งค่า Cognito, Google และ Lambda triggers ของ TU API: [cognito-triggers/README.md](cognito-triggers/README.md)
 ต้องผูก authorizer กับทุก protected route และจำกัดสิทธิ์ invoke Lambda ผ่าน API Gateway
 ไม่มีการสร้าง AWS resources หรือบัญชี Cognito อัตโนมัติ; staff ลงทะเบียนข้อมูลและ cognito_sub ผ่าน User API
 หน้า login local ยังไม่เปิด Google OAuth จึงไม่แสดงผลสำเร็จปลอม
 
 ## เอกสารและไฟล์
 
-Local PDF เก็บใน `.uploads/` ที่ไม่เข้า git มีขนาดไม่เกิน 10 MB ตรวจชนิดและ header PDF
+PDF และโลโก้เก็บใน S3 เมื่อตั้ง `FILE_BUCKET` (โหมดพัฒนาเก็บใน `.uploads/` ที่ไม่เข้า git) ไฟล์ไม่เกิน 4 MB ตามข้อจำกัดของ Lambda ตรวจชนิดและ header ของไฟล์
 คีย์ผูก namespace ตาม user_id; download ใช้ Bearer token และตรวจเจ้าของ/อาจารย์/company owner
-Production endpoint เก็บไฟล์ local ตอบ `503 STORAGE_NOT_CONFIGURED`; ต้องต่อ S3/presigned upload แยกก่อนใช้ไฟล์บน AWS
+ถ้าไม่ได้ตั้ง `FILE_BUCKET` นอกโหมดพัฒนา endpoint เอกสาร/โลโก้ตอบ `503 STORAGE_NOT_CONFIGURED` วิธีตั้งค่า S3 ดู [DEPLOY_AWS.md](../DEPLOY_AWS.md)
 ฟิลด์ `transcript_s3_key` และ `resume_s3_key` ใช้รูปแบบคีย์ตามเจ้าของที่ API กำหนด
 
 ## Error contract

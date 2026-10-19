@@ -12,7 +12,7 @@ docker compose up -d --build
 ถ้ามี volume เก่าต้องรัน [migration V3](database/README.md) ก่อน แล้ว seed บัญชีสำหรับ local:
 
 ```sh
-docker compose exec -T database sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/seeds/v3-demo.sql
+docker compose exec -T database sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/seeds/005_v3-demo.sql
 docker compose up -d --build -V --no-deps backend
 docker compose restart frontend
 ```
@@ -33,6 +33,17 @@ docker compose restart frontend
 | เจ้าหน้าที่ | `staff.v3@tu.ac.th` |
 | ผู้ประสานงาน | `company.v3@example.test` |
 | ผู้ประสานงานบริษัทอื่น | `company.other.v3@example.test` |
+
+### บัญชีจริงผ่าน TU API
+
+ใส่ `TU_API_KEY=<Application-Key>` ใน `.env` ที่ root แล้วรัน `docker compose up -d backend` ใหม่
+กรอกชื่อผู้ใช้ TU (นักศึกษาคือรหัสนักศึกษา) กับรหัสผ่าน TU — backend ตรวจกับ TU API จริง แล้วตัดสินสิทธิ์จาก DB
+
+- นักศึกษา: เฉพาะสาขาวิทยาการคอมพิวเตอร์ (รหัสที่ TU ตอบเป็น `YY0961xxxx` / `YY0965xxxx`) ทุกปีรหัส
+  เข้าครั้งแรกสร้างบัญชีให้ ใช้ชื่อและอีเมลจาก TU หลักสูตรตามปีรหัส: ถึงปี 65 → 61, ตั้งแต่ปี 66 → 66
+  บันทึกคุณสมบัติ/สมัครได้เมื่อเป็นชั้นปีที่ 3 ขึ้นไป (ปีการศึกษา 2569 = รหัส 67 ลงไป)
+- อาจารย์/เจ้าหน้าที่: ต้องให้เจ้าหน้าที่เพิ่มในหน้า "จัดการผู้ใช้งาน" ก่อน โดย username = ชื่อผู้ใช้ TU หรืออีเมลตรงกับอีเมล มธ.
+- บัญชีในตารางด้านบนยังใช้ `DEV_AUTH_PASSWORD` และไม่เรียก TU (กรอกอีเมลหรือ username เช่น `v3.staff`, `6609610031` ก็ได้)
 
 นักศึกษา 1–8 มีตัวอย่าง submitted, approved, rejected, accepted, declined, confirmed, released และ withdrawn ตามลำดับ
 นักศึกษา 7 มีใบ confirmed อีกตำแหน่งเพื่อสอดคล้องกับ released

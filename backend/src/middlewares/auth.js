@@ -1,7 +1,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { HttpError } from '../utils/httpError.js';
 import { query } from '../config/db.js';
-import { userById, userBySubject } from '../models/userModel.js';
+import { bindCognitoUser, provisionTuStudent, registeredTuStaff, userById, userBySubject } from '../models/userModel.js';
+import { isCsStudentId, isOtherStudentId, tuLoginName, verifyWithTu } from '../../cognito-triggers/verify-auth-challenge/index.mjs';
 
 const localSecret = process.env.DEV_AUTH_SECRET || randomBytes(32).toString('hex');
 export const developmentAuth = () => process.env.AUTH_MODE === 'development' && process.env.NODE_ENV !== 'production' && !process.env.AWS_LAMBDA_FUNCTION_NAME;
@@ -37,16 +38,21 @@ export async function authenticate(req, _res, next) {
       const client = process.env.COGNITO_CLIENT_ID;
       if (!pool || !client) throw new HttpError(503, 'ยังไม่ได้ตั้งค่า Cognito', 'AUTH_NOT_CONFIGURED');
       const issuer = `https://cognito-idp.${pool.split('_')[0]}.amazonaws.com/${pool}`;
-      if (!claims || claims.iss !== issuer || claims.client_id !== client || claims.token_use !== 'access' || !Number.isFinite(Number(claims.exp)) || Number(claims.exp) <= Date.now() / 1000 || typeof claims.sub !== 'string') throw new Error('invalid authorizer claims');
-      user = await userBySubject(claims.sub);
+      // ID token ระบุ client ใน aud ส่วน access token ใช้ client_id
+      const audience = claims?.token_use === 'id' ? claims.aud : claims?.token_use === 'access' ? claims.client_id : undefined;
+      // HTTP API ส่ง exp เป็นวินาที ส่วน REST API (Cognito authorizer) ส่งเป็นข้อความวันที่ เช่น "Mon Oct 19 02:00:00 UTC 2026"
+      const exp = /^\d+$/.test(String(claims?.exp)) ? Number(claims.exp) : Date.parse(claims?.exp) / 1000;
+      if (!claims || claims.iss !== issuer || audience !== client || !Number.isFinite(exp) || exp <= Date.now() / 1000 || typeof claims.sub !== 'string') throw new Error('invalid authorizer claims');
+      user = await userBySubject(claims.sub) ?? await bindCognitoUser(claims);
     } else {
       if (!process.env.COGNITO_USER_POOL_ID || !process.env.COGNITO_CLIENT_ID) throw new HttpError(503, 'ยังไม่ได้ตั้งค่า Cognito', 'AUTH_NOT_CONFIGURED');
       if (!verifier) {
         const { CognitoJwtVerifier } = await import('aws-jwt-verify');
-        verifier = CognitoJwtVerifier.create({ userPoolId: process.env.COGNITO_USER_POOL_ID, clientId: process.env.COGNITO_CLIENT_ID, tokenUse: 'access' });
+        // tokenUse null รับทั้ง ID token (frontend ส่งมา เพราะมีอีเมลไว้ผูกบัญชี Google) และ access token
+        verifier = CognitoJwtVerifier.create({ userPoolId: process.env.COGNITO_USER_POOL_ID, clientId: process.env.COGNITO_CLIENT_ID, tokenUse: null });
       }
       const claims = await verifier.verify(match[1]);
-      user = await userBySubject(claims.sub);
+      user = await userBySubject(claims.sub) ?? await bindCognitoUser(claims);
     }
     if (!user || !user.is_active) throw new HttpError(403, 'บัญชีไม่ได้รับอนุญาตหรือถูกปิดใช้งาน', 'ACCOUNT_DISABLED');
     req.user = user; // Always resolve current permissions from PostgreSQL, never client claims/role.
@@ -60,16 +66,59 @@ export async function authenticate(req, _res, next) {
 export const allowRoles = (...roles) => (req, _res, next) =>
   roles.includes(req.user.role) ? next() : next(new HttpError(403, 'ไม่มีสิทธิ์ดำเนินการ', 'FORBIDDEN'));
 
+const invalidCredentials = () => new HttpError(401, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'INVALID_CREDENTIALS');
+
+// ยืนยันตัวตนกับ TU API จริง แล้วตัดสินสิทธิ์จาก DB (เกณฑ์สาขาเดียวกับ Lambda ของ Cognito)
+// - นักศึกษาสาขาวิทยาการคอมพิวเตอร์: เข้าได้ login ครั้งแรกสร้างบัญชีให้
+// - อาจารย์/เจ้าหน้าที่: ต้องลงทะเบียนไว้ใน users (username หรืออีเมลตรงกับ TU)
+async function tuLogin(input, password) {
+  const loginName = tuLoginName(input);
+  if (isOtherStudentId(loginName)) throw notCsStudent();
+  if (!process.env.TU_API_KEY) throw new HttpError(503, 'ยังไม่ได้ตั้งค่า TU_API_KEY', 'AUTH_NOT_CONFIGURED');
+  let profile;
+  try {
+    profile = await verifyWithTu(loginName, password);
+  } catch (error) {
+    // ไม่ log รหัสผ่านหรือ response ของ TU
+    console.error('TU verify failed:', error.name, error.message);
+    if (error.name === 'TuKeyError') throw new HttpError(503, 'TU_API_KEY (Application Key) ไม่ถูกต้อง กรุณาตรวจสอบค่าใน .env', 'TU_KEY_INVALID');
+    throw new HttpError(502, 'ไม่สามารถตรวจสอบกับระบบ TU ได้ในขณะนี้', 'TU_UNAVAILABLE');
+  }
+  if (!profile) throw invalidCredentials();
+  const typedEmail = input.includes('@') ? input.trim().toLowerCase() : null;
+  let user;
+  if (profile.type === 'student') {
+    if (!isCsStudentId(profile.username)) throw notCsStudent();
+    user = await provisionTuStudent({ ...profile, email: profile.email ?? typedEmail ?? `${profile.username}@dome.tu.ac.th` });
+  } else {
+    user = await registeredTuStaff(profile.username, [profile.email, typedEmail]);
+    if (!user) throw new HttpError(403, 'บัญชีนี้ยังไม่ได้ลงทะเบียนในระบบ กรุณาติดต่อเจ้าหน้าที่', 'NOT_REGISTERED');
+  }
+  if (!user) throw new HttpError(403, 'บัญชีไม่ได้รับอนุญาตหรือถูกปิดใช้งาน', 'ACCOUNT_DISABLED');
+  return user;
+}
+const notCsStudent = () => new HttpError(403, 'ระบบนี้เปิดให้เฉพาะนักศึกษาสาขาวิชาวิทยาการคอมพิวเตอร์', 'NOT_CS_STUDENT');
+
+// บัญชี mock (ผู้ประสานงาน และบัญชีทดสอบใน seed) ใช้ DEV_AUTH_PASSWORD ร่วมกัน เข้าด้วยอีเมลหรือ username
+async function mockAccount(login, password) {
+  const configured = process.env.DEV_AUTH_PASSWORD;
+  if (!configured) return null;
+  const supplied = Buffer.from(password), expected = Buffer.from(configured);
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
+  const { rows } = await query("SELECT user_id FROM users WHERE (lower(email)=$1 OR lower(username)=$1) AND auth_provider='dev' AND is_active", [login.trim().toLowerCase()]);
+  return rows.length === 1 ? userById(rows[0].user_id) : null;
+}
+
 export async function developmentLogin(req, res) {
   if (!developmentAuth()) throw new HttpError(404, 'ไม่พบเส้นทางนี้', 'NOT_FOUND');
   const { email, password } = req.body ?? {};
-  const configured = process.env.DEV_AUTH_PASSWORD;
-  if (!configured) throw new HttpError(503, 'ยังไม่ได้ตั้งค่ารหัสผ่านบัญชีทดสอบ', 'AUTH_NOT_CONFIGURED');
-  if (typeof email !== 'string' || typeof password !== 'string') throw new HttpError(401, 'อีเมลหรือรหัสผ่านไม่ถูกต้อง', 'INVALID_CREDENTIALS');
-  const supplied = Buffer.from(password), expected = Buffer.from(configured);
-  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) throw new HttpError(401, 'อีเมลหรือรหัสผ่านไม่ถูกต้อง', 'INVALID_CREDENTIALS');
-  const { rows } = await query("SELECT user_id FROM users WHERE lower(email)=$1 AND auth_provider='dev' AND is_active", [email.trim().toLowerCase()]);
-  if (rows.length !== 1) throw new HttpError(401, 'อีเมลหรือรหัสผ่านไม่ถูกต้อง', 'INVALID_CREDENTIALS');
-  const user = await userById(rows[0].user_id);
+  if (typeof email !== 'string' || typeof password !== 'string' || !password) throw invalidCredentials();
+  // อีเมล/ชื่อผู้ใช้ของ มธ. ที่ไม่ใช่บัญชี mock ส่งไปตรวจกับ TU
+  let user = await mockAccount(email, password);
+  if (!user && tuLoginName(email)) user = await tuLogin(email, password);
+  if (!user) {
+    if (!process.env.DEV_AUTH_PASSWORD) throw new HttpError(503, 'ยังไม่ได้ตั้งค่ารหัสผ่านบัญชีทดสอบ', 'AUTH_NOT_CONFIGURED');
+    throw invalidCredentials();
+  }
   res.json({ user, token: issueDevelopmentToken(user.user_id), expires_in: 3600 });
 }
