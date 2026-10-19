@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { HttpError } from '../utils/httpError.js';
 import { query } from '../config/db.js';
-import { bindCognitoUser, provisionTuStudent, registeredTuStaff, userById, userBySubject } from '../models/userModel.js';
+import { bindCognitoUser, fillTuNames, provisionTuStudent, registeredTuStaff, userById, userBySubject } from '../models/userModel.js';
 import { isCsStudentId, isOtherStudentId, tuLoginName, verifyWithTu } from '../../cognito-triggers/verify-auth-challenge/index.mjs';
 
 const localSecret = process.env.DEV_AUTH_SECRET || randomBytes(32).toString('hex');
@@ -43,7 +43,7 @@ export async function authenticate(req, _res, next) {
       // HTTP API ส่ง exp เป็นวินาที ส่วน REST API (Cognito authorizer) ส่งเป็นข้อความวันที่ เช่น "Mon Oct 19 02:00:00 UTC 2026"
       const exp = /^\d+$/.test(String(claims?.exp)) ? Number(claims.exp) : Date.parse(claims?.exp) / 1000;
       if (!claims || claims.iss !== issuer || audience !== client || !Number.isFinite(exp) || exp <= Date.now() / 1000 || typeof claims.sub !== 'string') throw new Error('invalid authorizer claims');
-      user = await userBySubject(claims.sub) ?? await bindCognitoUser(claims);
+      user = await fillTuNames(await userBySubject(claims.sub) ?? await bindCognitoUser(claims), claims);
     } else {
       if (!process.env.COGNITO_USER_POOL_ID || !process.env.COGNITO_CLIENT_ID) throw new HttpError(503, 'ยังไม่ได้ตั้งค่า Cognito', 'AUTH_NOT_CONFIGURED');
       if (!verifier) {
@@ -52,7 +52,7 @@ export async function authenticate(req, _res, next) {
         verifier = CognitoJwtVerifier.create({ userPoolId: process.env.COGNITO_USER_POOL_ID, clientId: process.env.COGNITO_CLIENT_ID, tokenUse: null });
       }
       const claims = await verifier.verify(match[1]);
-      user = await userBySubject(claims.sub) ?? await bindCognitoUser(claims);
+      user = await fillTuNames(await userBySubject(claims.sub) ?? await bindCognitoUser(claims), claims);
     }
     if (!user || !user.is_active) throw new HttpError(403, 'บัญชีไม่ได้รับอนุญาตหรือถูกปิดใช้งาน', 'ACCOUNT_DISABLED');
     req.user = user; // Always resolve current permissions from PostgreSQL, never client claims/role.
