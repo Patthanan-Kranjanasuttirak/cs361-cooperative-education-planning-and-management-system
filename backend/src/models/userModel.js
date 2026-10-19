@@ -73,6 +73,18 @@ export async function bindCognitoUser(claims) {
   }, claims.sub);
 }
 
+// ชื่อจาก TU อาจยังไม่มากับ token ตอนเข้าครั้งแรก (Verify เก็บลง Cognito ไม่สำเร็จ) บัญชีจึงถูกสร้างด้วยรหัสนักศึกษาแทนชื่อ
+// token รอบถัดไปมีชื่อแล้วให้เติมเฉพาะช่องที่ยังเป็นรหัสนักศึกษา ไม่ทับชื่อที่เจ้าหน้าที่แก้ไว้
+export async function fillTuNames(user, claims) {
+  if (user?.role !== 'student') return user;
+  const placeholder = user.username.toLowerCase();
+  const fill = (current, value) => current?.toLowerCase() === placeholder && typeof value === 'string' && value.trim() && value.trim().toLowerCase() !== placeholder ? value.trim() : null;
+  const thName = fill(user.th_name, claims.name), enName = fill(user.en_name, claims['custom:en_name']);
+  if (!thName && !enName) return user;
+  await query('UPDATE users SET th_name=COALESCE($2, th_name), en_name=COALESCE($3, en_name) WHERE user_id=$1', [user.user_id, thName, enName]);
+  return userById(user.user_id);
+}
+
 // นักศึกษาที่ TU ยืนยันแล้ว: login ครั้งแรกสร้างบัญชีให้ (ชื่อจาก TU, หลักสูตรตามปีรหัส) ครั้งต่อไปใช้บัญชีเดิม
 // ถ้าชื่อผู้ใช้นี้เป็นบัญชีบทบาทอื่นหรือถูกปิด คืน null
 // Cognito (มี cognitoSub): สร้างใหม่เท่านั้น บัญชีเดิมต้องผูกผ่าน bindCognitoUser

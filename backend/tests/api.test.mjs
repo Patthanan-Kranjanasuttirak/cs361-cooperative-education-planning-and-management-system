@@ -475,6 +475,11 @@ test('Cognito: CS students are created on first login from TU claims, mock email
     // ไม่มีชื่อใน token (เก็บไม่ได้) ใช้รหัสนักศึกษาแทน
     result = await me(idToken('cognito-cs-2', { 'cognito:username':'6709617777' }));
     assert.equal(result.body.th_name, '6709617777'); assert.equal(result.body.email, '6709617777@dome.tu.ac.th'); assert.equal(result.body.curriculum, '66');
+    // token รอบถัดไปมีชื่อแล้ว: เติมชื่อที่ยังเป็นรหัสนักศึกษา แต่ไม่ทับชื่อที่มีอยู่แล้ว
+    result = await me(idToken('cognito-cs-2', { 'cognito:username':'6709617777', name:'ชื่อจาก TU', 'custom:en_name':'TU Name' }));
+    assert.equal(result.body.th_name, 'ชื่อจาก TU'); assert.equal(result.body.en_name, 'TU Name');
+    result = await me(idToken('cognito-cs-2', { 'cognito:username':'6709617777', name:'ชื่ออื่น', 'custom:en_name':'Other' }));
+    assert.equal(result.body.th_name, 'ชื่อจาก TU'); assert.equal(result.body.en_name, 'TU Name');
     // sub ใหม่ของรหัสเดิม นอกสาขา หรือบัญชีที่ไม่ใช่นักศึกษา: ไม่สร้าง
     assert.equal((await me(idToken('cognito-cs-3', { 'cognito:username':'6509617777' }))).status, 403);
     assert.equal((await me(idToken('cognito-cs-4', { 'cognito:username':'6509627777' }))).status, 403);
