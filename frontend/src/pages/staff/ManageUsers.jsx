@@ -12,15 +12,16 @@ import '../CSS/pendingApplications.css';
 import '../CSS/myStudents.css';
 import '../CSS/manageCompanies.css';
 import '../CSS/manageUsers.css';
+import '../CSS/eligibility.css';
 import '../../components/CSS/ApplicationStatusBadge.css';
 
 const ROLE_ORDER = ['student', 'advisor', 'staff', 'company'];
 // ชื่อบทบาทแบบสั้นสำหรับตาราง (ชื่อเต็มยาวจนดันตารางล้นกรอบ)
-const ROLE_SHORT = { student: 'นักศึกษา', advisor: 'อาจารย์ที่ปรึกษา', staff: 'เจ้าหน้าที่', company: 'ผู้ประสานงาน' };
+const ROLE_SHORT = { student: 'นักศึกษา', advisor: 'อาจารย์', staff: 'เจ้าหน้าที่', company: 'ผู้ประสานงาน' };
 const ROLE_TONE = { student: 'info', advisor: 'success', staff: 'pending', company: 'muted' };
 
 function UserEditor({ initial, users, companies, defaultCompanyId, onSave, onClose }) {
-  const [form, setForm] = useState({ username: '', role: defaultCompanyId ? 'company' : 'student', th_name: '', en_name: '', email: '', phone: '', advisor_id: '', company_id: defaultCompanyId ?? '', job_title: '', ...initial });
+  const [form, setForm] = useState({ username: '', role: defaultCompanyId ? 'company' : 'student', th_name: '', en_name: '', email: '', phone: '', advisor_id: '', is_supervisor: false, company_id: defaultCompanyId ?? '', job_title: '', ...initial });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const advisors = users.filter((u) => u.role === 'advisor' && (u.is_active || u.user_id === form.advisor_id));
@@ -39,6 +40,7 @@ function UserEditor({ initial, users, companies, defaultCompanyId, onSave, onClo
       const body = Object.fromEntries(['username','role','th_name','en_name','email','phone'].map((key) => [key, form[key]]));
       if (form.role === 'student' && (!initial || String(form.advisor_id ?? '') !== String(initial.advisor_id ?? ''))) body.advisor_id = form.advisor_id ? Number(form.advisor_id) : null;
       if (form.role === 'company') { body.company_id = Number(form.company_id); body.job_title = form.job_title || null; }
+      if (form.role === 'advisor' && (!initial || form.is_supervisor !== initial.is_supervisor)) body.is_supervisor = form.is_supervisor;
       await onSave(body);
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
@@ -85,6 +87,11 @@ function UserEditor({ initial, users, companies, defaultCompanyId, onSave, onClo
               <option value="">ยังไม่กำหนด</option>{advisors.map((u) => <option key={u.user_id} value={u.user_id} disabled={!u.is_active}>{u.th_name}{u.is_active ? '' : ' (ปิดใช้งาน)'}</option>)}
             </select>
           </>}
+          {/* อาจารย์นิเทศก์ = สิทธิ์อนุมัติใบสมัครของนักศึกษาทุกคน ไม่ต้องจับคู่กับนักศึกษา */}
+          {form.role === 'advisor' && <label className="elig-declare" htmlFor="user-supervisor">
+            <input id="user-supervisor" type="checkbox" checked={Boolean(form.is_supervisor)} onChange={(e) => setForm((prev) => ({ ...prev, is_supervisor: e.target.checked }))} />
+            <span>เป็นอาจารย์นิเทศก์ (อนุมัติใบสมัครของนักศึกษาได้ทุกคน)</span>
+          </label>}
         </fieldset>
         {error && <p role="alert" className="profile-error">{error}</p>}
       </fieldset>
@@ -116,6 +123,7 @@ export default function ManageUsers() {
   const filters = [
     { key: 'all', label: 'ทั้งหมด', match: () => true },
     ...ROLE_ORDER.map((r) => ({ key: r, label: ROLES[r].label, match: (u) => u.role === r })),
+    { key: 'supervisor', label: 'อาจารย์นิเทศก์', match: (u) => u.role === 'advisor' && u.is_supervisor },
     { key: 'no-advisor', label: 'ยังไม่มีอาจารย์ที่ปรึกษา', match: (u) => u.role === 'student' && !u.advisor_id && u.is_active },
     { key: 'inactive', label: 'ปิดใช้งาน', match: (u) => !u.is_active },
   ];
@@ -137,6 +145,15 @@ export default function ManageUsers() {
       await api(`/students/${student.student_id}`, { method:'PUT', body:{ advisor_id:advisorId ? Number(advisorId) : null } });
       await reload();
       setNotice(advisorId ? `กำหนดอาจารย์ที่ปรึกษาของ ${student.th_name} เป็น ${nameOf(Number(advisorId))} แล้ว` : `ยกเลิกอาจารย์ที่ปรึกษาของ ${student.th_name} แล้ว`);
+    } catch (err) { setNotice(err.message); }
+    finally { setBusy(false); }
+  };
+  const toggleSupervisor = async (user) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api(`/users/${user.user_id}`, { method:'PATCH', body:{ is_supervisor:!user.is_supervisor } });
+      await reload(); setNotice(`${user.is_supervisor ? 'ยกเลิก' : 'กำหนด'} ${user.th_name} เป็นอาจารย์นิเทศก์แล้ว`);
     } catch (err) { setNotice(err.message); }
     finally { setBusy(false); }
   };
@@ -213,6 +230,7 @@ export default function ManageUsers() {
                   </td>
                   <td data-label="บทบาท">
                     <span className={`status-badge status-badge--${ROLE_TONE[u.role]}`} title={ROLES[u.role].label}>{ROLE_SHORT[u.role]}</span>
+                    {u.is_supervisor && <span className="status-badge status-badge--info user-inactive-badge">นิเทศก์</span>}
                   </td>
                   <td data-label={u.role === 'student' ? 'อาจารย์ที่ปรึกษา' : u.role === 'company' ? 'สถานประกอบการ' : ''}>
                     {u.role === 'student' ? (
@@ -235,7 +253,12 @@ export default function ManageUsers() {
                         <p className="cm-muted">{[u.job_title, formatPhone(u.phone)].filter(Boolean).join(' · ')}</p>
                       </>
                     ) : u.role === 'advisor' ? (
-                      <p className="cm-muted">ดูแลนักศึกษา {users.filter((s) => s.advisor_id === u.user_id && s.is_active).length} คน</p>
+                      <>
+                        <p className="cm-muted">ที่ปรึกษาของนักศึกษา {users.filter((s) => s.advisor_id === u.user_id && s.is_active).length} คน</p>
+                        <label className="cm-muted">
+                          <input type="checkbox" checked={u.is_supervisor} onChange={() => toggleSupervisor(u)} disabled={!u.is_active || busy} /> อาจารย์นิเทศก์
+                        </label>
+                      </>
                     ) : (
                       <p className="cm-muted">-</p>
                     )}

@@ -7,7 +7,8 @@ import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
 import { APPLICATION_STATUS, APPLICATION_STEPS, STATUS_PROGRESS } from '../../config/applicationStatus';
 import '../CSS/myApplications.css';
 
-const REVIEWER_ROLE = { advisor: 'อาจารย์ที่ปรึกษา', staff: 'เจ้าหน้าที่' };
+// ผู้อนุมัติใบสมัครที่เป็นบัญชีอาจารย์คืออาจารย์นิเทศก์
+const REVIEWER_ROLE = { advisor: 'อาจารย์นิเทศก์', staff: 'เจ้าหน้าที่' };
 // ผลการตรวจ (application_reviews.status) ใช้ป้ายแยกจากสถานะใบสมัคร
 const REVIEW_RESULT = {
   approved: { label: 'อนุมัติ', tone: 'success' },

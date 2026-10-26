@@ -27,7 +27,7 @@ async function validAdvisor(db, advisorId) {
 }
 
 export async function saveUser(actor, userId, body) {
-  v.object(body, ['auth_provider', 'username', 'cognito_sub', 'role', 'th_name', 'en_name', 'email', 'phone', 'is_active', 'advisor_id', 'company_id', 'job_title']);
+  v.object(body, ['auth_provider', 'username', 'cognito_sub', 'role', 'th_name', 'en_name', 'email', 'phone', 'is_active', 'is_supervisor', 'advisor_id', 'company_id', 'job_title']);
   return transaction(async (db) => {
     let old;
     if (userId) {
@@ -42,10 +42,20 @@ export async function saveUser(actor, userId, body) {
     for (const [key, max] of [['username', 50], ['th_name', 255], ['en_name', 255], ['auth_provider', 10]]) {
       if (required || body[key] !== undefined) data[key] = v.text(body[key] ?? (key === 'auth_provider' ? (process.env.AUTH_MODE === 'development' && process.env.NODE_ENV !== 'production' && !process.env.AWS_LAMBDA_FUNCTION_NAME ? 'dev' : 'cognito') : undefined), key, max);
     }
-    if (required || body.email !== undefined) data.email = v.email(body.email);
+    if (required || body.email !== undefined) {
+      data.email = v.email(body.email);
+      // อีเมลใช้เข้าสู่ระบบและผูกบัญชี Cognito ต้องไม่ซ้ำ ไม่อย่างนั้นทั้งสองบัญชีจะเข้าระบบไม่ได้
+      const taken = await db.query('SELECT 1 FROM users WHERE lower(email)=$1 AND user_id IS DISTINCT FROM $2', [data.email, userId ?? null]);
+      if (taken.rows.length) conflict('อีเมลนี้ถูกใช้กับบัญชีอื่นแล้ว');
+    }
     if (body.phone !== undefined) data.phone = v.phone(body.phone);
     if (body.cognito_sub !== undefined) data.cognito_sub = v.text(body.cognito_sub, 'cognito_sub', 64, { nullable: true });
     if (body.is_active !== undefined) data.is_active = v.boolean(body.is_active, 'is_active');
+    // อาจารย์นิเทศก์ = สิทธิ์ของบัญชีอาจารย์ ไม่ผูกกับนักศึกษาคนใด
+    if (body.is_supervisor !== undefined) {
+      data.is_supervisor = v.boolean(body.is_supervisor, 'is_supervisor');
+      if (data.is_supervisor && role !== 'advisor') v.invalid('is_supervisor', 'อาจารย์นิเทศก์ต้องเป็นบัญชีอาจารย์');
+    }
     if (!old) {
       const entries = Object.entries({ ...data, role });
       const result = await db.query(`INSERT INTO users (${entries.map(([key]) => key).join(',')}) VALUES (${entries.map((_, i) => `$${i + 1}`).join(',')}) RETURNING user_id`, entries.map(([, value]) => value));
@@ -89,7 +99,9 @@ export async function listStudents(actor) {
 export async function studentProfile(actor, studentId) {
   const { rows } = await query(`SELECT ${USER_COLUMNS}, u.username AS student_code FROM users u ${USER_JOINS} WHERE s.student_id=$1`, [studentId]);
   const student = rows[0] ?? missing();
-  if (!(actor.role === 'staff' || (actor.role === 'advisor' && student.advisor_id === actor.user_id) || (actor.role === 'student' && student.user_id === actor.user_id))) denied();
+  // อาจารย์นิเทศก์ดูนักศึกษาได้ทุกคนเพื่อพิจารณาใบสมัคร
+  const teacher = actor.role === 'advisor' && (student.advisor_id === actor.user_id || actor.is_supervisor);
+  if (!(actor.role === 'staff' || teacher || (actor.role === 'student' && student.user_id === actor.user_id))) denied();
   return student;
 }
 
@@ -124,10 +136,37 @@ export async function saveStudent(actor, studentId, body) {
       if (!approved.rows.length) {
         const failures = qualificationChecks({ ...student, ...data }).filter(([passed]) => !passed).map(([, label]) => label);
         if (failures.length) throw new HttpError(422, 'ข้อมูลคุณสมบัติไม่ถูกต้องหรือไม่ครบถ้วน ไม่สามารถบันทึกได้', 'INELIGIBLE', { qualification: failures });
+        // บันทึกครั้งแรก, แก้หลังถูกส่งกลับ หรือแก้คุณสมบัติหลังตรวจผ่าน = ส่งให้เจ้าหน้าที่ตรวจใหม่
+        if (student.profile_status !== 'pending' && (student.profile_status !== 'verified' || qualificationChanged)) {
+          Object.assign(data, { profile_status: 'pending', profile_comment: null, profile_reviewed_by: null, profile_reviewed_at: null });
+        }
       }
     }
     if (Object.keys(data).length) await update(db, 'students', 'student_id', studentId, data);
     if (body.phone !== undefined) await db.query('UPDATE users SET phone=$1 WHERE user_id=$2', [v.phone(body.phone), student.user_id]);
+    return userById(student.user_id, db);
+  });
+}
+
+// เจ้าหน้าที่ตรวจข้อมูลส่วนตัว: verified = ถูกต้อง, returned = ส่งกลับให้นักศึกษาแก้ (ต้องมีเหตุผล)
+// อาจารย์ที่ปรึกษารับรองความประพฤติ: certified = รับรอง, rejected = ไม่รับรอง (ต้องมีเหตุผล)
+const STUDENT_REVIEWS = {
+  profile: { role: 'staff', statuses: ['verified', 'returned'], rejected: 'returned' },
+  conduct: { role: 'advisor', statuses: ['certified', 'rejected'], rejected: 'rejected' },
+};
+
+export async function reviewStudent(actor, studentId, kind, body) {
+  const rule = STUDENT_REVIEWS[kind];
+  v.object(body, ['status', 'comment']);
+  const status = v.enumeration(body.status, 'status', rule.statuses);
+  const comment = v.text(body.comment, 'comment', 10000, { nullable: true });
+  if (status === rule.rejected && !comment) v.invalid('comment', 'กรุณาระบุเหตุผล');
+  return transaction(async (db) => {
+    const student = (await db.query('SELECT * FROM students WHERE student_id=$1 FOR UPDATE', [studentId])).rows[0] ?? missing();
+    if (actor.role !== rule.role || (kind === 'conduct' && student.advisor_id !== actor.user_id)) denied();
+    if (kind === 'profile' && student.profile_status == null) conflict('นักศึกษายังไม่ได้ส่งข้อมูลส่วนตัวให้ตรวจ');
+    await db.query(`UPDATE students SET ${kind}_status=$1, ${kind}_comment=$2, ${kind}_reviewed_by=$3, ${kind}_reviewed_at=now() WHERE student_id=$4`,
+      [status, comment, actor.user_id, studentId]);
     return userById(student.user_id, db);
   });
 }

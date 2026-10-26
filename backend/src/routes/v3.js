@@ -40,6 +40,8 @@ router.put('/students/:id/advisor', staff, async (req, res) => {
   v.object(req.body, ['advisor_id']);
   res.json(await resources.saveStudent(req.user, v.id(req.params.id), { advisor_id: v.id(req.body.advisor_id, 'advisor_id', true) }));
 });
+router.post('/students/:id/profile-review', staff, async (req, res) => res.json(await resources.reviewStudent(req.user, v.id(req.params.id), 'profile', req.body)));
+router.post('/students/:id/conduct-review', allowRoles('advisor'), async (req, res) => res.json(await resources.reviewStudent(req.user, v.id(req.params.id), 'conduct', req.body)));
 router.get('/advisor/students', allowRoles('advisor'), async (req, res) => res.json(await resources.listStudents(req.user)));
 router.get('/advisor/students/:id', allowRoles('advisor'), async (req, res) => {
   const student = await resources.studentProfile(req.user, v.id(req.params.id));
@@ -66,10 +68,13 @@ router.post('/company/positions', allowRoles('company'), async (req, res) => res
 router.put('/company/positions/:id', allowRoles('company'), async (req, res) => res.json(await resources.savePosition(req.user, v.id(req.params.id), req.body)));
 router.patch('/company/positions/:id', allowRoles('company'), async (req, res) => res.json(await resources.savePosition(req.user, v.id(req.params.id), req.body)));
 router.delete('/company/positions/:id', allowRoles('company'), async (req, res) => { await resources.deletePosition(req.user, v.id(req.params.id)); res.status(204).end(); });
-for (const path of ['/applications', '/advisor/applications', '/staff/applications', '/company/applications']) {
+// /advisor = นักศึกษาในความดูแล, /supervisor = ใบสมัครทุกใบสำหรับอาจารย์นิเทศก์ (ทั้งคู่เป็นบัญชี advisor)
+for (const path of ['/applications', '/advisor/applications', '/supervisor/applications', '/staff/applications', '/company/applications']) {
   router.get(path, async (req, res) => {
-    if (path.includes('/advisor/') && req.user.role !== 'advisor' || path.includes('/staff/') && req.user.role !== 'staff' || path.includes('/company/') && req.user.role !== 'company') throw new HttpError(403, 'ไม่มีสิทธิ์เข้าถึงข้อมูล', 'FORBIDDEN');
-    const filters = await applicationFilters(req, path.startsWith('/company/') || path.startsWith('/advisor/'));
+    const teacher = path.startsWith('/advisor/') || path.startsWith('/supervisor/');
+    if (teacher && req.user.role !== 'advisor' || path.startsWith('/supervisor/') && !req.user.is_supervisor || path.includes('/staff/') && req.user.role !== 'staff' || path.includes('/company/') && req.user.role !== 'company') throw new HttpError(403, 'ไม่มีสิทธิ์เข้าถึงข้อมูล', 'FORBIDDEN');
+    const filters = await applicationFilters(req, path.startsWith('/company/') || teacher);
+    if (teacher) filters.scope = path.split('/')[1];
     res.json(await workflow.applications(req.user, filters));
   });
 }
@@ -78,7 +83,8 @@ router.post('/applications', allowRoles('student'), async (req, res) => {
   res.status(result.created ? 201 : 200).json(result.application);
 });
 router.get('/applications/:id', async (req, res) => res.json(await workflow.application(req.user, v.id(req.params.id))));
-router.post('/applications/:id/reviews', allowRoles('advisor', 'staff'), async (req, res) => res.json(await workflow.reviewApplication(req.user, v.id(req.params.id), req.body)));
+// อนุมัติใบสมัครได้เฉพาะอาจารย์นิเทศก์ (เจ้าหน้าที่ดูได้อย่างเดียว)
+router.post('/applications/:id/reviews', allowRoles('advisor'), async (req, res) => res.json(await workflow.reviewApplication(req.user, v.id(req.params.id), req.body)));
 router.patch('/company/applications/:id/decision', allowRoles('company'), async (req, res) => res.json(await workflow.decideApplication(req.user, v.id(req.params.id), req.body)));
 router.post('/applications/:id/confirm', allowRoles('student'), async (req, res) => res.json(await workflow.studentAction(req.user, v.id(req.params.id), 'confirm')));
 router.post('/applications/:id/withdraw', allowRoles('student'), async (req, res) => res.json(await workflow.studentAction(req.user, v.id(req.params.id), 'withdraw')));

@@ -89,7 +89,9 @@ async function tuLogin(input, password) {
   let user;
   if (profile.type === 'student') {
     if (!isCsStudentId(profile.username)) throw notCsStudent();
-    user = await provisionTuStudent({ ...profile, email: profile.email ?? typedEmail ?? `${profile.username}@dome.tu.ac.th` });
+    // TU ไม่ส่งชื่อมาในรอบที่สร้างบัญชี ชื่อจะเป็นรหัสนักศึกษา — รอบถัดไปที่ TU ส่งชื่อมาให้เติมแทน (เหมือนโหมด Cognito)
+    user = await fillTuNames(await provisionTuStudent({ ...profile, email: profile.email ?? typedEmail ?? `${profile.username}@dome.tu.ac.th` }),
+      { name: profile.th_name, 'custom:en_name': profile.en_name });
   } else {
     user = await registeredTuStaff(profile.username, [profile.email, typedEmail]);
     if (!user) throw new HttpError(403, 'บัญชีนี้ยังไม่ได้ลงทะเบียนในระบบ กรุณาติดต่อเจ้าหน้าที่', 'NOT_REGISTERED');

@@ -8,7 +8,7 @@ const error = (description) => ({ description, content: json(ref('ErrorResponse'
 const idParam = { name: 'id', in: 'path', required: true, schema: integer() };
 export const v3Schemas = {
   ErrorResponse: { type: 'object', properties: { message: string(), error: { type: 'object', required: ['code','message','request_id'], properties: { code: string(), message: string(), request_id: { type: 'string', format: 'uuid' }, details: { type: 'object', additionalProperties: true } } } } },
-  UserWrite: record({ auth_provider: string(10), username: string(50), cognito_sub: string(64,true), role: { type:'string', enum:['student','advisor','staff','company'] }, th_name: string(255), en_name: string(255), email: { type:'string', format:'email' }, phone: string(20,true), is_active: { type:'boolean' }, advisor_id: integer(true), company_id: integer(), job_title: string(150,true) }),
+  UserWrite: record({ auth_provider: string(10), username: string(50), cognito_sub: string(64,true), role: { type:'string', enum:['student','advisor','staff','company'] }, th_name: string(255), en_name: string(255), email: { type:'string', format:'email' }, phone: string(20,true), is_active: { type:'boolean' }, is_supervisor: { type:'boolean' }, advisor_id: integer(true), company_id: integer(), job_title: string(150,true) }),
   CourseGrades:{type:'object',maxProperties:50,description:'เกรดแยกตามรหัสวิชา เช่น คพ.100; IP = กำลังศึกษา',additionalProperties:{type:'string',enum:['A','B+','B','C+','C','D+','D','F','IP']}},
   Declarations:record({mustPass:{type:'boolean'},discipline:{type:'boolean'},accept:{type:'boolean'}}),
   StudentWrite: record({ curriculum:{type:'string',enum:['61','66'],nullable:true},course_grades:ref('CourseGrades'),declarations:ref('Declarations'),gpax: { type:'number', minimum:0, maximum:4, multipleOf:0.01, nullable:true }, phone:string(20,true), transcript_s3_key:string(512,true) }),
@@ -24,7 +24,7 @@ export const v3Schemas = {
   Term:{type:'object',properties:{code:string(20),...Object.fromEntries(['plan_open_at','plan_close_at','coop_start','coop_end'].map((key) => [key,{type:'string',format:'date'}])),term_id:integer(),is_active:{type:'boolean'}}},
   Position:{type:'object',properties:{company_id:integer(),name:string(255),description:string(undefined,true),quota:{type:'integer',minimum:0,nullable:true},term_id:integer(true),is_open:{type:'boolean'},position_id:integer(),id:integer(),applicant_count:{type:'integer'},accepted_count:{type:'integer'}}},
 };
-v3Schemas.User = {type:'object',properties:{...v3Schemas.UserWrite.properties,curriculum:{type:'string',enum:['61','66'],nullable:true},course_grades:{...ref('CourseGrades'),nullable:true},declarations:{...ref('Declarations'),nullable:true},qualification_locked:{type:'boolean'},user_id:integer(),student_id:integer(true),gpax:{type:'number',nullable:true},advisor_name:string(undefined,true),transcript_s3_key:string(512,true),student_code:string(),application_count:{type:'integer'},pending_count:{type:'integer'},applications:array('Application')}};
+v3Schemas.User = {type:'object',properties:{...v3Schemas.UserWrite.properties,curriculum:{type:'string',enum:['61','66'],nullable:true},course_grades:{...ref('CourseGrades'),nullable:true},declarations:{...ref('Declarations'),nullable:true},qualification_locked:{type:'boolean'},user_id:integer(),student_id:integer(true),gpax:{type:'number',nullable:true},advisor_name:string(undefined,true),profile_status:{type:'string',enum:['pending','verified','returned'],nullable:true},profile_comment:string(undefined,true),profile_reviewed_at:{type:'string',format:'date-time',nullable:true},conduct_status:{type:'string',enum:['certified','rejected'],nullable:true},conduct_comment:string(undefined,true),conduct_reviewed_at:{type:'string',format:'date-time',nullable:true},transcript_s3_key:string(512,true),student_code:string(),application_count:{type:'integer'},pending_count:{type:'integer'},applications:array('Application')}};
 delete v3Schemas.User.properties.cognito_sub;
 const paths = {};
 function add(path, method, tag, summary, response, body, { status = 200, public: anonymous = false, parameters = [], binary = false } = {}) {
@@ -47,6 +47,10 @@ v3Schemas.StaffStudentWrite = record({...v3Schemas.StudentWrite.properties,advis
 add('/students/{id}','put','Students','Student owner/staff: แก้ไขข้อมูลนักศึกษา (advisor_id เฉพาะ staff)',ref('User'),'StaffStudentWrite');
 add('/students/{id}/advisor','put','Students','Staff: กำหนดอาจารย์ที่ปรึกษาที่ active',ref('User'),'AdvisorWrite');
 v3Schemas.AdvisorWrite = record({advisor_id:integer(true)},['advisor_id']);
+add('/students/{id}/profile-review','post','Students','Staff: ตรวจข้อมูลส่วนตัว verified/returned (returned ต้องมี comment)',ref('User'),'ProfileReviewWrite');
+v3Schemas.ProfileReviewWrite = record({status:{type:'string',enum:['verified','returned']},comment:string(10000,true)},['status']);
+add('/students/{id}/conduct-review','post','Students','อาจารย์ที่ปรึกษา: รับรองความประพฤติ certified/rejected (rejected ต้องมี comment)',ref('User'),'ConductReviewWrite');
+v3Schemas.ConductReviewWrite = record({status:{type:'string',enum:['certified','rejected']},comment:string(10000,true)},['status']);
 add('/terms','get','Terms','ภาคการศึกษาทั้งหมด',array('Term'));
 add('/terms/active','get','Terms','ภาคที่ active หรือ null',{...ref('Term'),nullable:true});
 add('/terms','post','Terms','Staff: เพิ่มภาคที่ยังไม่ active',array('Term'),'TermWrite',{status:201});
@@ -68,11 +72,11 @@ for (const prefix of ['/positions','/company/positions']) {
   for (const method of ['put','patch']) add(`${prefix}/{id}`,method,'Positions','แก้ไขตำแหน่งตามสิทธิ์',ref('Position'),'PositionWrite');
   add(`${prefix}/{id}`,'delete','Positions','ลบตำแหน่งเมื่อยังไม่มีใบสมัคร',null,null,{status:204});
 }
-for (const path of ['/applications','/students/me/applications','/advisor/applications','/staff/applications','/company/applications']) add(path,'get','Applications','ใบสมัครตามเจ้าของข้อมูล (company ไม่เห็นใบที่ยังไม่อนุมัติ)',array('Application'),null,{parameters:[{name:'term_id',in:'query',schema:integer()},{name:'status',in:'query',schema:v3Schemas.Application.properties.status}]});
-add('/applications','post','Applications','Student: ตรวจ GPAX/เอกสาร/วันรับสมัครและสร้างใบสมัคร; ส่งซ้ำคืนใบเดิม',ref('Application'),'ApplicationWrite',{status:201});
+for (const path of ['/applications','/students/me/applications','/advisor/applications','/supervisor/applications','/staff/applications','/company/applications']) add(path,'get','Applications','ใบสมัครตามเจ้าของข้อมูล (company ไม่เห็นใบที่ยังไม่อนุมัติ)',array('Application'),null,{parameters:[{name:'term_id',in:'query',schema:integer()},{name:'status',in:'query',schema:v3Schemas.Application.properties.status}]});
+add('/applications','post','Applications','Student: ต้องผ่านการตรวจข้อมูล/รับรองความประพฤติ; ตรวจ GPAX/เอกสาร/วันรับสมัครและสร้างใบสมัคร; ส่งซ้ำคืนใบเดิม',ref('Application'),'ApplicationWrite',{status:201});
 paths['/api/applications'].post.responses[200] = {description:'ส่งซ้ำโดยไม่เพิ่มใบสมัครหรือประวัติ',content:json(ref('Application'))};
 add('/applications/{id}','get','Applications','รายละเอียดพร้อม reviews/history ตามสิทธิ์',ref('Application'));
-add('/applications/{id}/reviews','post','Applications','Advisor ที่ดูแล/staff: อนุมัติหรือปฏิเสธพร้อม comment',ref('Application'),'ReviewWrite');
+add('/applications/{id}/reviews','post','Applications','อาจารย์นิเทศก์ (is_supervisor) คนใดก็ได้: อนุมัติหรือปฏิเสธพร้อม comment (staff ไม่มีสิทธิ์)',ref('Application'),'ReviewWrite');
 add('/company/applications/{id}/decision','patch','Applications','Company owner: approved → accepted/declined',ref('Application'),'DecisionWrite');
 for (const action of ['confirm','withdraw']) add(`/applications/{id}/${action}`,'post','Applications',`Student owner: ${action} แบบ atomic และรันซ้ำได้`,ref('Application'));
 add('/documents','post','Documents','Student: อัปโหลด PDF ไม่เกิน 4 MB (local ในโหมดพัฒนา หรือ S3 เมื่อตั้ง FILE_BUCKET)',{type:'object',properties:{key:string(512),url:string()}},'unused',{status:201,binary:true,parameters:[{name:'kind',in:'query',required:true,schema:{type:'string',enum:['transcript','resume']}}]});

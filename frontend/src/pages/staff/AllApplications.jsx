@@ -1,11 +1,9 @@
 import { useApi } from '../../hooks/useApi';
-import { api } from '../../services/api';
 import ApiState from '../../components/ApiState';
 import { useState } from 'react';
 import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
 import DocumentLink from '../../components/DocumentLink';
 import GpaxValue from '../../components/GpaxValue';
-import ReviewPanel from '../../components/ReviewPanel';
 import { APPLICATION_STATUS } from '../../config/applicationStatus';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
@@ -38,14 +36,13 @@ function History({ items }) {
 }
 
 export default function AllApplications() {
-  const { data: applications, reload, loading, error } = useApi('/staff/applications');
+  const { data: applications, loading, error } = useApi('/staff/applications');
   const { data: terms } = useApi('/terms');
   const [term, setTerm] = useState('');
   const [status, setStatus] = useState('');
   const [company, setCompany] = useState('');
   const [search, setSearch] = useState('');
   const [openHistory, setOpenHistory] = useState(() => new Set());
-  const [notice, setNotice] = useState('');
 
   const inTerm = applications.filter((a) => !term || a.term === term);
   const companies = [...new Set(inTerm.map((a) => a.company_name))].sort((a, b) => a.localeCompare(b, 'th'));
@@ -66,15 +63,6 @@ export default function AllApplications() {
       return next;
     });
 
-  const submitReview = async (app, decision, comment) => {
-    try {
-      await api(`/applications/${app.application_id}/reviews`, { method: 'POST', body: { status: decision, comment } });
-      await reload();
-      setNotice(`บันทึกผลการพิจารณาของ ${app.student.th_name} แล้ว`);
-      return true;
-    } catch (err) { setNotice(err.message); return false; }
-  };
-
   const changeTerm = (value) => {
     setTerm(value);
     setCompany('');
@@ -85,12 +73,11 @@ export default function AllApplications() {
       <div className="app-header">
         <h1 className="app-title">ใบสมัครทั้งหมด</h1>
         <span className="app-term">
-          {inTerm.length} ใบ{pendingCount > 0 && <span className="all-pending"> · รออนุมัติ {pendingCount}</span>}
+          {inTerm.length} ใบ{pendingCount > 0 && <span className="all-pending"> · รออาจารย์นิเทศก์อนุมัติ {pendingCount}</span>}
         </span>
       </div>
 
       <ApiState loading={loading} error={error} />
-      {notice && <div className="app-banner">{notice}</div>}
 
       <div className="all-filters">
         <label className="all-filter">
@@ -141,7 +128,7 @@ export default function AllApplications() {
                   <div>
                     <p className="app-company">{app.student.th_name}</p>
                     <p className="pending-student-meta">
-                      รหัส {app.student.student_code} · GPAX <GpaxValue gpax={app.student.gpax} /> · อ.ที่ปรึกษา {app.student.advisor_name}
+                      รหัส {app.student.student_code} · GPAX <GpaxValue gpax={app.student.gpax} /> · อ.ที่ปรึกษา {app.student.advisor_name ?? '-'}
                     </p>
                   </div>
                   <ApplicationStatusBadge status={app.status} />
@@ -168,15 +155,8 @@ export default function AllApplications() {
 
                 {historyOpen && <History items={app.history} />}
 
-                {app.status === 'submitted' ? (
-                  <ReviewPanel
-                    id={app.application_id}
-                    onOpen={() => setNotice('')}
-                    onSubmit={(decision, comment) => submitReview(app, decision, comment)}
-                  />
-                ) : (
-                  <p className="app-date all-submitted">ส่งเมื่อ {formatDateTime(app.submitted_at)}</p>
-                )}
+                {/* อนุมัติใบสมัครเป็นหน้าที่ของอาจารย์นิเทศก์ เจ้าหน้าที่ติดตามสถานะอย่างเดียว */}
+                <p className="app-date all-submitted">ส่งเมื่อ {formatDateTime(app.submitted_at)}</p>
               </li>
             );
           })}

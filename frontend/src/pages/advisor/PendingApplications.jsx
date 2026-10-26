@@ -2,6 +2,8 @@ import { useApi } from '../../hooks/useApi';
 import { api } from '../../services/api';
 import ApiState from '../../components/ApiState';
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../../context/useAuth';
 import GpaxValue from '../../components/GpaxValue';
 import ReviewPanel from '../../components/ReviewPanel';
 import DocumentLink from '../../components/DocumentLink';
@@ -12,8 +14,14 @@ import '../CSS/pendingApplications.css';
 const formatDateTime = (iso) =>
   new Date(iso).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+// ใบสมัครรออนุมัติของนักศึกษาทุกคน — เฉพาะอาจารย์นิเทศก์ อาจารย์ที่ปรึกษาอย่างเดียวไปหน้านักศึกษาในความดูแล
 export default function PendingApplications() {
-  const { data: applications, reload, loading, error } = useApi('/advisor/applications?status=submitted');
+  const { user } = useAuth();
+  return user.is_supervisor ? <SupervisorQueue /> : <Navigate to="/advisor/students" replace />;
+}
+
+function SupervisorQueue() {
+  const { data: applications, reload, loading, error } = useApi('/supervisor/applications?status=submitted');
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -38,7 +46,7 @@ export default function PendingApplications() {
   return (
     <section>
       <div className="app-header">
-        <h1 className="app-title">ใบสมัครรออนุมัติ</h1>
+        <h1 className="app-title">ใบสมัครรออนุมัติ (อาจารย์นิเทศก์)</h1>
         <span className="app-term">{applications.length} ใบ</span>
       </div>
 
@@ -71,7 +79,7 @@ export default function PendingApplications() {
                   <p className="app-company">{app.student.th_name}</p>
                   <p className="pending-student-meta">
                     รหัส {app.student.student_code} · GPAX{' '}
-                    <GpaxValue gpax={app.student.gpax} />
+                    <GpaxValue gpax={app.student.gpax} /> · อ.ที่ปรึกษา {app.student.advisor_name ?? '-'}
                   </p>
                 </div>
                 <span className="app-date">ส่งเมื่อ {formatDateTime(app.submitted_at)}</span>

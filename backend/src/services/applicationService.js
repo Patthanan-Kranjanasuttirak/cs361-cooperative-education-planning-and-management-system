@@ -11,6 +11,8 @@ export async function applications(actor, filters = {}, db = { query }) {
   const termId = filters.term_id ?? null;
   const status = filters.status ?? null;
   const studentId = filters.student_id ?? null;
+  // อาจารย์: scope 'supervisor' = ทุกใบ (เฉพาะอาจารย์นิเทศก์), 'advisor' = ของนักศึกษาในความดูแล, ไม่ระบุ = ทั้งสองแบบ
+  const scope = filters.scope ?? null;
   const { rows } = await db.query(`SELECT a.*,c.name AS company_name,p.name AS position_name,p.company_id,t.code AS term,
     json_build_object('student_id',s.student_id,'user_id',u.user_id,'student_code',u.username,
       'th_name',u.th_name,'gpax',s.gpax::float8,'curriculum',s.curriculum,'email',u.email,'phone',u.phone,'advisor_name',advisor.th_name) AS student,
@@ -27,10 +29,10 @@ export async function applications(actor, filters = {}, db = { query }) {
     JOIN terms t ON t.term_id=a.term_id JOIN positions p ON p.position_id=a.position_id JOIN companies c ON c.company_id=p.company_id
     WHERE ($1::int IS NULL OR a.application_id=$1) AND ($2::int IS NULL OR a.term_id=$2)
       AND ($3::varchar IS NULL OR a.status=$3) AND ($4::int IS NULL OR a.student_id=$4)
-      AND ($5='staff' OR ($5='student' AND u.user_id=$6) OR ($5='advisor' AND s.advisor_id=$6)
+      AND ($5='staff' OR ($5='student' AND u.user_id=$6) OR ($5='advisor' AND (($8::varchar IS DISTINCT FROM 'supervisor' AND s.advisor_id=$6) OR ($8::varchar IS DISTINCT FROM 'advisor' AND $9::boolean)))
         OR ($5='company' AND p.company_id=$7 AND (a.status IN ('approved','accepted','declined','confirmed','released')
           OR (a.status='withdrawn' AND EXISTS (SELECT 1 FROM application_reviews r WHERE r.application_id=a.application_id AND r.status='approved')))))
-    ORDER BY a.application_id DESC`, [applicationId, termId, status, studentId, actor.role, actor.user_id, actor.company_id ?? null]);
+    ORDER BY a.application_id DESC`, [applicationId, termId, status, studentId, actor.role, actor.user_id, actor.company_id ?? null, scope, actor.is_supervisor === true]);
   return rows.map((row) => {
     row.resume_url = documentUrl(row.resume_s3_key);
     row.transcript_url = documentUrl(row.transcript_s3_key);
@@ -67,6 +69,14 @@ function eligible(student) {
   }
 }
 
+// ก่อนสมัคร/อนุมัติ: เจ้าหน้าที่ตรวจข้อมูลผ่าน และอาจารย์ที่ปรึกษารับรองความประพฤติ
+function reviewed(student) {
+  const missing = [];
+  if (student.profile_status !== 'verified') missing.push('เจ้าหน้าที่ยังไม่ได้ยืนยันว่าข้อมูลส่วนตัวถูกต้อง');
+  if (student.conduct_status !== 'certified') missing.push('อาจารย์ที่ปรึกษายังไม่ได้รับรองความประพฤติ');
+  if (missing.length) throw new HttpError(422, missing.join(' และ '), 'PROFILE_NOT_REVIEWED', { review: missing });
+}
+
 async function lockStudent(db, applicationId) {
   const { rows } = await db.query('SELECT s.* FROM students s JOIN applications a USING(student_id) WHERE a.application_id=$1 FOR UPDATE OF s', [applicationId]);
   if (!rows.length) throw new HttpError(404, 'ไม่พบใบสมัคร', 'NOT_FOUND');
@@ -93,7 +103,7 @@ export async function createApplication(actor, body) {
       return { created: false, application: await application(actor, duplicate.application_id, db) };
     }
     eligible(student);
-    if (!student.advisor_id) v.invalid('advisor_id', 'กรุณาให้เจ้าหน้าที่กำหนดอาจารย์ที่ปรึกษา');
+    reviewed(student);
     if (!term.within_period || !position.is_open || position.term_id != null && position.term_id !== term.term_id) conflict('ตำแหน่งหรือภาคการศึกษาไม่อยู่ในช่วงเปิดรับ');
     const period = await db.query(`SELECT 1 FROM companies WHERE company_id=$1
       AND (application_start IS NULL OR application_start <= (now() AT TIME ZONE 'Asia/Bangkok')::date)
@@ -113,14 +123,14 @@ export async function reviewApplication(actor, applicationId, body) {
   if (status === 'rejected' && !comment) v.invalid('comment', 'กรุณาระบุเหตุผลที่ไม่อนุมัติ');
   return transaction(async (db) => {
     const student = await lockStudent(db, applicationId);
-    if (actor.role !== 'staff' && student.advisor_id !== actor.user_id) deny();
+    if (!actor.is_supervisor) deny();
     const app = (await db.query('SELECT * FROM applications WHERE application_id=$1 FOR UPDATE', [applicationId])).rows[0];
     if (app.status !== 'submitted') {
       const previous = await db.query('SELECT 1 FROM application_reviews WHERE application_id=$1 AND reviewer_id=$2 AND status=$3 AND comment IS NOT DISTINCT FROM $4', [applicationId, actor.user_id, status, comment]);
       if (app.status === status && previous.rows.length) return application(actor, applicationId, db);
       conflict('ใบสมัครถูกพิจารณาแล้ว');
     }
-    if (status === 'approved') eligible(student);
+    if (status === 'approved') { eligible(student); reviewed(student); }
     await db.query('INSERT INTO application_reviews (application_id,reviewer_id,status,comment) VALUES ($1,$2,$3,$4)', [applicationId, actor.user_id, status, comment]);
     await db.query('UPDATE applications SET status=$1 WHERE application_id=$2', [status, applicationId]);
     await history(db, app, actor, app.status, status);

@@ -71,6 +71,10 @@ test('public company API, real users, and consistent error envelopes', async () 
   assert.ok(!('cognito_sub' in users[0]));
   assert.equal((await request('/users', student.token)).status, 403);
   assert.equal((await request('/users', accounts.advisor.token)).status, 403);
+  // Duplicate emails would make both accounts unable to log in.
+  assert.equal((await request(`/users/${accounts.otherCompany.user.user_id}`, accounts.staff.token, { method: 'PUT', body: { email: 'Company.V3@example.test' } })).status, 409);
+  assert.equal((await request('/users', accounts.staff.token, { method: 'POST', body: { username: 'dup.email', th_name: 'ซ้ำ', en_name: 'Dup', email: 'staff.v3@tu.ac.th', role: 'staff' } })).status, 409);
+  assert.equal((await ok(`/users/${accounts.otherCompany.user.user_id}`, accounts.staff.token, { method: 'PUT', body: { email: 'company.other.v3@example.test' } })).email, 'company.other.v3@example.test', 'Keeping your own email is allowed');
 });
 
 test('wrong password, tampered/expired tokens, disabled accounts and forged roles are rejected', async () => {
@@ -121,6 +125,10 @@ test('local login verifies university accounts with the TU API: CS students are 
     tuReply = { status: 200, body: { status: true, type: 'student', username: '6709655555' } };
     const newer = await login('new.student@dome.tu.ac.th');
     assert.equal(newer.body.user.curriculum, '66'); assert.equal(newer.body.user.email, 'new.student@dome.tu.ac.th');
+    assert.equal(newer.body.user.th_name, '6709655555', 'Without TU names the student ID is a placeholder');
+    tuReply = { status: 200, body: { status: true, type: 'student', username: '6709655555', displayname_th: 'นักศึกษา ใหม่', displayname_en: 'New Student' } };
+    const named = (await login('6709655555')).body.user;
+    assert.equal(named.th_name, 'นักศึกษา ใหม่'); assert.equal(named.en_name, 'New Student');
 
     tuReply = { status: 400, body: { status: false, message: 'Password incorrect' } };
     assert.equal((await login('tu.student@dome.tu.ac.th', 'wrong')).status, 401);
@@ -297,6 +305,59 @@ test('company logo uploads persist through profile save, respect ownership, and 
   assert.equal((await request(`/company-logos/${profile.company_id}/${encodeURIComponent('../.env')}`)).status, 404);
 });
 
+test('staff verifies the profile and the advisor certifies conduct before applying; any supervisor approves', async () => {
+  const studentPath = `/students/${studentUser.student_id}`;
+  const position = await ok('/positions', accounts.staff.token, { method: 'POST', body: { company_id: positions[0].company_id, name: 'Review flow position', quota: 1, term_id: null } }, 201);
+  const resume = await upload(student.token, 'resume');
+  const body = { position_id: position.position_id, resume_s3_key: resume.key };
+  assert.equal((await ok('/students/me', student.token)).profile_status, 'pending', 'A saved profile waits for staff');
+  const blocked = await request('/applications', student.token, { method: 'POST', body });
+  assert.equal(blocked.status, 422);
+  assert.equal(blocked.body.error.code, 'PROFILE_NOT_REVIEWED');
+  assert.equal(blocked.body.error.details.review.length, 2);
+
+  assert.equal((await request(`${studentPath}/profile-review`, accounts.advisor.token, { method: 'POST', body: { status: 'verified' } })).status, 403);
+  assert.equal((await request(`${studentPath}/profile-review`, accounts.staff.token, { method: 'POST', body: { status: 'returned' } })).status, 422, 'Returning needs a reason');
+  const returned = await ok(`${studentPath}/profile-review`, accounts.staff.token, { method: 'POST', body: { status: 'returned', comment: 'แนบ Transcript ฉบับล่าสุด' } });
+  assert.equal(returned.profile_status, 'returned'); assert.equal(returned.profile_comment, 'แนบ Transcript ฉบับล่าสุด');
+  const resubmitted = await ok('/students/me', student.token, { method: 'PUT', body: { phone: '0812345678' } });
+  assert.equal(resubmitted.profile_status, 'pending'); assert.equal(resubmitted.profile_comment, null);
+  await ok(`${studentPath}/profile-review`, accounts.staff.token, { method: 'POST', body: { status: 'verified' } });
+
+  for (const token of [accounts.otherAdvisor.token, accounts.staff.token, student.token]) {
+    assert.equal((await request(`${studentPath}/conduct-review`, token, { method: 'POST', body: { status: 'certified' } })).status, 403, 'Only the student\'s own advisor certifies conduct');
+  }
+  assert.equal((await request(`${studentPath}/conduct-review`, accounts.advisor.token, { method: 'POST', body: { status: 'rejected' } })).status, 422);
+  const certified = await ok(`${studentPath}/conduct-review`, accounts.advisor.token, { method: 'POST', body: { status: 'certified', comment: 'ประพฤติดี' } });
+  assert.equal(certified.conduct_status, 'certified'); assert.equal(certified.profile_status, 'verified');
+
+  // Contact edits keep the verification; qualification edits go back to staff.
+  assert.equal((await ok('/students/me', student.token, { method: 'PUT', body: { phone: '0812345670' } })).profile_status, 'verified');
+  assert.equal((await ok('/students/me', student.token, { method: 'PUT', body: { gpax: 2.8 } })).profile_status, 'pending');
+  assert.equal((await request('/applications', student.token, { method: 'POST', body })).body.error.details.review.length, 1);
+  await ok(`${studentPath}/profile-review`, accounts.staff.token, { method: 'POST', body: { status: 'verified' } });
+
+  // Supervising is an advisor-account permission, not a per-student assignment.
+  const otherAdvisorId = accounts.otherAdvisor.user.user_id;
+  assert.equal((await request(`/users/${studentUser.user_id}`, accounts.staff.token, { method: 'PATCH', body: { is_supervisor: true } })).status, 422);
+  const application = await ok('/applications', student.token, { method: 'POST', body }, 201);
+  const listed = async (path, token) => (await ok(path, token)).some((a) => a.application_id === application.application_id);
+  assert.equal((await request('/supervisor/applications', accounts.otherAdvisor.token)).status, 403, 'Advisors who do not supervise see no queue');
+  assert.equal((await request('/supervisor/applications', accounts.staff.token)).status, 403);
+  assert.equal((await request(`/applications/${application.application_id}/reviews`, accounts.otherAdvisor.token, { method: 'POST', body: { status: 'approved' } })).status, 403);
+  assert.equal(await listed('/advisor/applications', accounts.otherAdvisor.token), false);
+  assert.equal((await request(`/advisor/students/${studentUser.student_id}`, accounts.otherAdvisor.token)).status, 403);
+  assert.equal((await ok(`/users/${otherAdvisorId}`, accounts.staff.token, { method: 'PATCH', body: { is_supervisor: true } })).is_supervisor, true);
+  assert.equal(await listed('/supervisor/applications', accounts.otherAdvisor.token), true, 'A supervisor sees every student\'s applications');
+  assert.equal(await listed('/supervisor/applications', accounts.advisor.token), true);
+  assert.equal(await listed('/advisor/applications', accounts.otherAdvisor.token), false, 'Supervising does not make them the advisor');
+  assert.equal((await ok(`/advisor/students/${studentUser.student_id}`, accounts.otherAdvisor.token)).student_id, studentUser.student_id, 'Supervisors can open any student');
+  assert.equal((await request(`${studentPath}/conduct-review`, accounts.otherAdvisor.token, { method: 'POST', body: { status: 'certified' } })).status, 403, 'Only the advisor certifies conduct');
+  await ok(`/applications/${application.application_id}/reviews`, accounts.otherAdvisor.token, { method: 'POST', body: { status: 'approved' } });
+  await ok(`/applications/${application.application_id}/withdraw`, student.token, { method: 'POST' });
+  await ok(`/users/${otherAdvisorId}`, accounts.staff.token, { method: 'PATCH', body: { is_supervisor: false } });
+});
+
 test('duplicate concurrent submissions, unauthorized reviews and concurrent approve/reject', async () => {
   const resume = await upload(student.token, 'resume');
   const body = { position_id: positions[0].position_id, resume_s3_key: resume.key };
@@ -306,10 +367,11 @@ test('duplicate concurrent submissions, unauthorized reviews and concurrent appr
   assert.equal(application.history.length, 1);
   assert.equal((await request(`/applications/${application.application_id}/reviews`, accounts.otherAdvisor.token, { method: 'POST', body: { status: 'approved' } })).status, 403);
   assert.equal((await request(`/company/applications/${application.application_id}/decision`, accounts.integrationCompany.token, { method: 'PATCH', body: { status: 'accepted' } })).status, 409);
+  assert.equal((await request(`/applications/${application.application_id}/reviews`, accounts.staff.token, { method: 'POST', body: { status: 'approved' } })).status, 403, 'Staff cannot approve applications');
   assert.equal((await request(`/applications/${application.application_id}/reviews`, accounts.advisor.token, { method: 'POST', body: { status: 'rejected' } })).status, 422);
   const results = await Promise.all([
     request(`/applications/${application.application_id}/reviews`, accounts.advisor.token, { method: 'POST', body: { status: 'approved', comment: 'Reviewed' } }),
-    request(`/applications/${application.application_id}/reviews`, accounts.staff.token, { method: 'POST', body: { status: 'rejected', comment: 'Competing review' } }),
+    request(`/applications/${application.application_id}/reviews`, accounts.advisor.token, { method: 'POST', body: { status: 'rejected', comment: 'Competing review' } }),
   ]);
   assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
   const detail = await ok(`/applications/${application.application_id}`, student.token);

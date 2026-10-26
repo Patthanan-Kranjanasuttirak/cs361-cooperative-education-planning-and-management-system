@@ -5,13 +5,15 @@ import { useAuth } from '../../context/useAuth';
 import FileInput from '../../components/FileInput';
 import SaveSuccessDialog from '../../components/SaveSuccessDialog';
 import { MIN_GPAX, isGpaxEligible } from '../../config/coopRules';
+import { reviewBlockers } from '../../config/studentReview';
 import { fetchCompanies } from '../../services/companyApi';
 import { formatApplicationPeriod } from '../../utils/applicationPeriod';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/studentApply.css';
 
-const MAX_RESUME_MB = 10;
+// ตรงกับขนาดสูงสุดที่ backend รับ (POST /documents)
+const MAX_RESUME_MB = 4;
 const MAX_SUGGESTIONS = 8;
 
 const openPositions = (company) => (company?.positions ?? []).filter((p) => p.is_open !== false);
@@ -28,7 +30,8 @@ function validate({ company, positionId, resume }) {
 
 export default function Apply() {
   const { user } = useAuth();
-  const eligible = isGpaxEligible(user.gpax);
+  const blockers = reviewBlockers(user);
+  const eligible = isGpaxEligible(user.gpax) && blockers.length === 0;
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -122,15 +125,19 @@ export default function Apply() {
           <p>กรุณากรอกข้อมูลคุณสมบัติสหกิจศึกษาในหน้าข้อมูลส่วนตัว แล้วส่งให้เจ้าหน้าที่ตรวจสอบก่อน</p>
           <Link to="/student/profile" className="app-btn app-btn--primary">ไปหน้าข้อมูลส่วนตัว</Link>
         </div>
-      ) : (
-        !eligible && (
-          <div className="apply-gate apply-gate--blocked">
-            <p>
-              GPAX ของคุณคือ <strong>{user.gpax.toFixed(2)}</strong> ต่ำกว่าเกณฑ์ขั้นต่ำ {MIN_GPAX.toFixed(2)} จึงยังสมัครสหกิจศึกษาไม่ได้
-            </p>
-            <p className="apply-gate-note">หากข้อมูลไม่ถูกต้อง กรุณาแก้ไขในหน้าข้อมูลส่วนตัวหรือติดต่อเจ้าหน้าที่</p>
-          </div>
-        )
+      ) : !isGpaxEligible(user.gpax) ? (
+        <div className="apply-gate apply-gate--blocked">
+          <p>
+            GPAX ของคุณคือ <strong>{user.gpax.toFixed(2)}</strong> ต่ำกว่าเกณฑ์ขั้นต่ำ {MIN_GPAX.toFixed(2)} จึงยังสมัครสหกิจศึกษาไม่ได้
+          </p>
+          <p className="apply-gate-note">หากข้อมูลไม่ถูกต้อง กรุณาแก้ไขในหน้าข้อมูลส่วนตัวหรือติดต่อเจ้าหน้าที่</p>
+        </div>
+      ) : blockers.length > 0 && (
+        <div className="apply-gate">
+          <p>ยังยื่นใบสมัครไม่ได้ ต้องรอให้</p>
+          <ul>{blockers.map((text) => <li key={text}>{text}</li>)}</ul>
+          <Link to="/student/profile" className="app-btn app-btn--primary">ดูสถานะในหน้าข้อมูลส่วนตัว</Link>
+        </div>
       )}
 
       <form className="profile-form" onSubmit={handleSubmit} noValidate>

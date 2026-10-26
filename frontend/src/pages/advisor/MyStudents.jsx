@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
 import GpaxValue from '../../components/GpaxValue';
+import StudentReviewBadge from '../../components/StudentReviewBadge';
 import { useApi } from '../../hooks/useApi';
 import ApiState from '../../components/ApiState';
 import '../CSS/myApplications.css';
@@ -11,6 +12,7 @@ import '../CSS/myStudents.css';
 // ตัวกรองด้านบน: ชื่อ + เงื่อนไขของแต่ละกลุ่ม
 const FILTERS = [
   { key: 'all', label: 'ทั้งหมด', match: () => true },
+  { key: 'conduct', label: 'รอรับรองความประพฤติ', match: (s) => !s.conduct_status },
   { key: 'pending', label: 'มีใบรออนุมัติ', match: (s) => s.pending_count > 0 },
   { key: 'none', label: 'ยังไม่สมัคร', match: (s) => s.application_count === 0 },
   { key: 'confirmed', label: 'ยืนยันสิทธิ์แล้ว', match: (s) => s.latest?.status === 'confirmed' },
@@ -74,6 +76,7 @@ export default function MyStudents() {
               <tr>
                 <th>นักศึกษา</th>
                 <th className="students-num">GPAX</th>
+                <th>การตรวจก่อนสมัคร</th>
                 <th className="students-num">ใบสมัคร</th>
                 <th>สถานะล่าสุด</th>
               </tr>
@@ -91,13 +94,14 @@ export default function MyStudents() {
                   <td data-label="GPAX" className="students-num">
                     <GpaxValue gpax={s.gpax} />
                   </td>
+                  <td data-label="การตรวจก่อนสมัคร">
+                    <StudentReviewBadge kind="conduct" status={s.conduct_status} />
+                    <p className="students-code">ข้อมูล: <StudentReviewBadge kind="profile" status={s.profile_status} /></p>
+                  </td>
                   <td data-label="ใบสมัคร" className="students-num">
                     {s.application_count}
-                    {s.pending_count > 0 && (
-                      <Link to="/advisor" className="students-pending-link" onClick={(e) => e.stopPropagation()}>
-                        รออนุมัติ {s.pending_count}
-                      </Link>
-                    )}
+                    {/* ใบรออนุมัติอยู่ที่อาจารย์นิเทศก์ของนักศึกษา (อาจเป็นอาจารย์คนอื่น) */}
+                    {s.pending_count > 0 && <p className="students-code">รออนุมัติ {s.pending_count}</p>}
                   </td>
                   <td data-label="สถานะล่าสุด">
                     {s.latest ? (

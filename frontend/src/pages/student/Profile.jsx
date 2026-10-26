@@ -8,6 +8,8 @@ import FileInput from '../../components/FileInput';
 import DocumentLink from '../../components/DocumentLink';
 import CourseGradesFields from '../../components/CourseGradesFields';
 import SaveSuccessDialog from '../../components/SaveSuccessDialog';
+import StudentReviewBadge from '../../components/StudentReviewBadge';
+import { reviewBlockers } from '../../config/studentReview';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/eligibility.css';
@@ -27,6 +29,22 @@ function QualificationAlert({ errors, onClose }) {
     <ul>{errors.map((message) => <li key={message}>{message}</li>)}</ul>
     <div className="profile-validation-actions"><button type="button" className="profile-submit" onClick={onClose} autoFocus>กลับไปแก้ไข</button></div>
   </dialog>;
+}
+
+// ผลตรวจก่อนสมัคร: เจ้าหน้าที่ตรวจข้อมูล + อาจารย์ที่ปรึกษารับรองความประพฤติ
+function ReviewStatus({ profile }) {
+  const rows = [
+    ['ข้อมูลส่วนตัว (เจ้าหน้าที่ตรวจ)', 'profile', profile.profile_status, profile.profile_status === 'returned' ? profile.profile_comment : null],
+    ['ความประพฤติ (อาจารย์ที่ปรึกษารับรอง)', 'conduct', profile.conduct_status, profile.conduct_status === 'rejected' ? profile.conduct_comment : null],
+  ];
+  return <div className="profile-section">
+    <p className="profile-section-title">สถานะการตรวจก่อนสมัคร</p>
+    <dl className="profile-readonly">{rows.map(([label, kind, status, comment]) => <div key={kind} className="profile-readonly-row">
+      <dt>{label}</dt>
+      <dd><StudentReviewBadge kind={kind} status={status} />{comment && <p className="profile-hint profile-hint-warn">เหตุผล: {comment}</p>}</dd>
+    </div>)}</dl>
+    <p className="profile-hint">ต้องผ่านทั้งสองรายการก่อนจึงจะยื่นใบสมัครได้ หากแก้ไขข้อมูลคุณสมบัติหลังตรวจผ่าน ข้อมูลจะถูกส่งให้เจ้าหน้าที่ตรวจใหม่</p>
+  </div>;
 }
 
 function ProfileForm({ profile, onSaved }) {
@@ -63,7 +81,8 @@ function ProfileForm({ profile, onSaved }) {
       const body = locked ? { phone } : { gpax: Number(gpax), phone, curriculum, course_grades: grades, declarations, transcript_s3_key: key };
       const result = await api('/students/me', { method: 'PUT', body });
       onSaved(result); setFile(null);
-      setSaved(true);
+      // ยังไม่ผ่านการตรวจ = ยังสมัครไม่ได้ จึงไม่พาไปหน้าสมัคร
+      setSaved(reviewBlockers(result).length ? 'review' : 'ready');
     } catch (error) {
       if (error.status === 422) setValidationErrors(error.details ? Object.values(error.details).flat() : [error.message]);
       else setNotice(error.message);
@@ -73,8 +92,10 @@ function ProfileForm({ profile, onSaved }) {
   return <section>
     <h1 className="profile-title">ข้อมูลส่วนตัว</h1>
     {validationErrors && <QualificationAlert errors={validationErrors} onClose={() => setValidationErrors(null)} />}
-    {saved && <SaveSuccessDialog to="/student/apply" nextPageLabel="สมัครสหกิจศึกษา" />}
+    {saved === 'ready' && <SaveSuccessDialog to="/student/apply" nextPageLabel="สมัครสหกิจศึกษา" />}
+    {saved === 'review' && <SaveSuccessDialog title="บันทึกแล้ว รอเจ้าหน้าที่ตรวจข้อมูลและอาจารย์ที่ปรึกษารับรองความประพฤติ" to="/student" nextPageLabel="ใบสมัครของฉัน" />}
     {notice && <p role="status" className="app-banner">{notice}</p>}
+    <ReviewStatus profile={profile} />
     {locked && <p className="profile-hint">ข้อมูลคุณสมบัติถูกใช้ในใบสมัครที่อนุมัติแล้ว หากต้องแก้ไขกรุณาติดต่อเจ้าหน้าที่ ส่วนเบอร์โทรศัพท์ยังแก้ไขได้</p>}
     <form className="profile-form" onSubmit={save} noValidate>
       <fieldset className="profile-section">
@@ -113,7 +134,7 @@ function ProfileForm({ profile, onSaved }) {
         <p className="profile-hint">ผลเบื้องต้นคำนวณจากข้อมูลที่กรอก ผู้ตรวจจะพิจารณารายวิชาและคุณสมบัติอื่นจาก Transcript อีกครั้ง</p>
         {!locked && <p className="profile-hint profile-hint-warn">ต้องผ่านเงื่อนไขทั้งหมดก่อนจึงจะบันทึกข้อมูลได้</p>}
       </div>
-      <button className="profile-submit" type="submit" disabled={saving || saved}>{saving ? 'กำลังบันทึก…' : saved ? 'บันทึกแล้ว' : 'บันทึกข้อมูลคุณสมบัติ'}</button>
+      <button className="profile-submit" type="submit" disabled={saving || saved}>{saving ? 'กำลังบันทึก…' : saved ? 'บันทึกแล้ว' : locked ? 'บันทึกข้อมูลติดต่อ' : 'บันทึกและส่งให้เจ้าหน้าที่ตรวจ'}</button>
     </form>
   </section>;
 }

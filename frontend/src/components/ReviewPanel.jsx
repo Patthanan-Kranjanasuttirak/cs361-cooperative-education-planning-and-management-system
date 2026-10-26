@@ -2,14 +2,13 @@ import { useState } from 'react';
 import '../pages/CSS/myApplications.css';
 import '../pages/CSS/pendingApplications.css';
 
-const DECISION = {
-  approved: { label: 'อนุมัติ', button: 'app-btn--primary' },
-  rejected: { label: 'ไม่อนุมัติ', button: 'app-btn--ghost' },
-};
+const BUTTON = { approved: 'app-btn--primary', rejected: 'app-btn--ghost' };
+const DEFAULT_LABELS = { approved: 'อนุมัติ', rejected: 'ไม่อนุมัติ' };
 
-// ปุ่มอนุมัติ / ไม่อนุมัติ พร้อมช่องความเห็น — ใช้ร่วมกันระหว่างอาจารย์ที่ปรึกษาและเจ้าหน้าที่
+// ปุ่มอนุมัติ / ไม่อนุมัติ พร้อมช่องความเห็น — ใช้ร่วมกันทั้งใบสมัคร การตรวจข้อมูล และการรับรองความประพฤติ
 // onSubmit(decision, comment) เรียกเมื่อกดยืนยัน (decision = 'approved' | 'rejected')
-export default function ReviewPanel({ id, onSubmit, onOpen }) {
+// labels เปลี่ยนข้อความปุ่ม เช่น { approved: 'ข้อมูลถูกต้อง', rejected: 'ส่งกลับให้แก้ไข' }
+export default function ReviewPanel({ id, onSubmit, onOpen, labels = DEFAULT_LABELS, rejectPlaceholder = 'เช่น GPAX ยังไม่ถึงเกณฑ์ที่บริษัทกำหนด' }) {
   // null = ยังไม่เปิดช่องความเห็น / { decision, comment, error }
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -24,7 +23,7 @@ export default function ReviewPanel({ id, onSubmit, onOpen }) {
     const comment = draft.comment.trim();
     // ไม่อนุมัติต้องบอกเหตุผล นักศึกษาจะได้รู้ว่าต้องแก้อะไร
     if (draft.decision === 'rejected' && !comment) {
-      setDraft({ ...draft, error: 'กรุณาระบุเหตุผลที่ไม่อนุมัติ' });
+      setDraft({ ...draft, error: `กรุณาระบุเหตุผลที่${labels.rejected}` });
       return;
     }
     setSaving(true);
@@ -37,10 +36,10 @@ export default function ReviewPanel({ id, onSubmit, onOpen }) {
     return (
       <div className="app-actions pending-actions">
         <button type="button" className="app-btn app-btn--ghost" onClick={() => open('rejected')}>
-          ไม่อนุมัติ
+          {labels.rejected}
         </button>
         <button type="button" className="app-btn app-btn--primary" onClick={() => open('approved')}>
-          อนุมัติ
+          {labels.approved}
         </button>
       </div>
     );
@@ -57,7 +56,7 @@ export default function ReviewPanel({ id, onSubmit, onOpen }) {
         rows={3}
         value={draft.comment}
         onChange={(e) => setDraft({ ...draft, comment: e.target.value, error: '' })}
-        placeholder={draft.decision === 'rejected' ? 'เช่น GPAX ยังไม่ถึงเกณฑ์ที่บริษัทกำหนด' : 'ความเห็นถึงนักศึกษา'}
+        placeholder={draft.decision === 'rejected' ? rejectPlaceholder : 'ความเห็นถึงนักศึกษา'}
         autoFocus
       />
       {draft.error && <p className="pending-error">{draft.error}</p>}
@@ -65,8 +64,8 @@ export default function ReviewPanel({ id, onSubmit, onOpen }) {
         <button type="button" className="app-btn pending-btn-cancel" onClick={() => setDraft(null)}>
           ยกเลิก
         </button>
-        <button type="button" className={`app-btn ${DECISION[draft.decision].button}`} onClick={submit} disabled={saving}>
-          ยืนยัน{DECISION[draft.decision].label}
+        <button type="button" className={`app-btn ${BUTTON[draft.decision]}`} onClick={submit} disabled={saving}>
+          ยืนยัน{labels[draft.decision]}
         </button>
       </div>
     </div>

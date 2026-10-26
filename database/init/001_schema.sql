@@ -2,8 +2,13 @@
 -- ไฟล์นี้จะถูกรันอัตโนมัติครั้งแรกที่ container PostgreSQL ถูกสร้าง (docker-entrypoint-initdb.d)
 -- ข้อมูลมาจาก frontend/src/data/mockfile.json (ตำแหน่งงาน ช่วงเวลาเปิดรับสมัคร และภาคการศึกษาเป็นข้อมูลตัวอย่าง)
 --
+-- ก่อนสมัคร: นักศึกษาบันทึกข้อมูลส่วนตัว (students.profile_status = pending)
+--   เจ้าหน้าที่ตรวจข้อมูล      profile_status: pending → verified | returned (แก้แล้วส่งใหม่ได้)
+--   อาจารย์ที่ปรึกษารับรองความประพฤติ  conduct_status: NULL → certified | rejected
+--   ยื่นใบสมัครได้เมื่อ verified + certified
+--
 -- ลำดับสถานะของใบสมัคร (applications.status)
---   submitted → approved | rejected        อาจารย์ที่ปรึกษา หรือ เจ้าหน้าที่ คนใดคนหนึ่งตรวจ
+--   submitted → approved | rejected        อาจารย์นิเทศก์ (users.is_supervisor) คนใดก็ได้ ตรวจ (เจ้าหน้าที่ไม่มีสิทธิ์)
 --   approved  → accepted | declined        บริษัทตัดสิน (เห็นเฉพาะใบที่ approved แล้ว)
 --   accepted  → confirmed                  นักศึกษายืนยันสิทธิ์ได้ที่เดียวต่อภาคการศึกษา
 --     เมื่อยืนยันแล้ว ใบอื่นในภาคเดียวกัน: accepted → released, submitted/approved → withdrawn
@@ -21,7 +26,9 @@ CREATE TABLE IF NOT EXISTS users (
     en_name       VARCHAR(255) NOT NULL,
     email         VARCHAR(255) NOT NULL,
     phone         VARCHAR(20),
-    is_active     BOOLEAN      NOT NULL DEFAULT TRUE
+    is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+    -- อาจารย์นิเทศก์: บัญชีอาจารย์ที่อนุมัติใบสมัครได้ทุกใบ (เป็นอาจารย์ที่ปรึกษาด้วยได้)
+    is_supervisor BOOLEAN      NOT NULL DEFAULT FALSE CHECK (NOT is_supervisor OR role = 'advisor')
 );
 
 -- ภาคการศึกษาที่เปิดรับแผนสหกิจ (เปิดใช้งานได้ทีละภาค)
@@ -76,7 +83,17 @@ CREATE TABLE IF NOT EXISTS students (
     advisor_id        INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
     curriculum        VARCHAR(2) CHECK (curriculum IN ('61', '66')),
     course_grades     JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(course_grades) = 'object'),
-    declarations      JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(declarations) = 'object')
+    declarations      JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(declarations) = 'object'),
+    -- เจ้าหน้าที่ตรวจข้อมูล: NULL = ยังไม่ส่ง
+    profile_status      VARCHAR(20) CHECK (profile_status IN ('pending', 'verified', 'returned')),
+    profile_comment     TEXT,
+    profile_reviewed_by INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
+    profile_reviewed_at TIMESTAMPTZ,
+    -- อาจารย์ที่ปรึกษารับรองความประพฤติ: NULL = ยังไม่รับรอง
+    conduct_status      VARCHAR(20) CHECK (conduct_status IN ('certified', 'rejected')),
+    conduct_comment     TEXT,
+    conduct_reviewed_by INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
+    conduct_reviewed_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_students_advisor_id ON students (advisor_id);

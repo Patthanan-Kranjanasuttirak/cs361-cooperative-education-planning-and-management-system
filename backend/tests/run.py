@@ -26,6 +26,12 @@ try:
     course_migration = (ROOT / 'database/migrations/004_student_course_grades.sql').read_text()
     sql(name, course_migration)
     sql(name, course_migration)
+    sql(name, 'ALTER TABLE users DROP COLUMN is_supervisor;')
+    sql(name, 'ALTER TABLE students DROP COLUMN profile_status, DROP COLUMN profile_comment, DROP COLUMN profile_reviewed_by, '
+              'DROP COLUMN profile_reviewed_at, DROP COLUMN conduct_status, DROP COLUMN conduct_comment, DROP COLUMN conduct_reviewed_by, DROP COLUMN conduct_reviewed_at;')
+    review_migration = (ROOT / 'database/migrations/006_student_review.sql').read_text()
+    sql(name, review_migration)
+    sql(name, review_migration)
     seed = (ROOT / 'database/seeds/005_v3-demo.sql').read_text()
     sql(name, seed)
     sql(name, seed)

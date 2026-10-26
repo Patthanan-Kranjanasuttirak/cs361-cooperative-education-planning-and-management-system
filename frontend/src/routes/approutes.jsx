@@ -16,6 +16,7 @@ import AllApplications from '../pages/staff/AllApplications';
 import ManageCompanies from '../pages/staff/ManageCompanies';
 import ManageTerms from '../pages/staff/ManageTerms';
 import ManageUsers from '../pages/staff/ManageUsers';
+import VerifyStudents from '../pages/staff/VerifyStudents';
 import Applicants from '../pages/company-portal/Applicants';
 import CompanyPositions from '../pages/company-portal/CompanyPositions';
 import CompanyProfile from '../pages/company-portal/CompanyProfile';
@@ -53,6 +54,7 @@ export default function approutes() {
           <Route element={<ProtectedRoute roles={['staff']} />}>
             <Route path="/staff" element={<RoleLayout />}>
               <Route index element={<AllApplications />} />
+              <Route path="students" element={<VerifyStudents />} />
               <Route path="companies" element={<ManageCompanies />} />
               <Route path="terms" element={<ManageTerms />} />
               <Route path="users" element={<ManageUsers />} />

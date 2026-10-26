@@ -152,7 +152,7 @@ export default function Applicants() {
                   <button type="button" className="app-btn app-btn--primary" onClick={() => decide(app, 'accepted')} disabled={deciding}>ผ่านการคัดเลือก</button>
                 </div>
               ) : (
-                <p className="app-date all-submitted">อาจารย์/เจ้าหน้าที่อนุมัติเมื่อ {formatDate(app.approved_at)}</p>
+                <p className="app-date all-submitted">อาจารย์นิเทศก์อนุมัติเมื่อ {formatDate(app.approved_at)}</p>
               )}
             </li>
           ))}

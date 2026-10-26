@@ -3,9 +3,11 @@ import { curriculumFor } from '../config/coopCriteria.js';
 import { isCsStudentId, isMockLogin } from '../../cognito-triggers/verify-auth-challenge/index.mjs';
 
 export const USER_COLUMNS = `u.user_id, u.auth_provider, u.username, u.role, u.th_name, u.en_name,
-  u.email, u.phone, u.is_active, s.student_id, s.gpax::float8 AS gpax,
+  u.email, u.phone, u.is_active, u.is_supervisor, s.student_id, s.gpax::float8 AS gpax,
   s.transcript_s3_key, s.advisor_id, advisor.th_name AS advisor_name,
   s.curriculum, s.course_grades, s.declarations,
+  s.profile_status, s.profile_comment, s.profile_reviewed_at,
+  s.conduct_status, s.conduct_comment, s.conduct_reviewed_at,
   EXISTS (SELECT 1 FROM applications a WHERE a.student_id=s.student_id AND a.status IN ('approved','accepted','confirmed')) AS qualification_locked,
   cu.company_id, cu.job_title`;
 export const USER_JOINS = `LEFT JOIN students s ON s.user_id=u.user_id
