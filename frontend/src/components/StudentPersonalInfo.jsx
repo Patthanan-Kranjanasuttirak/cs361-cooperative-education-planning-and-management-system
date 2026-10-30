@@ -4,7 +4,7 @@ import { MAJORS } from '../config/majors';
 import { formatPhone } from '../utils/phone';
 import '../pages/CSS/studentProfile.css';
 
-// ข้อมูลส่วนตัวที่นักศึกษากรอก (อ่านอย่างเดียว) สำหรับเจ้าหน้าที่และอาจารย์
+// ข้อมูลส่วนตัวที่นักศึกษากรอก (อ่านอย่างเดียว) สำหรับเจ้าหน้าที่และกรรมการ
 export default function StudentPersonalInfo({ student }) {
   const rows = [
     ['กลุ่มวิชาเอก', MAJORS[student.major]],

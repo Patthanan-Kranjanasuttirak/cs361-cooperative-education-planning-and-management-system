@@ -156,3 +156,46 @@
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* ฟอร์มตัดสินผลคัดเลือก + ข้อความ/ไฟล์ถึงนักศึกษา */
+.cp-decision {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cp-decision--accepted {
+  border-color: #6ee7b7;
+  background-color: #ecfdf5;
+}
+
+.cp-decision--declined {
+  border-color: #fecaca;
+  background-color: #fef2f2;
+}
+
+.cp-decision-title {
+  font-weight: 600;
+  color: #222A4B;
+  margin-bottom: 0.25rem;
+}
+
+.cp-decision-hint {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.cp-confirmed {
+  margin-top: 0.75rem;
+  color: #047857;
+  background-color: #ecfdf5;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}

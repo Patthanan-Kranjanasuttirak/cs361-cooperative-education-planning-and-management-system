@@ -15,16 +15,16 @@ import '../CSS/manageUsers.css';
 import '../CSS/eligibility.css';
 import '../../components/CSS/ApplicationStatusBadge.css';
 
-const ROLE_ORDER = ['student', 'advisor', 'staff', 'company'];
+// บัญชีนักศึกษาสร้างอัตโนมัติเมื่อเข้าสู่ระบบด้วยบัญชี TU จึงไม่จัดการในหน้านี้
+const ROLE_ORDER = ['committee', 'staff', 'company'];
 // ชื่อบทบาทแบบสั้นสำหรับตาราง (ชื่อเต็มยาวจนดันตารางล้นกรอบ)
-const ROLE_SHORT = { student: 'นักศึกษา', advisor: 'อาจารย์', staff: 'เจ้าหน้าที่', company: 'ผู้ประสานงาน' };
-const ROLE_TONE = { student: 'info', advisor: 'success', staff: 'pending', company: 'muted' };
+const ROLE_SHORT = { committee: 'กรรมการ', staff: 'เจ้าหน้าที่', company: 'ผู้ประสานงาน' };
+const ROLE_TONE = { committee: 'success', staff: 'pending', company: 'muted' };
 
-function UserEditor({ initial, users, companies, defaultCompanyId, onSave, onClose }) {
-  const [form, setForm] = useState({ username: '', role: defaultCompanyId ? 'company' : 'student', th_name: '', en_name: '', email: '', phone: '', advisor_id: '', is_supervisor: false, company_id: defaultCompanyId ?? '', job_title: '', ...initial });
+function UserEditor({ initial, companies, defaultCompanyId, onSave, onClose }) {
+  const [form, setForm] = useState({ username: '', role: defaultCompanyId ? 'company' : 'committee', th_name: '', en_name: '', email: '', phone: '', company_id: defaultCompanyId ?? '', job_title: '', ...initial });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const advisors = users.filter((u) => u.role === 'advisor' && (u.is_active || u.user_id === form.advisor_id));
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     const onKey = (event) => { if (event.key === 'Escape' && !saving) onClose(); };
@@ -38,9 +38,7 @@ function UserEditor({ initial, users, companies, defaultCompanyId, onSave, onClo
     setSaving(true); setError('');
     try {
       const body = Object.fromEntries(['username','role','th_name','en_name','email','phone'].map((key) => [key, form[key]]));
-      if (form.role === 'student' && (!initial || String(form.advisor_id ?? '') !== String(initial.advisor_id ?? ''))) body.advisor_id = form.advisor_id ? Number(form.advisor_id) : null;
       if (form.role === 'company') { body.company_id = Number(form.company_id); body.job_title = form.job_title || null; }
-      if (form.role === 'advisor' && (!initial || form.is_supervisor !== initial.is_supervisor)) body.is_supervisor = form.is_supervisor;
       await onSave(body);
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
@@ -62,7 +60,7 @@ function UserEditor({ initial, users, companies, defaultCompanyId, onSave, onClo
           <label className="profile-label" htmlFor="user-role">บทบาท <span className="profile-required">*</span></label>
           {initial ? <p className="profile-readonly-value user-readonly">{ROLES[form.role].label} · {form.username}</p> :
             <select id="user-role" className="profile-input" value={form.role} onChange={change('role')}>{ROLE_ORDER.map((key) => <option key={key} value={key}>{ROLES[key].label}</option>)}</select>}
-          {field('username', form.role === 'student' ? 'รหัสนักศึกษา / ชื่อบัญชี' : 'ชื่อบัญชี', { maxLength:50 })}
+          {field('username', 'ชื่อบัญชี', { maxLength:50 })}
           {field('email', 'อีเมล (ใช้เข้าสู่ระบบ)', { type:'email', maxLength:255 })}
         </fieldset>
         <fieldset className="profile-section">
@@ -81,17 +79,6 @@ function UserEditor({ initial, users, companies, defaultCompanyId, onSave, onClo
             <div className="cm-col">{field('job_title', 'ตำแหน่งงาน', { required:false, maxLength:150 })}</div>
           </div>}
           <div className="cm-row"><div className="cm-col">{field('phone', 'เบอร์โทรศัพท์', { required:false, type:'tel', maxLength:20 })}</div></div>
-          {form.role === 'student' && <>
-            <label className="profile-label" htmlFor="user-advisor">อาจารย์ที่ปรึกษา</label>
-            <select id="user-advisor" className="profile-input" value={form.advisor_id ?? ''} onChange={change('advisor_id')}>
-              <option value="">ยังไม่กำหนด</option>{advisors.map((u) => <option key={u.user_id} value={u.user_id} disabled={!u.is_active}>{u.th_name}{u.is_active ? '' : ' (ปิดใช้งาน)'}</option>)}
-            </select>
-          </>}
-          {/* อาจารย์นิเทศก์ = สิทธิ์อนุมัติใบสมัครของนักศึกษาทุกคน ไม่ต้องจับคู่กับนักศึกษา */}
-          {form.role === 'advisor' && <label className="elig-declare" htmlFor="user-supervisor">
-            <input id="user-supervisor" type="checkbox" checked={Boolean(form.is_supervisor)} onChange={(e) => setForm((prev) => ({ ...prev, is_supervisor: e.target.checked }))} />
-            <span>เป็นอาจารย์นิเทศก์ (อนุมัติใบสมัครของนักศึกษาได้ทุกคน)</span>
-          </label>}
         </fieldset>
         {error && <p role="alert" className="profile-error">{error}</p>}
       </fieldset>
@@ -116,15 +103,11 @@ export default function ManageUsers() {
   const [editing, setEditing] = useState(null);
   const [notice, setNotice] = useState('');
 
-  const advisors = users.filter((u) => u.role === 'advisor' && u.is_active);
-  const nameOf = (id) => users.find((u) => u.user_id === id)?.th_name;
   const companyName = (id) => companyResult.data.find((c) => c.id === id)?.name ?? '-';
 
   const filters = [
     { key: 'all', label: 'ทั้งหมด', match: () => true },
     ...ROLE_ORDER.map((r) => ({ key: r, label: ROLES[r].label, match: (u) => u.role === r })),
-    { key: 'supervisor', label: 'อาจารย์นิเทศก์', match: (u) => u.role === 'advisor' && u.is_supervisor },
-    { key: 'no-advisor', label: 'ยังไม่มีอาจารย์ที่ปรึกษา', match: (u) => u.role === 'student' && !u.advisor_id && u.is_active },
     { key: 'inactive', label: 'ปิดใช้งาน', match: (u) => !u.is_active },
   ];
   const activeFilter = filters.find((f) => f.key === roleFilter);
@@ -138,29 +121,9 @@ export default function ManageUsers() {
     await api(editing === 'new' ? '/users' : `/users/${editing.user_id}`, { method:editing === 'new' ? 'POST' : 'PUT', body:data });
     await reload(); setEditing(null); setNotice(`บันทึกข้อมูล ${data.th_name} แล้ว`);
   };
-  const assignAdvisor = async (student, advisorId) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await api(`/students/${student.student_id}`, { method:'PUT', body:{ advisor_id:advisorId ? Number(advisorId) : null } });
-      await reload();
-      setNotice(advisorId ? `กำหนดอาจารย์ที่ปรึกษาของ ${student.th_name} เป็น ${nameOf(Number(advisorId))} แล้ว` : `ยกเลิกอาจารย์ที่ปรึกษาของ ${student.th_name} แล้ว`);
-    } catch (err) { setNotice(err.message); }
-    finally { setBusy(false); }
-  };
-  const toggleSupervisor = async (user) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await api(`/users/${user.user_id}`, { method:'PATCH', body:{ is_supervisor:!user.is_supervisor } });
-      await reload(); setNotice(`${user.is_supervisor ? 'ยกเลิก' : 'กำหนด'} ${user.th_name} เป็นอาจารย์นิเทศก์แล้ว`);
-    } catch (err) { setNotice(err.message); }
-    finally { setBusy(false); }
-  };
   const toggleActive = async (user) => {
     if (busy) return;
-    const advisees = user.role === 'advisor' ? users.filter((u) => u.advisor_id === user.user_id && u.is_active).length : 0;
-    if (user.is_active && !window.confirm(`ปิดการใช้งานบัญชี ${user.th_name}?\n\nผู้ใช้นี้จะเข้าสู่ระบบไม่ได้ แต่ข้อมูลเดิมยังอยู่ เปิดใช้งานใหม่ได้ภายหลัง` + (advisees ? `\nอาจารย์ท่านนี้ดูแลนักศึกษาอยู่ ${advisees} คน` : ''))) return;
+    if (user.is_active && !window.confirm(`ปิดการใช้งานบัญชี ${user.th_name}?\n\nผู้ใช้นี้จะเข้าสู่ระบบไม่ได้ แต่ข้อมูลเดิมยังอยู่ เปิดใช้งานใหม่ได้ภายหลัง`)) return;
     setBusy(true);
     try {
       await api(`/users/${user.user_id}`, { method:'PATCH', body:{is_active:!user.is_active} });
@@ -178,6 +141,7 @@ export default function ManageUsers() {
         </button>
       </div>
 
+      <p className="app-hint user-student-hint">บัญชีนักศึกษาสร้างอัตโนมัติเมื่อนักศึกษาเข้าสู่ระบบด้วยบัญชี TU ดูข้อมูลนักศึกษาได้ที่หน้า "คัดกรองและประกาศผล"</p>
       <ApiState loading={loading} error={error || companyError} />
       {notice && <div className="app-banner" role="status">{notice}</div>}
       {companyId && <div className="app-banner">ผู้ประสานงานของ {companyName(Number(companyId))} <button type="button" className="app-btn pending-btn-cancel cm-small-btn" onClick={() => setCompanyId('')}>แสดงทุกบริษัท</button></div>}
@@ -214,7 +178,7 @@ export default function ManageUsers() {
               <tr>
                 <th>ผู้ใช้งาน</th>
                 <th>บทบาท</th>
-                <th>อาจารย์ที่ปรึกษา / สถานประกอบการ</th>
+                <th>สถานประกอบการ</th>
                 <th aria-label="จัดการ" />
               </tr>
             </thead>
@@ -230,34 +194,12 @@ export default function ManageUsers() {
                   </td>
                   <td data-label="บทบาท">
                     <span className={`status-badge status-badge--${ROLE_TONE[u.role]}`} title={ROLES[u.role].label}>{ROLE_SHORT[u.role]}</span>
-                    {u.is_supervisor && <span className="status-badge status-badge--info user-inactive-badge">นิเทศก์</span>}
                   </td>
-                  <td data-label={u.role === 'student' ? 'อาจารย์ที่ปรึกษา' : u.role === 'company' ? 'สถานประกอบการ' : ''}>
-                    {u.role === 'student' ? (
-                      <select
-                        className={`profile-input user-advisor-select${u.advisor_id ? '' : ' user-advisor-select--empty'}`}
-                        aria-label={`อาจารย์ที่ปรึกษาของ ${u.th_name}`}
-                        value={u.advisor_id ?? ''}
-                        onChange={(e) => assignAdvisor(u, e.target.value)}
-                        disabled={!u.is_active || busy}
-                      >
-                        <option value="">ยังไม่กำหนด</option>
-                        {/* อาจารย์ที่ถูกปิดบัญชีแล้วแต่ยังผูกอยู่ ให้แสดงไว้ด้วย */}
-                        {[...advisors, ...users.filter((a) => a.user_id === u.advisor_id && !a.is_active)].map((a) => (
-                          <option key={a.user_id} value={a.user_id}>{a.th_name}{a.is_active ? '' : ' (ปิดใช้งาน)'}</option>
-                        ))}
-                      </select>
-                    ) : u.role === 'company' ? (
+                  <td data-label={u.role === 'company' ? 'สถานประกอบการ' : ''}>
+                    {u.role === 'company' ? (
                       <>
                         <p>{companyName(u.company_id)}</p>
                         <p className="cm-muted">{[u.job_title, formatPhone(u.phone)].filter(Boolean).join(' · ')}</p>
-                      </>
-                    ) : u.role === 'advisor' ? (
-                      <>
-                        <p className="cm-muted">ที่ปรึกษาของนักศึกษา {users.filter((s) => s.advisor_id === u.user_id && s.is_active).length} คน</p>
-                        <label className="cm-muted">
-                          <input type="checkbox" checked={u.is_supervisor} onChange={() => toggleSupervisor(u)} disabled={!u.is_active || busy} /> อาจารย์นิเทศก์
-                        </label>
                       </>
                     ) : (
                       <p className="cm-muted">-</p>
@@ -287,7 +229,6 @@ export default function ManageUsers() {
       {editing && (
         <UserEditor
           initial={editing === 'new' ? null : editing}
-          users={users}
           companies={companyResult.data}
           defaultCompanyId={companyId}
           onSave={handleSave}

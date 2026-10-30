@@ -10,13 +10,12 @@ export const ROLES = {
       { name: 'ใบสมัครของฉัน', to: '/student', end: true },
     ],
   },
-  advisor: {
-    label: 'อาจารย์ที่ปรึกษา',
-    home: '/advisor/students',
-    // อาจารย์ทุกคนเป็นที่ปรึกษาได้ (รับรองความประพฤติ) ส่วนเมนูอนุมัติใบสมัครเห็นเฉพาะอาจารย์นิเทศก์ (requires: users.is_supervisor)
+  committee: {
+    label: 'กรรมการสหกิจศึกษา',
+    home: '/committee',
     menu: [
-      { name: 'นักศึกษาในความดูแล', to: '/advisor/students' },
-      { name: 'อนุมัติใบสมัคร (นิเทศก์)', to: '/advisor', end: true, requires: 'is_supervisor' },
+      { name: 'คัดเลือกเข้าแผนสหกิจศึกษา', to: '/committee', end: true },
+      { name: 'รายชื่อผู้ผ่านเข้าแผน', to: '/committee/report' },
     ],
   },
   staff: {
@@ -24,7 +23,9 @@ export const ROLES = {
     home: '/staff',
     menu: [
       { name: 'ภาพรวมสหกิจศึกษา', to: '/staff', end: true },
-      { name: 'ประกาศผลสหกิจศึกษา', to: '/staff/students' },
+      { name: 'คัดกรองและประกาศผล', to: '/staff/students' },
+      { name: 'รายชื่อผู้ผ่านเข้าแผน', to: '/staff/report' },
+      { name: 'รายชื่อยืนยันสิทธิ์แล้ว', to: '/staff/confirmed' },
       { name: 'สถานประกอบการ', to: '/staff/companies' },
       { name: 'ภาคการศึกษา', to: '/staff/terms' },
       { name: 'จัดการผู้ใช้งาน', to: '/staff/users' },

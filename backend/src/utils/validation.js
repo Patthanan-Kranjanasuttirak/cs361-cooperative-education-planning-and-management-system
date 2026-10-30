@@ -68,7 +68,7 @@ export function documentKey(value, field, userId) {
   return key;
 }
 
-export const ROLES = ['student', 'advisor', 'staff', 'company'];
+export const ROLES = ['student', 'committee', 'staff', 'company'];
 export const STATUSES = ['submitted', 'approved', 'rejected', 'accepted', 'declined', 'confirmed', 'released', 'withdrawn'];
 
 export function courseGrades(value) {

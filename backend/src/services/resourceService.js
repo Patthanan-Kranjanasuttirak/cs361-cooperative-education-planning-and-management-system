@@ -1,6 +1,6 @@
 import { query, transaction } from '../config/db.js';
 import { qualificationChecks } from '../config/coopCriteria.js';
-import { USER_COLUMNS, USER_JOINS, userById } from '../models/userModel.js';
+import { QUALIFICATION_LOCK, SELECTION_COLUMNS, USER_COLUMNS, USER_JOINS, userById } from '../models/userModel.js';
 import { HttpError } from '../utils/httpError.js';
 import * as v from '../utils/validation.js';
 
@@ -15,28 +15,27 @@ async function update(db, table, key, target, data) {
   return rows[0] ?? missing();
 }
 
+// บัญชีนักศึกษาสร้างและอัปเดตอัตโนมัติจากระบบ TU ตอนเข้าสู่ระบบ จึงไม่อยู่ในหน้าจัดการผู้ใช้งาน
+const STUDENT_MANAGED = () => { throw new HttpError(403, 'บัญชีนักศึกษาสร้างอัตโนมัติเมื่อเข้าสู่ระบบด้วยบัญชี TU เจ้าหน้าที่จัดการไม่ได้', 'STUDENT_MANAGED_BY_TU'); };
+
 export async function listUsers() {
-  const { rows } = await query(`SELECT ${USER_COLUMNS} FROM users u ${USER_JOINS} ORDER BY u.user_id`);
+  const { rows } = await query(`SELECT ${USER_COLUMNS} FROM users u ${USER_JOINS} WHERE u.role <> 'student' ORDER BY u.user_id`);
   return rows;
 }
 
-async function validAdvisor(db, advisorId) {
-  if (advisorId === null) return;
-  const { rows } = await db.query("SELECT user_id FROM users WHERE user_id=$1 AND role='advisor' AND is_active FOR SHARE", [advisorId]);
-  if (!rows.length) v.invalid('advisor_id', 'อาจารย์ที่ปรึกษาต้องเป็นบัญชีอาจารย์ที่เปิดใช้งาน');
-}
-
 export async function saveUser(actor, userId, body) {
-  v.object(body, ['auth_provider', 'username', 'cognito_sub', 'role', 'th_name', 'en_name', 'email', 'phone', 'is_active', 'is_supervisor', 'advisor_id', 'company_id', 'job_title']);
+  v.object(body, ['auth_provider', 'username', 'cognito_sub', 'role', 'th_name', 'en_name', 'email', 'phone', 'is_active', 'company_id', 'job_title']);
   return transaction(async (db) => {
     let old;
     if (userId) {
       const result = await db.query('SELECT * FROM users WHERE user_id=$1 FOR UPDATE', [userId]);
       old = result.rows[0] ?? missing();
+      if (old.role === 'student') STUDENT_MANAGED();
       if (body.role !== undefined && body.role !== old.role) v.invalid('role', 'ไม่สามารถเปลี่ยนบทบาทของบัญชีเดิม');
       if (userId === actor.user_id && body.is_active === false) conflict('ไม่สามารถปิดบัญชีของตนเอง');
     }
     const role = v.enumeration(body.role ?? old?.role, 'role', v.ROLES);
+    if (role === 'student') STUDENT_MANAGED();
     const required = !old;
     const data = {};
     for (const [key, max] of [['username', 50], ['th_name', 255], ['en_name', 255], ['auth_provider', 10]]) {
@@ -51,39 +50,26 @@ export async function saveUser(actor, userId, body) {
     if (body.phone !== undefined) data.phone = v.phone(body.phone);
     if (body.cognito_sub !== undefined) data.cognito_sub = v.text(body.cognito_sub, 'cognito_sub', 64, { nullable: true });
     if (body.is_active !== undefined) data.is_active = v.boolean(body.is_active, 'is_active');
-    // อาจารย์นิเทศก์ = สิทธิ์ของบัญชีอาจารย์ ไม่ผูกกับนักศึกษาคนใด
-    if (body.is_supervisor !== undefined) {
-      data.is_supervisor = v.boolean(body.is_supervisor, 'is_supervisor');
-      if (data.is_supervisor && role !== 'advisor') v.invalid('is_supervisor', 'อาจารย์นิเทศก์ต้องเป็นบัญชีอาจารย์');
-    }
     if (!old) {
       const entries = Object.entries({ ...data, role });
       const result = await db.query(`INSERT INTO users (${entries.map(([key]) => key).join(',')}) VALUES (${entries.map((_, i) => `$${i + 1}`).join(',')}) RETURNING user_id`, entries.map(([, value]) => value));
       userId = result.rows[0].user_id;
     } else if (Object.keys(data).length) await update(db, 'users', 'user_id', userId, data);
-    if (role === 'student') {
-      if (body.company_id !== undefined || body.job_title !== undefined) v.invalid('company_id', 'นักศึกษาไม่สังกัดบัญชีผู้ประสานงาน');
-      await db.query('INSERT INTO students (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
-      if (body.advisor_id !== undefined) {
-        const advisorId = v.id(body.advisor_id, 'advisor_id', true);
-        await validAdvisor(db, advisorId);
-        await db.query('UPDATE students SET advisor_id=$1 WHERE user_id=$2', [advisorId, userId]);
-      }
-    } else if (role === 'company') {
-      if (body.advisor_id !== undefined) v.invalid('advisor_id', 'กำหนดอาจารย์ได้เฉพาะนักศึกษา');
+    if (role === 'company') {
       const existing = await db.query('SELECT * FROM company_users WHERE user_id=$1', [userId]);
       const companyId = v.id(body.company_id === undefined ? existing.rows[0]?.company_id : body.company_id, 'company_id');
       const company = await db.query('SELECT company_id FROM companies WHERE company_id=$1 FOR SHARE', [companyId]);
       if (!company.rows.length) v.invalid('company_id', 'ไม่พบสถานประกอบการ');
       const job = body.job_title === undefined ? existing.rows[0]?.job_title ?? null : v.text(body.job_title, 'job_title', 150, { nullable: true });
       await db.query('INSERT INTO company_users (user_id, company_id, job_title) VALUES ($1,$2,$3) ON CONFLICT (user_id) DO UPDATE SET company_id=EXCLUDED.company_id, job_title=EXCLUDED.job_title', [userId, companyId, job]);
-    } else if (body.advisor_id !== undefined || body.company_id !== undefined || body.job_title !== undefined) v.invalid('role', 'ข้อมูลความสัมพันธ์ไม่ตรงกับบทบาท');
+    } else if (body.company_id !== undefined || body.job_title !== undefined) v.invalid('role', 'ข้อมูลความสัมพันธ์ไม่ตรงกับบทบาท');
     return userById(userId, db);
   });
 }
 
+// เจ้าหน้าที่เห็นนักศึกษาทุกคน กรรมการเห็นเฉพาะคนที่สมัครแผนสหกิจศึกษาแล้ว
 export async function listStudents(actor) {
-  const { rows } = await query(`SELECT ${USER_COLUMNS}, u.username AS student_code,
+  const { rows } = await query(`SELECT ${USER_COLUMNS}, ${SELECTION_COLUMNS}, u.username AS student_code,
       (SELECT count(*)::int FROM applications a WHERE a.student_id=s.student_id) AS application_count,
       (SELECT count(*)::int FROM applications a WHERE a.student_id=s.student_id AND a.status='submitted') AS pending_count,
       (SELECT json_build_object('status',a.status,'company_name',c.name,'position_name',p.name,'changed_at',
@@ -92,16 +78,18 @@ export async function listStudents(actor) {
        WHERE a.student_id=s.student_id ORDER BY (a.status='confirmed') DESC,
          COALESCE((SELECT max(h.changed_at) FROM application_history h WHERE h.application_id=a.application_id),a.submitted_at) DESC LIMIT 1) AS latest
     FROM users u ${USER_JOINS} WHERE u.role='student'
-      AND ($1='staff' OR ($1='advisor' AND s.advisor_id=$2) OR ($1='student' AND u.user_id=$2)) ORDER BY u.username`, [actor.role, actor.user_id]);
+      AND ($1='staff' OR ($1='committee' AND s.profile_status IS NOT NULL)) ORDER BY u.username`, [actor.role]);
   return rows;
 }
 
-export async function studentProfile(actor, studentId) {
-  const { rows } = await query(`SELECT ${USER_COLUMNS}, u.username AS student_code FROM users u ${USER_JOINS} WHERE s.student_id=$1`, [studentId]);
+// นักศึกษาเห็นเฉพาะของตัวเองและไม่เห็นผลคัดกรอง/คัดเลือก ส่วนกรรมการเห็นเฉพาะคนที่สมัครแผนแล้ว
+export async function studentProfile(actor, studentId, db = { query }) {
+  const reviewer = actor.role === 'staff' || actor.role === 'committee';
+  const { rows } = await db.query(`SELECT ${USER_COLUMNS}, ${reviewer ? `${SELECTION_COLUMNS}, ` : ''}u.username AS student_code
+    FROM users u ${USER_JOINS} WHERE s.student_id=$1`, [studentId]);
   const student = rows[0] ?? missing();
-  // อาจารย์นิเทศก์ดูนักศึกษาได้ทุกคนเพื่อพิจารณาใบสมัคร
-  const teacher = actor.role === 'advisor' && (student.advisor_id === actor.user_id || actor.is_supervisor);
-  if (!(actor.role === 'staff' || teacher || (actor.role === 'student' && student.user_id === actor.user_id))) denied();
+  const allowed = actor.role === 'staff' || (actor.role === 'committee' && student.profile_status != null) || (actor.role === 'student' && student.user_id === actor.user_id);
+  if (!allowed) denied();
   return student;
 }
 
@@ -112,9 +100,15 @@ const PERSONAL_FIELDS = {
   guardian_address: 'กรุณากรอกที่อยู่ผู้ปกครอง', guardian_phone: 'กรุณากรอกเบอร์โทรศัพท์ผู้ปกครอง',
 };
 
+const LOCK_MESSAGES = {
+  announced: 'ประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษาแล้ว ไม่สามารถแก้ไขข้อมูลคุณสมบัติได้ กรุณาติดต่อเจ้าหน้าที่',
+  selecting: 'กรรมการกำลังคัดเลือกเข้าแผนสหกิจศึกษา ไม่สามารถแก้ไขข้อมูลคุณสมบัติได้ กรุณาติดต่อเจ้าหน้าที่',
+  application: 'ข้อมูลคุณสมบัติถูกใช้ในใบสมัครที่บริษัทรับแล้ว กรุณาติดต่อเจ้าหน้าที่เพื่อแก้ไข',
+};
+
 export async function saveStudent(actor, studentId, body) {
   const fields = ['gpax', 'phone', 'transcript_s3_key', 'curriculum', 'course_grades', 'declarations', ...Object.keys(PERSONAL_FIELDS)];
-  v.object(body, actor.role === 'staff' ? [...fields, 'advisor_id'] : fields);
+  v.object(body, fields);
   return transaction(async (db) => {
     // username = เลขทะเบียน ใช้ตรวจชั้นปีและหลักสูตรใน qualificationChecks
     const result = await db.query('SELECT s.*, u.username FROM students s JOIN users u USING (user_id) WHERE s.student_id=$1 FOR UPDATE OF s', [studentId]);
@@ -131,10 +125,6 @@ export async function saveStudent(actor, studentId, body) {
     if (body.curriculum !== undefined) data.curriculum = body.curriculum === null ? null : v.enumeration(body.curriculum, 'curriculum', ['61', '66']);
     if (body.course_grades !== undefined) data.course_grades = v.courseGrades(body.course_grades);
     if (body.declarations !== undefined) data.declarations = v.declarations(body.declarations);
-    if (body.advisor_id !== undefined) {
-      data.advisor_id = v.id(body.advisor_id, 'advisor_id', true);
-      await validAdvisor(db, data.advisor_id);
-    }
     const sameGrades = (left, right) => JSON.stringify(Object.entries(left ?? {}).sort()) === JSON.stringify(Object.entries(right ?? {}).sort());
     const qualificationChanged = (data.gpax !== undefined && data.gpax !== (student.gpax == null ? null : Number(student.gpax))) ||
       (data.transcript_s3_key !== undefined && data.transcript_s3_key !== student.transcript_s3_key) ||
@@ -142,13 +132,12 @@ export async function saveStudent(actor, studentId, body) {
       (data.course_grades !== undefined && !sameGrades(data.course_grades, student.course_grades)) ||
       (data.declarations !== undefined && Object.keys(data.declarations).some((key) => data.declarations[key] !== Boolean(student.declarations?.[key])));
     if (actor.role === 'student') {
-      // ประกาศผลคัดเลือกแล้ว หรือมีใบที่อนุมัติแล้ว = ข้อมูลคุณสมบัติถูกล็อก ข้อมูลติดต่อ/ส่วนตัวยังแก้ได้
-      const approved = await db.query("SELECT 1 FROM applications WHERE student_id=$1 AND status IN ('approved','accepted','confirmed') LIMIT 1", [studentId]);
-      const locked = student.coop_result != null || approved.rows.length > 0;
-      if (locked && qualificationChanged) {
-        conflict(student.coop_result != null ? 'ประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษาแล้ว ไม่สามารถแก้ไขข้อมูลคุณสมบัติได้ กรุณาติดต่อเจ้าหน้าที่'
-          : 'ข้อมูลคุณสมบัติถูกใช้ในใบสมัครที่อนุมัติแล้ว กรุณาติดต่อเจ้าหน้าที่เพื่อแก้ไข');
-      }
+      // ข้อมูลคุณสมบัติถูกล็อก (QUALIFICATION_LOCK) แต่ข้อมูลติดต่อ/ส่วนตัวยังแก้ได้
+      // รอกรรมการที่กำลังตัดสินพร้อมกัน ไม่ให้แก้คุณสมบัติเล็ดลอดหลังกรรมการเริ่มคัดเลือก
+      await db.query('SELECT pg_advisory_xact_lock_shared($1, $2)', SELECTION_LOCK);
+      const lock = (await db.query(`SELECT ${QUALIFICATION_LOCK} AS lock FROM students s WHERE s.student_id=$1`, [studentId])).rows[0].lock;
+      const locked = lock != null;
+      if (locked && qualificationChanged) conflict(LOCK_MESSAGES[lock]);
       if (!locked) {
         const failures = qualificationChecks({ ...student, ...data }).filter(([passed]) => !passed).map(([, label]) => label);
         if (failures.length) throw new HttpError(422, 'ข้อมูลคุณสมบัติไม่ถูกต้องหรือไม่ครบถ้วน ไม่สามารถบันทึกได้', 'INELIGIBLE', { qualification: failures });
@@ -164,17 +153,81 @@ export async function saveStudent(actor, studentId, body) {
   });
 }
 
-// เจ้าหน้าที่ประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษา: passed | failed, null = กลับเป็นรอประกาศผล (ปลดล็อกข้อมูลคุณสมบัติ)
-export async function setCoopResult(studentId, actor, body) {
-  v.object(body, ['coop_result']);
-  const result = body.coop_result === null ? null : v.enumeration(body.coop_result, 'coop_result', ['passed', 'failed']);
+// ---- คัดเลือกเข้าแผนสหกิจศึกษา ----
+// รอบปัจจุบัน = นักศึกษาที่สมัครแผนแล้วแต่ยังไม่ประกาศผล
+const CANDIDATE = 's.profile_status IS NOT NULL AND s.coop_result IS NULL';
+const RESULT = ['passed', 'failed'];
+// advisory lock ของการคัดเลือก: กรรมการตัดสิน/ประกาศผล = exclusive, นักศึกษาบันทึกข้อมูล = shared
+const SELECTION_LOCK = [361, 10];
+
+async function lockCandidate(db, studentId) {
+  const student = (await db.query('SELECT * FROM students WHERE student_id=$1 FOR UPDATE', [studentId])).rows[0] ?? missing();
+  if (student.profile_status == null) conflict('นักศึกษายังไม่ได้สมัครแผนสหกิจศึกษา');
+  return student;
+}
+
+// เจ้าหน้าที่คัดกรองเบื้องต้น: passed | failed | null และโน้ตถึงกรรมการ (นักศึกษาไม่เห็น)
+export async function screenStudent(actor, studentId, body) {
+  v.object(body, ['screening_status', 'screening_note']);
+  const data = {};
+  if (body.screening_status !== undefined) data.screening_status = body.screening_status === null ? null : v.enumeration(body.screening_status, 'screening_status', RESULT);
+  if (body.screening_note !== undefined) data.screening_note = v.text(body.screening_note, 'screening_note', 10000, { nullable: true });
+  if (!Object.keys(data).length) v.invalid('body', 'กรุณาระบุผลคัดกรองหรือโน้ต');
   return transaction(async (db) => {
-    const student = (await db.query('SELECT user_id, profile_status FROM students WHERE student_id=$1 FOR UPDATE', [studentId])).rows[0] ?? missing();
-    if (result && student.profile_status == null) conflict('นักศึกษายังไม่ได้บันทึกข้อมูลส่วนตัว');
-    await db.query('UPDATE students SET coop_result=$1, coop_result_by=$2, coop_result_at=$3 WHERE student_id=$4',
-      [result, result && actor.user_id, result && new Date(), studentId]);
-    return userById(student.user_id, db);
+    await lockCandidate(db, studentId);
+    await update(db, 'students', 'student_id', studentId, { ...data, screening_by: actor.user_id, screening_at: new Date() });
+    return studentProfile(actor, studentId, db);
   });
+}
+
+// กรรมการเลือกผ่าน/ไม่ผ่าน (null = ยังไม่ตัดสิน) ได้จนกว่าเจ้าหน้าที่จะประกาศผลคนนั้น
+export async function decideStudent(actor, studentId, body) {
+  v.object(body, ['committee_result']);
+  const result = body.committee_result === null ? null : v.enumeration(body.committee_result, 'committee_result', RESULT);
+  return transaction(async (db) => {
+    await db.query('SELECT pg_advisory_xact_lock($1, $2)', SELECTION_LOCK);
+    const student = await lockCandidate(db, studentId);
+    if (student.coop_result != null) conflict('ประกาศผลของนักศึกษาคนนี้แล้ว');
+    await db.query('UPDATE students SET committee_result=$1, committee_by=$2, committee_at=$3 WHERE student_id=$4',
+      [result, result && actor.user_id, result && new Date(), studentId]);
+    return studentProfile(actor, studentId, db);
+  });
+}
+
+// จำนวนผู้สมัครแผนที่ยังไม่ประกาศผล แยกตามผลของกรรมการ
+export async function selection() {
+  const { rows } = await query(`SELECT count(*)::int AS candidates,
+      count(*) FILTER (WHERE committee_result='passed')::int AS passed,
+      count(*) FILTER (WHERE committee_result='failed')::int AS failed,
+      count(*) FILTER (WHERE committee_result IS NULL)::int AS undecided
+    FROM students s WHERE ${CANDIDATE}`);
+  return rows[0];
+}
+
+// เจ้าหน้าที่ประกาศผล (committee_result → coop_result ที่นักศึกษาเห็น) ได้ทันทีที่กรรมการตัดสิน
+// student_ids = ประกาศเฉพาะคนที่เลือก, ไม่ส่ง = ประกาศทุกคนที่กรรมการตัดสินแล้ว
+export async function announceResults(actor, body = {}) {
+  v.object(body, ['student_ids']);
+  let ids = null;
+  if (body.student_ids !== undefined) {
+    if (!Array.isArray(body.student_ids) || !body.student_ids.length || body.student_ids.length > 1000) v.invalid('student_ids', 'กรุณาเลือกนักศึกษาที่ต้องการประกาศผล');
+    ids = body.student_ids.map((id) => v.id(id, 'student_ids'));
+  }
+  return transaction(async (db) => {
+    await db.query('SELECT pg_advisory_xact_lock($1, $2)', SELECTION_LOCK);
+    const { rowCount } = await db.query(`UPDATE students s SET coop_result=committee_result, coop_result_by=$1, coop_result_at=now()
+      WHERE ${CANDIDATE} AND committee_result IS NOT NULL AND ($2::int[] IS NULL OR student_id=ANY($2))`, [actor.user_id, ids]);
+    if (!rowCount) conflict('ไม่มีนักศึกษาที่กรรมการคัดเลือกแล้วและรอประกาศผล');
+    return { announced: rowCount };
+  });
+}
+
+// รายชื่อนักศึกษาที่ประกาศว่าผ่านเข้าแผนสหกิจศึกษา
+export async function passedStudents() {
+  const { rows } = await query(`SELECT u.username AS student_code, u.th_name, u.en_name, s.major, s.curriculum, s.gpax::float8 AS gpax,
+      u.email, u.phone, s.coop_result_at
+    FROM students s JOIN users u USING(user_id) WHERE s.coop_result='passed' ORDER BY u.username`);
+  return rows;
 }
 
 export async function terms() {

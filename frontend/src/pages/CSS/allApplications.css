@@ -90,3 +90,32 @@
     grid-column: 1 / -1;
   }
 }
+
+/* ผลคัดเลือกจากบริษัท (เจ้าหน้าที่) */
+.company-decision {
+  border-left: 3px solid #94a3b8;
+  background-color: #f8fafc;
+  border-radius: 6px;
+  padding: 0.6rem 0.85rem;
+  margin: 0.75rem 0;
+}
+
+.company-decision--accepted {
+  border-left-color: #059669;
+  background-color: #ecfdf5;
+}
+
+.company-decision--declined {
+  border-left-color: #dc2626;
+  background-color: #fef2f2;
+}
+
+.company-decision-who {
+  font-weight: 600;
+  color: #222A4B;
+}
+
+.company-decision-contact {
+  font-size: 0.9rem;
+  color: #475569;
+}

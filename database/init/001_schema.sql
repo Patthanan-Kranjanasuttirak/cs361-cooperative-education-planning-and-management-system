@@ -2,14 +2,17 @@
 -- ไฟล์นี้จะถูกรันอัตโนมัติครั้งแรกที่ container PostgreSQL ถูกสร้าง (docker-entrypoint-initdb.d)
 -- ข้อมูลมาจาก frontend/src/data/mockfile.json (ตำแหน่งงาน ช่วงเวลาเปิดรับสมัคร และภาคการศึกษาเป็นข้อมูลตัวอย่าง)
 --
--- ก่อนสมัคร: นักศึกษาบันทึกข้อมูลส่วนตัว (students.profile_status = pending = รอประกาศผล)
---   เจ้าหน้าที่ประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษา  coop_result: NULL → passed | failed
+-- ก่อนสมัคร: นักศึกษาสมัครแผนสหกิจศึกษา (students.profile_status = pending = รอประกาศผล)
+--   เจ้าหน้าที่คัดกรองเบื้องต้น + โน้ต     screening_status: passed | failed, screening_note
+--   กรรมการสหกิจศึกษาคัดเลือก              committee_result: passed | failed (นักศึกษาไม่เห็น)
+--   เจ้าหน้าที่ประกาศผล (ทีละคนหรือทั้งหมด)  coop_result: NULL → passed | failed (คัดลอกจาก committee_result)
+--   กรรมการเริ่มคัดเลือกแล้ว ผู้สมัครแผนที่ยังไม่ประกาศผลทุกคนแก้ข้อมูลคุณสมบัติไม่ได้
 --   ยื่นใบสมัครได้เมื่อ passed และเมื่อประกาศผลแล้วนักศึกษาแก้ข้อมูลคุณสมบัติไม่ได้
 --   (การตรวจข้อมูลโดยเจ้าหน้าที่ verified/returned และการรับรองความประพฤติยกเลิกแล้ว คงคอลัมน์ไว้เพื่อไม่ลบข้อมูลเดิม)
 --
 -- ลำดับสถานะของใบสมัคร (applications.status)
---   submitted → approved | rejected        อาจารย์นิเทศก์ (users.is_supervisor) คนใดก็ได้ ตรวจ (เจ้าหน้าที่ไม่มีสิทธิ์)
---   approved  → accepted | declined        บริษัทตัดสิน (เห็นเฉพาะใบที่ approved แล้ว)
+--   submitted → accepted | declined        บริษัทตัดสินโดยตรง (ขั้นอาจารย์นิเทศก์อนุมัติยกเลิกแล้วใน migration 010)
+--   approved  → accepted | declined        ใบสมัครเก่าที่อาจารย์นิเทศก์เคยอนุมัติไว้
 --   accepted  → confirmed                  นักศึกษายืนยันสิทธิ์ได้ที่เดียวต่อภาคการศึกษา
 --     เมื่อยืนยันแล้ว ใบอื่นในภาคเดียวกัน: accepted → released, submitted/approved → withdrawn
 --   submitted | approved → withdrawn       นักศึกษาถอนใบสมัครเอง
@@ -21,14 +24,14 @@ CREATE TABLE IF NOT EXISTS users (
     auth_provider VARCHAR(10)  NOT NULL,
     username      VARCHAR(50)  NOT NULL UNIQUE,
     cognito_sub   VARCHAR(64)  UNIQUE,
-    role          VARCHAR(20)  NOT NULL CHECK (role IN ('student', 'advisor', 'staff', 'company')),
+    role          VARCHAR(20)  NOT NULL CONSTRAINT users_role_check CHECK (role IN ('student', 'committee', 'staff', 'company')),
     th_name       VARCHAR(255) NOT NULL,
     en_name       VARCHAR(255) NOT NULL,
     email         VARCHAR(255) NOT NULL,
     phone         VARCHAR(20),
     is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
-    -- อาจารย์นิเทศก์: บัญชีอาจารย์ที่อนุมัติใบสมัครได้ทุกใบ (เป็นอาจารย์ที่ปรึกษาด้วยได้)
-    is_supervisor BOOLEAN      NOT NULL DEFAULT FALSE CHECK (NOT is_supervisor OR role = 'advisor')
+    -- เดิมอาจารย์นิเทศก์: ยกเลิกแล้ว (migration 010) คงคอลัมน์ไว้เพื่อไม่ลบข้อมูลเดิม
+    is_supervisor BOOLEAN      NOT NULL DEFAULT FALSE
 );
 
 -- ภาคการศึกษาที่เปิดรับแผนสหกิจ (เปิดใช้งานได้ทีละภาค)
@@ -92,6 +95,7 @@ CREATE TABLE IF NOT EXISTS students (
     guardian_relation VARCHAR(100),
     guardian_address  TEXT,
     guardian_phone    VARCHAR(20),
+    -- เดิมอาจารย์ที่ปรึกษา: ยกเลิกแล้ว (migration 010) คงคอลัมน์ไว้เพื่อไม่ลบข้อมูลเดิม
     advisor_id        INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
     curriculum        VARCHAR(2) CHECK (curriculum IN ('61', '66')),
     course_grades     JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(course_grades) = 'object'),
@@ -109,7 +113,16 @@ CREATE TABLE IF NOT EXISTS students (
     -- ผลการคัดเลือกเข้าแผนสหกิจศึกษา: NULL = รอประกาศผล
     coop_result         VARCHAR(10) CHECK (coop_result IN ('passed', 'failed')),
     coop_result_by      INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
-    coop_result_at      TIMESTAMPTZ
+    coop_result_at      TIMESTAMPTZ,
+    -- เจ้าหน้าที่คัดกรองเบื้องต้นและโน้ต (กรรมการเห็น นักศึกษาไม่เห็น)
+    screening_status    VARCHAR(10) CHECK (screening_status IN ('passed', 'failed')),
+    screening_note      TEXT,
+    screening_by        INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
+    screening_at        TIMESTAMPTZ,
+    -- ผลการคัดเลือกของกรรมการ (นักศึกษาไม่เห็นจนกว่าเจ้าหน้าที่ประกาศเป็น coop_result)
+    committee_result    VARCHAR(10) CHECK (committee_result IN ('passed', 'failed')),
+    committee_by        INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
+    committee_at        TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_students_advisor_id ON students (advisor_id);
@@ -133,6 +146,9 @@ CREATE TABLE IF NOT EXISTS applications (
                    CHECK (status IN ('submitted', 'approved', 'rejected', 'accepted',
                                      'declined', 'confirmed', 'released', 'withdrawn')),
     resume_s3_key  VARCHAR(512),
+    -- ข้อความ/ไฟล์ PDF จากบริษัทถึงนักศึกษาตอนตัดสินผลคัดเลือก (ไม่บังคับ)
+    company_note   TEXT,
+    company_file   VARCHAR(255),
     submitted_at   TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (student_id, term_id, position_id)
 );

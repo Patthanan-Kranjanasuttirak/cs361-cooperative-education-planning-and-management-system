@@ -4,11 +4,12 @@ import ApiState from '../../components/ApiState';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
+import CompanyFeedback from '../../components/CompanyFeedback';
 import { APPLICATION_STATUS, APPLICATION_STEPS, STATUS_PROGRESS } from '../../config/applicationStatus';
 import '../CSS/myApplications.css';
 
-// ผู้อนุมัติใบสมัครที่เป็นบัญชีอาจารย์คืออาจารย์นิเทศก์
-const REVIEWER_ROLE = { advisor: 'อาจารย์นิเทศก์', staff: 'เจ้าหน้าที่' };
+// ผลการตรวจของใบสมัครเก่า (ขั้นอาจารย์นิเทศก์อนุมัติยกเลิกแล้ว บัญชีอาจารย์เดิมเป็นกรรมการ)
+const REVIEWER_ROLE = { committee: 'อาจารย์นิเทศก์', staff: 'เจ้าหน้าที่' };
 // ผลการตรวจ (application_reviews.status) ใช้ป้ายแยกจากสถานะใบสมัคร
 const REVIEW_RESULT = {
   approved: { label: 'อนุมัติ', tone: 'success' },
@@ -71,6 +72,7 @@ export default function MyApplications() {
       {confirmed && (
         <div className="app-banner">
           คุณยืนยันสิทธิ์ฝึกสหกิจที่ <strong>{confirmed.company_name}</strong> ตำแหน่ง <strong>{confirmed.position_name}</strong> แล้ว
+          <br />กรุณารอเจ้าหน้าที่ประกาศผลอีกครั้ง
         </div>
       )}
 
@@ -93,6 +95,7 @@ export default function MyApplications() {
 
               <StatusProgress status={app.status} />
               <p className="app-hint">{APPLICATION_STATUS[app.status]?.hint}</p>
+              <CompanyFeedback app={app} />
 
               {app.reviews.length > 0 && (
                 <div className="app-reviews">

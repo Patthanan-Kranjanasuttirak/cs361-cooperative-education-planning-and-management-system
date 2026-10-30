@@ -8,6 +8,21 @@ export const COOP_STATUS = {
   failed: { label: 'ไม่ผ่านเข้าแผนสหกิจศึกษา', tone: 'danger' },
 };
 
+// เจ้าหน้าที่คัดกรองเบื้องต้น และผลคัดเลือกของกรรมการ (เห็นเฉพาะเจ้าหน้าที่และกรรมการ)
+export const SCREENING_STATUS = {
+  none: { label: 'ยังไม่คัดกรอง', tone: 'muted' },
+  passed: { label: 'ผ่านคัดกรองเบื้องต้น', tone: 'info' },
+  failed: { label: 'ไม่ผ่านคัดกรองเบื้องต้น', tone: 'danger' },
+};
+export const COMMITTEE_RESULT = {
+  none: { label: 'รอกรรมการคัดเลือก', tone: 'muted' },
+  passed: { label: 'ผ่านการคัดเลือกจากคณะกรรมการ', tone: 'success' },
+  failed: { label: 'ไม่ผ่านการคัดเลือกจากคณะกรรมการ', tone: 'danger' },
+};
+
+// สมัครแผนแล้วแต่ยังไม่ประกาศผล = อยู่ในรอบคัดเลือกปัจจุบัน
+export const isCandidate = (student) => Boolean(student.profile_status) && !student.coop_result;
+
 export function coopStatus(student) {
   return student.coop_result ?? (student.profile_status ? 'waiting' : 'none');
 }

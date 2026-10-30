@@ -3,12 +3,15 @@ import { api } from '../../services/api';
 import ApiState from '../../components/ApiState';
 import { useState } from 'react';
 import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
+import CompanyFeedback from '../../components/CompanyFeedback';
 import DocumentLink from '../../components/DocumentLink';
 import GpaxValue from '../../components/GpaxValue';
 import { useAuth } from '../../context/useAuth';
 import { formatPhone } from '../../utils/phone';
 const ACCEPTED_STATUSES = ['accepted', 'confirmed'];
-const CONTACT_VISIBLE_STATUSES = ['approved', 'accepted', 'confirmed'];
+// ใบสมัครส่งถึงบริษัทโดยตรง (approved = ใบเก่าที่อาจารย์นิเทศก์เคยอนุมัติ)
+const PENDING_STATUSES = ['submitted', 'approved'];
+const CONTACT_VISIBLE_STATUSES = [...PENDING_STATUSES, 'accepted', 'confirmed'];
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
@@ -19,8 +22,9 @@ import '../CSS/companyPortal.css';
 // ป้ายในมุมมองของบริษัท (ต่างจากมุมมองนักศึกษาเล็กน้อย)
 const FILTERS = [
   { key: 'all', label: 'ทั้งหมด', match: () => true },
-  { key: 'approved', label: 'รอพิจารณา', match: (a) => a.status === 'approved' },
-  { key: 'accepted', label: 'ผ่านการคัดเลือก', match: (a) => ACCEPTED_STATUSES.includes(a.status) },
+  { key: 'pending', label: 'รอพิจารณา', match: (a) => PENDING_STATUSES.includes(a.status) },
+  { key: 'accepted', label: 'รอนักศึกษายืนยันสิทธิ์', match: (a) => a.status === 'accepted' },
+  { key: 'confirmed', label: 'ยืนยันสิทธิ์แล้ว', match: (a) => a.status === 'confirmed' },
   { key: 'declined', label: 'ไม่ผ่านการคัดเลือก', match: (a) => a.status === 'declined' },
   { key: 'released', label: 'สละสิทธิ์', match: (a) => a.status === 'released' || a.status === 'withdrawn' },
 ];
@@ -35,7 +39,7 @@ export default function Applicants() {
   const positions = allPositions.filter((p) => p.term_id == null || p.term_id === activeTerm?.term_id);
   const loading = positionsLoading || termLoading || applicantsLoading;
   const error = positionsError || termError || applicantsError;
-  const [filter, setFilter] = useState('approved');
+  const [filter, setFilter] = useState('pending');
   const [positionId, setPositionId] = useState('');
   const [notice, setNotice] = useState('');
   const [deciding, setDeciding] = useState(false);
@@ -47,24 +51,26 @@ export default function Applicants() {
   const inPosition = applicants.filter((a) => !positionId || a.position_id === Number(positionId));
   const visible = inPosition.filter(activeFilter.match);
 
-  const decide = async (app, decision) => {
-    if (deciding) return;
+  // กดผ่าน/ไม่ผ่าน → เปิดฟอร์มแนบข้อความหรือไฟล์ PDF ถึงนักศึกษา (ไม่บังคับ) แล้วกดยืนยัน
+  const [draft, setDraft] = useState(null);
+  const openDraft = (app, status) => setDraft({ applicationId: app.application_id, status, note: '', file: null, error: '' });
+
+  const decide = async (app) => {
+    if (deciding || !draft) return;
     const position = positionOf(app.position_id);
     const name = app.student.th_name;
-    let message =
-      decision === 'accepted'
-        ? `${name} ผ่านการคัดเลือก ตำแหน่ง ${position?.name ?? ''}?`
-        : `${name} ไม่ผ่านการคัดเลือก ตำแหน่ง ${position?.name ?? ''}?`;
-    if (decision === 'accepted' && position?.quota != null && acceptedCount(app.position_id) >= position.quota) {
-      message += `\n\nตำแหน่งนี้มีผู้ผ่านการคัดเลือกครบ ${position.quota} คนแล้ว ยังต้องการให้ผ่านเพิ่มหรือไม่`;
-    }
-    message += '\n\nเปลี่ยนแปลงภายหลังไม่ได้';
-    if (!window.confirm(message)) return;
+    if (draft.status === 'accepted' && position?.quota != null && acceptedCount(app.position_id) >= position.quota
+      && !window.confirm(`ตำแหน่งนี้มีผู้ผ่านการคัดเลือกครบ ${position.quota} คนแล้ว ยังต้องการให้ผ่านเพิ่มหรือไม่`)) return;
+    if (draft.file && draft.file.type !== 'application/pdf') { setDraft({ ...draft, error: 'แนบได้เฉพาะไฟล์ PDF' }); return; }
     setDeciding(true);
     try {
-      await api(`/company/applications/${app.application_id}/decision`, { method: 'PATCH', body: { status: decision } });
-      await reload(); setNotice(decision === 'accepted' ? `${name} ผ่านการคัดเลือกแล้ว — รอนักศึกษายืนยันสิทธิ์` : `${name} ไม่ผ่านการคัดเลือก`);
-    } catch (err) { setNotice(err.message); }
+      const company_file = draft.file
+        ? (await api('/company/decision-file', { method: 'POST', body: draft.file, headers: { 'Content-Type': 'application/pdf' } })).key
+        : null;
+      await api(`/company/applications/${app.application_id}/decision`, { method: 'PATCH', body: { status: draft.status, company_note: draft.note.trim() || null, company_file } });
+      setDraft(null);
+      await reload(); setNotice(draft.status === 'accepted' ? `${name} ผ่านการคัดเลือกแล้ว — รอนักศึกษายืนยันสิทธิ์` : `${name} ไม่ผ่านการคัดเลือก`);
+    } catch (err) { setDraft((prev) => prev && { ...prev, error: err.message }); }
     finally { setDeciding(false); }
   };
 
@@ -143,16 +149,54 @@ export default function Applicants() {
                 <DocumentLink url={app.transcript_url} label="ดู Transcript" />
               </div>
 
+              {app.status === 'accepted' && <p className="cp-released">ผ่านการคัดเลือกแล้ว — รอนักศึกษายืนยันสิทธิ์</p>}
+              {app.status === 'confirmed' && <p className="cp-confirmed">นักศึกษายืนยันสิทธิ์มาฝึกสหกิจศึกษาที่นี่แล้ว</p>}
               {app.status === 'released' && <p className="cp-released">นักศึกษาสละสิทธิ์ — ยืนยันไปฝึกที่สถานประกอบการอื่นแล้ว</p>}
               {app.status === 'withdrawn' && <p className="cp-released">นักศึกษาถอนใบสมัครแล้ว</p>}
 
-              {app.status === 'approved' ? (
+              {!PENDING_STATUSES.includes(app.status) && <CompanyFeedback app={app} title="ข้อความที่ส่งถึงนักศึกษา" />}
+
+              {PENDING_STATUSES.includes(app.status) && draft?.applicationId === app.application_id ? (
+                <form className={`cp-decision cp-decision--${draft.status}`} onSubmit={(e) => { e.preventDefault(); decide(app); }}>
+                  <fieldset disabled={deciding} className="profile-fields">
+                    <p className="cp-decision-title">
+                      {draft.status === 'accepted' ? 'ผ่านการคัดเลือก' : 'ไม่ผ่านการคัดเลือก'} · {positionOf(app.position_id)?.name ?? ''}
+                    </p>
+                    <label className="pending-label" htmlFor={`note-${app.application_id}`}>ข้อความถึงนักศึกษา (ไม่บังคับ)</label>
+                    <textarea
+                      id={`note-${app.application_id}`}
+                      className="profile-input"
+                      rows={3}
+                      maxLength={5000}
+                      value={draft.note}
+                      onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+                      placeholder={draft.status === 'accepted' ? 'เช่น วันเริ่มงาน เอกสารที่ต้องเตรียม ผู้ติดต่อ' : 'เช่น เหตุผลหรือคำแนะนำ'}
+                    />
+                    <label className="pending-label" htmlFor={`file-${app.application_id}`}>ไฟล์แนบ PDF (ไม่บังคับ)</label>
+                    <input
+                      id={`file-${app.application_id}`}
+                      type="file"
+                      accept="application/pdf"
+                      className="profile-input"
+                      onChange={(e) => setDraft({ ...draft, file: e.target.files[0] ?? null, error: '' })}
+                    />
+                    <p className="cp-decision-hint">นักศึกษาจะเห็นข้อความและไฟล์นี้ · ยืนยันแล้วเปลี่ยนผลภายหลังไม่ได้</p>
+                    {draft.error && <p role="alert" className="profile-error">{draft.error}</p>}
+                    <div className="app-actions pending-actions">
+                      <button type="button" className="app-btn app-btn--ghost" onClick={() => setDraft(null)}>ยกเลิก</button>
+                      <button type="submit" className="app-btn app-btn--primary">
+                        {deciding ? 'กำลังบันทึก…' : draft.status === 'accepted' ? 'ยืนยันผ่านการคัดเลือก' : 'ยืนยันไม่ผ่านการคัดเลือก'}
+                      </button>
+                    </div>
+                  </fieldset>
+                </form>
+              ) : PENDING_STATUSES.includes(app.status) ? (
                 <div className="app-actions pending-actions">
-                  <button type="button" className="app-btn app-btn--ghost" onClick={() => decide(app, 'declined')} disabled={deciding}>ไม่ผ่านการคัดเลือก</button>
-                  <button type="button" className="app-btn app-btn--primary" onClick={() => decide(app, 'accepted')} disabled={deciding}>ผ่านการคัดเลือก</button>
+                  <button type="button" className="app-btn app-btn--ghost" onClick={() => openDraft(app, 'declined')} disabled={deciding}>ไม่ผ่านการคัดเลือก</button>
+                  <button type="button" className="app-btn app-btn--primary" onClick={() => openDraft(app, 'accepted')} disabled={deciding}>ผ่านการคัดเลือก</button>
                 </div>
               ) : (
-                <p className="app-date all-submitted">อาจารย์นิเทศก์อนุมัติเมื่อ {formatDate(app.approved_at)}</p>
+                <p className="app-date all-submitted">ส่งใบสมัครเมื่อ {formatDate(app.submitted_at)}</p>
               )}
             </li>
           ))}

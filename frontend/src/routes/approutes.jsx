@@ -9,9 +9,9 @@ import Login from '../pages/Login';
 import MyApplications from '../pages/student/MyApplications';
 import Apply from '../pages/student/Apply';
 import Profile from '../pages/student/Profile';
-import PendingApplications from '../pages/advisor/PendingApplications';
-import MyStudents from '../pages/advisor/MyStudents';
-import StudentDetail from '../pages/advisor/StudentDetail';
+import SelectStudents from '../pages/committee/SelectStudents';
+import CoopReport from '../pages/CoopReport';
+import ConfirmedReport from '../pages/staff/ConfirmedReport';
 import AllApplications from '../pages/staff/AllApplications';
 import ManageCompanies from '../pages/staff/ManageCompanies';
 import ManageTerms from '../pages/staff/ManageTerms';
@@ -43,11 +43,10 @@ export default function approutes() {
             </Route>
           </Route>
 
-          <Route element={<ProtectedRoute roles={['advisor']} />}>
-            <Route path="/advisor" element={<RoleLayout />}>
-              <Route index element={<PendingApplications />} />
-              <Route path="students" element={<MyStudents />} />
-              <Route path="students/:studentId" element={<StudentDetail />} />
+          <Route element={<ProtectedRoute roles={['committee']} />}>
+            <Route path="/committee" element={<RoleLayout />}>
+              <Route index element={<SelectStudents />} />
+              <Route path="report" element={<CoopReport />} />
             </Route>
           </Route>
 
@@ -55,6 +54,8 @@ export default function approutes() {
             <Route path="/staff" element={<RoleLayout />}>
               <Route index element={<AllApplications />} />
               <Route path="students" element={<VerifyStudents />} />
+              <Route path="report" element={<CoopReport />} />
+              <Route path="confirmed" element={<ConfirmedReport />} />
               <Route path="companies" element={<ManageCompanies />} />
               <Route path="terms" element={<ManageTerms />} />
               <Route path="users" element={<ManageUsers />} />

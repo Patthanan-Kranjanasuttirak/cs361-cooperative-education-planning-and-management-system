@@ -27,6 +27,7 @@ try:
     sql(name, course_migration)
     sql(name, course_migration)
     sql(name, 'ALTER TABLE users DROP COLUMN is_supervisor;')
+    # 006 re-adds is_supervisor with the old advisor CHECK; 010 must replace it.
     sql(name, 'ALTER TABLE students DROP COLUMN profile_status, DROP COLUMN profile_comment, DROP COLUMN profile_reviewed_by, '
               'DROP COLUMN profile_reviewed_at, DROP COLUMN conduct_status, DROP COLUMN conduct_comment, DROP COLUMN conduct_reviewed_by, DROP COLUMN conduct_reviewed_at;')
     review_migration = (ROOT / 'database/migrations/006_student_review.sql').read_text()
@@ -45,6 +46,15 @@ try:
     coop_result_migration = (ROOT / 'database/migrations/009_coop_result.sql').read_text()
     sql(name, coop_result_migration)
     sql(name, coop_result_migration)
+    sql(name, 'ALTER TABLE students DROP COLUMN screening_status, DROP COLUMN screening_note, DROP COLUMN screening_by, DROP COLUMN screening_at, '
+              'DROP COLUMN committee_result, DROP COLUMN committee_by, DROP COLUMN committee_at;')
+    committee_migration = (ROOT / 'database/migrations/010_committee.sql').read_text()
+    sql(name, committee_migration)
+    sql(name, committee_migration)
+    sql(name, 'ALTER TABLE applications DROP COLUMN company_note, DROP COLUMN company_file;')
+    feedback_migration = (ROOT / 'database/migrations/011_company_feedback.sql').read_text()
+    sql(name, feedback_migration)
+    sql(name, feedback_migration)
     seed = (ROOT / 'database/seeds/005_v3-demo.sql').read_text()
     sql(name, seed)
     sql(name, seed)

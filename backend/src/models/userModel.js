@@ -2,16 +2,29 @@ import { query, transaction } from '../config/db.js';
 import { curriculumFor } from '../config/coopCriteria.js';
 import { isCsStudentId, isMockLogin } from '../../cognito-triggers/verify-auth-challenge/index.mjs';
 
+// เหตุที่นักศึกษาแก้ข้อมูลคุณสมบัติไม่ได้ (NULL = แก้ได้)
+//   announced = ประกาศผลแล้ว, selecting = สมัครแผนแล้วและกรรมการเริ่มคัดเลือกผู้ที่ยังไม่ประกาศ (ล็อกทั้งรอบ ไม่บอกว่าใครถูกตัดสินแล้ว),
+//   application = มีใบสมัครที่บริษัทรับ/ยืนยันแล้ว
+export const QUALIFICATION_LOCK = `CASE
+    WHEN s.coop_result IS NOT NULL THEN 'announced'
+    WHEN s.profile_status IS NOT NULL AND EXISTS (SELECT 1 FROM students c
+      WHERE c.profile_status IS NOT NULL AND c.coop_result IS NULL AND c.committee_result IS NOT NULL) THEN 'selecting'
+    WHEN EXISTS (SELECT 1 FROM applications a WHERE a.student_id=s.student_id AND a.status IN ('approved','accepted','confirmed')) THEN 'application'
+  END`;
+
 export const USER_COLUMNS = `u.user_id, u.auth_provider, u.username, u.role, u.th_name, u.en_name,
-  u.email, u.phone, u.is_active, u.is_supervisor, s.student_id, s.gpax::float8 AS gpax,
-  s.transcript_s3_key, s.cv_s3_key, s.photo_s3_key, s.advisor_id, advisor.th_name AS advisor_name,
+  u.email, u.phone, u.is_active, s.student_id, s.gpax::float8 AS gpax,
+  s.transcript_s3_key, s.cv_s3_key, s.photo_s3_key,
   s.address, s.major, s.guardian_name, s.guardian_relation, s.guardian_address, s.guardian_phone,
   s.curriculum, s.course_grades, s.declarations,
   s.profile_status, s.coop_result, s.coop_result_at,
-  (s.coop_result IS NOT NULL OR EXISTS (SELECT 1 FROM applications a WHERE a.student_id=s.student_id AND a.status IN ('approved','accepted','confirmed'))) AS qualification_locked,
+  ${QUALIFICATION_LOCK} AS qualification_lock, (${QUALIFICATION_LOCK}) IS NOT NULL AS qualification_locked,
   cu.company_id, cu.job_title`;
+// ผลคัดกรอง/คัดเลือกสำหรับเจ้าหน้าที่และกรรมการเท่านั้น (นักศึกษาไม่เห็น จึงไม่อยู่ใน USER_COLUMNS)
+export const SELECTION_COLUMNS = `s.screening_status, s.screening_note, s.screening_at,
+  (SELECT th_name FROM users WHERE user_id=s.screening_by) AS screening_by_name,
+  s.committee_result, s.committee_at, (SELECT th_name FROM users WHERE user_id=s.committee_by) AS committee_by_name`;
 export const USER_JOINS = `LEFT JOIN students s ON s.user_id=u.user_id
-  LEFT JOIN users advisor ON advisor.user_id=s.advisor_id
   LEFT JOIN company_users cu ON cu.user_id=u.user_id`;
 
 export async function userById(userId, db = { query }) {
@@ -55,7 +68,7 @@ export async function bindCognitoUser(claims) {
     condition = 'lower(email)=lower($2)';
     value = username;
   } else {
-    condition = "role IN ('student','advisor','staff') AND lower(username)=lower($2)";
+    condition = "role IN ('student','committee','staff') AND lower(username)=lower($2)";
     value = username;
   }
   const { rows } = await query(
@@ -108,11 +121,11 @@ export async function provisionTuStudent(profile, cognitoSub = null) {
   return userId ? userById(userId) : null;
 }
 
-// อาจารย์/เจ้าหน้าที่ที่ TU ยืนยันแล้ว: เข้าได้เมื่อเจ้าหน้าที่ลงทะเบียนไว้ โดย username หรืออีเมลตรงกับข้อมูลจาก TU
+// กรรมการ/เจ้าหน้าที่ที่ TU ยืนยันแล้ว: เข้าได้เมื่อเจ้าหน้าที่ลงทะเบียนไว้ โดย username หรืออีเมลตรงกับข้อมูลจาก TU
 // ถ้าไม่พบหรือพบหลายบัญชีจะไม่เดา คืน null
 export async function registeredTuStaff(username, emails) {
   const { rows } = await query(
-    `SELECT user_id FROM users WHERE role IN ('advisor','staff') AND is_active
+    `SELECT user_id FROM users WHERE role IN ('committee','staff') AND is_active
        AND (lower(username)=$1 OR lower(email)=ANY($2::text[]))`,
     [username, emails.filter(Boolean).map((email) => email.toLowerCase())]
   );

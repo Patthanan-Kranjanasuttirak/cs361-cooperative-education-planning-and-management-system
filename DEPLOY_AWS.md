@@ -136,13 +136,19 @@ ls cognito-triggers/*.zip
 - **ทำ snapshot ของ RDS ก่อนรันแบบ reset ทุกครั้ง**
 - `006_student_review.sql` (flow ตรวจข้อมูลก่อนสมัคร): เพิ่มคอลัมน์อย่างเดียว ไม่ลบข้อมูล
   - นักศึกษาที่เคยกรอกข้อมูลแล้วจะอยู่สถานะ "รอเจ้าหน้าที่ตรวจ"
-  - ต้องมีอาจารย์นิเทศก์อย่างน้อย 1 คน: seed ตั้ง `advisor.v3@tu.ac.th` ให้ หรือเจ้าหน้าที่ติ๊ก "อาจารย์นิเทศก์" ในหน้าจัดการผู้ใช้
-  - ต้องอัปโหลด zip ใหม่และ redeploy Amplify พร้อมกัน (frontend ใหม่เรียก `/api/supervisor/applications`)
+  - ขั้นอาจารย์นิเทศก์และการตรวจข้อมูลโดยเจ้าหน้าที่ยกเลิกแล้วใน migration 009/010
 - `007_company_allowance.sql`: เพิ่มเบี้ยเลี้ยง รายละเอียดเพิ่มเติม และไฟล์ PDF แนบของบริษัท (ไฟล์เปิดผ่าน `GET /api/companies/{id}/details-file` ใช้ resource `/api/companies/{proxy+}` เดิม ไม่ต้องเพิ่มใน API Gateway)
 - `008_student_profile.sql`: เพิ่ม CV, รูป, ที่อยู่, กลุ่มวิชาเอก และข้อมูลผู้ปกครองของนักศึกษา และยกเลิกการรับรองความประพฤติ (คอลัมน์ `conduct_*` ยังอยู่)
 - `009_coop_result.sql`: เพิ่มผลการคัดเลือกเข้าแผนสหกิจศึกษาของนักศึกษา (`coop_result`: NULL = รอประกาศผล, passed, failed) เจ้าหน้าที่ประกาศผ่าน `PUT /api/students/{id}/coop-result` (อยู่ใต้ resource `/api/{proxy+}` เดิม) แทนขั้นตอนเจ้าหน้าที่ตรวจข้อมูล นักศึกษายื่นใบสมัครได้เมื่อผล = passed เท่านั้น ถ้าใช้ seed demo ให้รัน `"seeds":true` ซ้ำหลัง migrate เพื่อตั้งนักศึกษา demo ให้ผ่านเข้าแผน
   - นักศึกษาเดิมต้องกรอกข้อมูลส่วนตัวให้ครบก่อนบันทึกครั้งถัดไป
   - ต้องอัปโหลด zip ใหม่และ redeploy Amplify พร้อมกัน
+- `010_committee.sql`: เปลี่ยนบทบาทอาจารย์ (`advisor`) ทั้งหมดเป็น **กรรมการสหกิจศึกษา** (`committee`) และเพิ่มขั้นตอนคัดเลือก
+  - เจ้าหน้าที่คัดกรอง + โน้ต (`PUT /api/students/{id}/screening`) → กรรมการเลือกผ่าน/ไม่ผ่าน (`PUT /api/students/{id}/committee-result`) → เจ้าหน้าที่ประกาศทีละคนหรือทั้งหมด (`POST /api/coop-selection/announce`) รายชื่อผู้ผ่าน `GET /api/reports/coop-passed?format=csv` ทั้งหมดอยู่ใต้ resource `/api/{proxy+}` เดิม ไม่ต้องเพิ่มใน API Gateway
+  - ใบสมัครส่งถึงบริษัทโดยตรง ไม่มีขั้นอาจารย์นิเทศก์อนุมัติ (endpoint `/api/applications/{id}/reviews`, `/api/advisor/*`, `/api/supervisor/*`, `PUT /api/students/{id}/coop-result` ถูกลบ)
+  - คอลัมน์ `users.is_supervisor`, `students.advisor_id` ยังอยู่ (ไม่ใช้แล้ว)
+  - **แก้ `MOCK_LOGINS` ของ Cognito trigger**: เปลี่ยน `advisor.v3@tu.ac.th` เป็น `committee.v3@tu.ac.th` (seed สร้างบัญชีกรรมการใหม่ บัญชี `advisor.v3` เดิมกลายเป็นกรรมการเช่นกัน)
+  - ต้องอัปโหลด zip ใหม่และ redeploy Amplify พร้อมกัน แล้วรัน `{"action":"migrate","seeds":true}`
+- `011_company_feedback.sql`: บริษัทแนบข้อความ/ไฟล์ PDF ถึงนักศึกษาตอนตัดสินผลคัดเลือก (`POST /api/company/decision-file`, `GET /api/applications/{id}/company-file` อยู่ใต้ resource `/api/{proxy+}` เดิม ไม่ต้องเพิ่มใน API Gateway)
 
 ## 7. Cognito
 
@@ -228,10 +234,10 @@ backend ต้องการ `Authorization: Bearer <ID token>` (ใช้ **ID
 ## 10. บัญชี mock
 
 `MOCK_LOGINS` เป็นรายการอีเมลคั่นด้วย `,` ทุกบัญชีใช้ `MOCK_PASSWORD` ตัวเดียวกัน (ตัดสินที่ verify-auth-challenge)
-บัญชีใน seed `005_v3-demo.sql`: `student1.v3`–`student8.v3@dome.tu.ac.th`, `advisor.v3@tu.ac.th`, `advisor.other.v3@tu.ac.th`, `staff.v3@tu.ac.th`, `company.v3@example.test`, `company.other.v3@example.test`
+บัญชีใน seed `005_v3-demo.sql`: `student1.v3`–`student8.v3@dome.tu.ac.th`, `committee.v3@tu.ac.th`, `staff.v3@tu.ac.th`, `company.v3@example.test`, `company.other.v3@example.test`
 
 - **อย่าใช้ `DEV_AUTH_PASSWORD` จาก `.env.example` เป็น `MOCK_PASSWORD`** (อยู่ใน repo ทุกคนเห็น)
-- ใครรู้รหัสนี้เป็น staff/advisor ได้ → ลบ `MOCK_LOGINS` หรือเปลี่ยนรหัสหลัง demo
+- ใครรู้รหัสนี้เป็น staff/committee ได้ → ลบ `MOCK_LOGINS` หรือเปลี่ยนรหัสหลัง demo
 - ถ้าเว็บตัดโดเมน `@dome.tu.ac.th` ก่อนส่งให้ Cognito บัญชีนักศึกษา mock อาจ login ไม่ได้ (ชื่อที่ส่งไม่ตรงกับรายการใน `MOCK_LOGINS`) ให้ตรวจ `AuthProvider.jsx`
 
 ## 11. ความปลอดภัยและค่าใช้จ่าย 

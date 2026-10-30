@@ -43,6 +43,13 @@ function ReviewStatus({ profile }) {
   </div>;
 }
 
+// เหตุที่แก้ข้อมูลคุณสมบัติไม่ได้ (qualification_lock จาก API)
+const LOCK_REASONS = {
+  announced: 'ประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษาแล้ว',
+  selecting: 'กรรมการกำลังคัดเลือกเข้าแผนสหกิจศึกษา',
+  application: 'ข้อมูลคุณสมบัติถูกใช้ในใบสมัครที่บริษัทรับแล้ว',
+};
+
 const MAX_FILE_MB = 4;
 const PHOTO_TYPES = ['image/jpeg', 'image/png'];
 // ช่องข้อความที่ต้องกรอก: [ชื่อใน API, ชื่อที่แสดง]
@@ -122,7 +129,7 @@ function ProfileForm({ profile, onSaved, onCancel }) {
     {validationErrors && <QualificationAlert errors={validationErrors} onClose={() => setValidationErrors(null)} />}
     {notice && <p role="status" className="app-banner">{notice}</p>}
     <ReviewStatus profile={profile} />
-    {locked && <p className="profile-hint">{profile.coop_result ? 'ประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษาแล้ว' : 'ข้อมูลคุณสมบัติถูกใช้ในใบสมัครที่อนุมัติแล้ว'} จึงแก้ไขข้อมูลคุณสมบัติไม่ได้ หากต้องแก้ไขกรุณาติดต่อเจ้าหน้าที่ ส่วนข้อมูลส่วนตัว ข้อมูลติดต่อ และข้อมูลผู้ปกครองยังแก้ไขได้</p>}
+    {locked && <p className="profile-hint">{LOCK_REASONS[profile.qualification_lock]} จึงแก้ไขข้อมูลคุณสมบัติไม่ได้ หากต้องแก้ไขกรุณาติดต่อเจ้าหน้าที่ ส่วนข้อมูลส่วนตัว ข้อมูลติดต่อ และข้อมูลผู้ปกครองยังแก้ไขได้</p>}
     <form className="profile-form" onSubmit={save} noValidate>
       <fieldset className="profile-section">
         <legend className="profile-section-title">ข้อมูลทั่วไป</legend>

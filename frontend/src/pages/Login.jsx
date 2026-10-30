@@ -11,7 +11,7 @@ import './CSS/login.css';
 
 const LOGIN_ROLES = [
   { value: 'student', label: 'นักศึกษา (Student)' },
-  { value: 'advisor', label: 'อาจารย์ที่ปรึกษา (Advisor)' },
+  { value: 'committee', label: 'กรรมการสหกิจศึกษา (Committee)' },
   { value: 'staff', label: 'เจ้าหน้าที่ (Staff)' },
   { value: 'company', label: 'ผู้ประสานงานสถานประกอบการ (Company Coordinator)' },
 ];
@@ -96,7 +96,7 @@ export default function Login() {
             <h1 id="login-title">เข้าสู่ระบบ</h1>
             <p>{role === 'company'
               ? 'สำหรับผู้ประสานงานสถานประกอบการ ใช้อีเมลทั่วไปหรือ Google'
-              : tuLogin ? 'สำหรับนักศึกษา ใช้บัญชีมหาวิทยาลัย (TU)' : 'สำหรับอาจารย์และเจ้าหน้าที่'}</p>
+              : tuLogin ? 'สำหรับนักศึกษา ใช้บัญชีมหาวิทยาลัย (TU)' : 'สำหรับกรรมการและเจ้าหน้าที่'}</p>
           </header>
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="login-role-field">
@@ -113,7 +113,7 @@ export default function Login() {
             <div className="login-credentials">
               <div className="login-field">
                 <label className="login-label" htmlFor="login-email">{role === 'student' ? 'ชื่อผู้ใช้ TU' : 'อีเมล'}</label>
-                {/* นักศึกษาตรวจกับ TU API ด้วยรหัสนักศึกษา; อาจารย์/เจ้าหน้าที่/ผู้ประสานงานใช้บัญชี mock ไปก่อน */}
+                {/* นักศึกษาตรวจกับ TU API ด้วยรหัสนักศึกษา; กรรมการ/เจ้าหน้าที่/ผู้ประสานงานใช้บัญชี mock ไปก่อน */}
                 <input id="login-email" className="login-input" type={role === 'student' ? 'text' : 'email'} autoComplete="username"
                   placeholder={role === 'student' ? 'รหัสนักศึกษา เช่น 6609611234' : role === 'company' ? 'name@company.com' : 'name@tu.ac.th'} required value={email}
                   onChange={(e) => setEmail(e.target.value)} />
