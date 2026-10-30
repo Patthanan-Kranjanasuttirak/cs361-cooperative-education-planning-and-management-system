@@ -145,3 +145,14 @@
 .cp-contact-item:hover {
   text-decoration: underline;
 }
+
+/* ปุ่มที่หน้าตาเหมือนลิงก์ (เช่น ลบไฟล์แนบ) */
+.cp-link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #dc2626;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}

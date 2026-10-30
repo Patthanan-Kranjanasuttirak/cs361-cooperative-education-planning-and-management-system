@@ -6,6 +6,7 @@ import companiesRouter from "./routes/companies.js";
 import v3Router from './routes/v3.js';
 import documentsRouter from './routes/documents.js';
 import companyLogosRouter from './routes/companyLogos.js';
+import companyFilesRouter from './routes/companyFiles.js';
 import { randomUUID } from 'node:crypto';
 import { notFound, errorHandler } from "./middlewares/errorHandler.js";
 
@@ -32,6 +33,7 @@ app.get("/api/db-check", async (_req, res) => {
 app.use("/api/companies", companiesRouter);
 app.use('/api/documents', documentsRouter);
 app.use('/api', companyLogosRouter);
+app.use('/api', companyFilesRouter);
 app.use('/api', v3Router);
 
 app.use(notFound);

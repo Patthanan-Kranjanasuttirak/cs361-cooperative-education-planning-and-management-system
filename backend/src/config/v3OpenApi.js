@@ -12,7 +12,7 @@ export const v3Schemas = {
   CourseGrades:{type:'object',maxProperties:50,description:'เกรดแยกตามรหัสวิชา เช่น คพ.100; IP = กำลังศึกษา',additionalProperties:{type:'string',enum:['A','B+','B','C+','C','D+','D','F','IP']}},
   Declarations:record({mustPass:{type:'boolean'},discipline:{type:'boolean'},accept:{type:'boolean'}}),
   StudentWrite: record({ curriculum:{type:'string',enum:['61','66'],nullable:true},course_grades:ref('CourseGrades'),declarations:ref('Declarations'),gpax: { type:'number', minimum:0, maximum:4, multipleOf:0.01, nullable:true }, phone:string(20,true), transcript_s3_key:string(512,true) }),
-  CompanyWrite: record({ name:string(255), logo:string(255,true), description:string(20000,true), province:string(100,true), location:string(10000,true), application_start:{type:'string',format:'date',nullable:true}, application_end:{type:'string',format:'date',nullable:true} }),
+  CompanyWrite: record({ name:string(255), logo:string(255,true), description:string(20000,true), province:string(100,true), location:string(10000,true), allowance:string(255,true), additional_info:string(20000,true), additional_file:string(255,true), application_start:{type:'string',format:'date',nullable:true}, application_end:{type:'string',format:'date',nullable:true} }),
   PositionWrite: record({ company_id:integer(), name:string(255), description:string(20000,true), quota:{type:'integer',minimum:0,nullable:true}, term_id:integer(true), is_open:{type:'boolean'} }),
   TermWrite: record({ code:{type:'string',pattern:'^[123]/25[0-9]{2}$'}, ...Object.fromEntries(['plan_open_at','plan_close_at','coop_start','coop_end'].map((key) => [key,{type:'string',format:'date'}])) }, ['code','plan_open_at','plan_close_at','coop_start','coop_end']),
   ApplicationWrite: record({ position_id:integer(), term_id:integer(), resume_s3_key:string(512) }, ['position_id','resume_s3_key']),
@@ -66,6 +66,9 @@ add('/company/logo','post','Companies','Company: อัปโหลดโลโ�
 paths['/api/company/logo'].post.requestBody = {required:true,content:Object.fromEntries(['image/png','image/jpeg','image/webp','image/svg+xml'].map((type) => [type,{schema:{type:'string',format:'binary'}}]))};
 add('/company-logos/{companyId}/{filename}','get','Companies','โลโก้สาธารณะที่บันทึกไว้กับบริษัท (development only)',null,null,{public:true,parameters:[{name:'companyId',in:'path',required:true,schema:integer()},{name:'filename',in:'path',required:true,schema:string()}]});
 paths['/api/company-logos/{companyId}/{filename}'].get.responses[200] = {description:'Company logo image',content:Object.fromEntries(['image/png','image/jpeg','image/webp','image/svg+xml'].map((type) => [type,{schema:{type:'string',format:'binary'}}]))};
+add('/company/details-file','post','Companies','Company: อัปโหลด PDF รายละเอียดเพิ่มเติม ไม่เกิน 4 MB แล้วส่ง key ใน additional_file ของ PUT /company/profile',{type:'object',properties:{key:string(255)}},'unused',{status:201,binary:true});
+add('/companies/{id}/details-file','get','Companies','PDF รายละเอียดเพิ่มเติมที่บันทึกไว้กับบริษัท',null,null,{public:true,parameters:[{name:'id',in:'path',required:true,schema:integer()}]});
+paths['/api/companies/{id}/details-file'].get.responses[200] = {description:'PDF (inline)',content:{'application/pdf':{schema:{type:'string',format:'binary'}}}};
 for (const prefix of ['/positions','/company/positions']) {
   add(prefix,'get','Positions','Staff/company: ตำแหน่งตามสิทธิ์',array('Position'),null,{parameters:prefix==='/positions' ? [{name:'company_id',in:'query',schema:integer()}] : []});
   add(prefix,'post','Positions','เพิ่มตำแหน่ง (staff ระบุ company_id; company ใช้บริษัทตนเอง)',ref('Position'),'PositionWrite',{status:201});

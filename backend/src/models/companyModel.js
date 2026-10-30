@@ -16,6 +16,7 @@ const ACTIVE_POSITIONS = `
 // - positions รวมตำแหน่งที่ไม่ผูกภาคและตำแหน่งของภาคที่ active เรียงตามลำดับที่เพิ่ม
 const COMPANY_COLUMNS = `
   c.company_id AS id, c.name, c.logo, c.description, c.province, c.location,
+  c.allowance, c.additional_info, c.additional_file IS NOT NULL AS has_additional_file,
   to_char(c.application_start, 'YYYY-MM-DD') AS application_start,
   to_char(c.application_end, 'YYYY-MM-DD') AS application_end,
   COALESCE(

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { getImageUrl } from '../utils/image';
+import { API_URL } from '../services/api';
 import locationIcon from '../assets/location.png';
 import calendarIcon from '../assets/calendar.png';
 import briefcaseIcon from '../assets/briefcase.png';
@@ -114,6 +115,11 @@ export default function CompanyDetailModal({ company, onClose }) {
             </span>
           </div>
 
+          <div className="modal-info-row">
+            <span className="modal-info-label">เบี้ยเลี้ยง</span>
+            <span className="modal-info-value">{company.allowance || 'ไม่ระบุ'}</span>
+          </div>
+
           <div className="modal-section">
             <span className="modal-section-title modal-positions-title">
               <img src={briefcaseIcon} alt="positions" className="modal-info-icon" />
@@ -139,6 +145,18 @@ export default function CompanyDetailModal({ company, onClose }) {
               <p className="modal-description-text">ยังไม่มีข้อมูลตำแหน่งที่เปิดรับ</p>
             )}
           </div>
+
+          {(company.additional_info || company.has_additional_file) && (
+            <div className="modal-section">
+              <span className="modal-section-title">รายละเอียดเพิ่มเติม</span>
+              {company.additional_info && <p className="modal-description-text modal-additional-text">{company.additional_info}</p>}
+              {company.has_additional_file && (
+                <a href={`${API_URL}/companies/${company.id}/details-file`} target="_blank" rel="noopener noreferrer" className="modal-file-link">
+                  เปิดไฟล์รายละเอียดเพิ่มเติม (PDF) ↗
+                </a>
+              )}
+            </div>
+          )}
 
           <a
             href={companyLink}

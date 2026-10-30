@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS companies (
     description       TEXT,
     province          VARCHAR(100),
     location          TEXT,
+    allowance         VARCHAR(255),
+    additional_info   TEXT,
+    additional_file   VARCHAR(255), -- key ในที่เก็บไฟล์ ของ PDF รายละเอียดเพิ่มเติม
     application_start DATE,
     application_end   DATE,
     CHECK (application_end IS NULL OR application_start IS NULL OR application_end >= application_start)

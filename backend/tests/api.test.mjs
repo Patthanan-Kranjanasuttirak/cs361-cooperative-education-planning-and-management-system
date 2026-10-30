@@ -305,6 +305,29 @@ test('company logo uploads persist through profile save, respect ownership, and 
   assert.equal((await request(`/company-logos/${profile.company_id}/${encodeURIComponent('../.env')}`)).status, 404);
 });
 
+test('company details PDF is optional, owned by the company, and public only after it is saved', async () => {
+  const options = { method:'POST', raw:pdf, headers:{'Content-Type':'application/pdf'} };
+  assert.equal((await request('/company/details-file', null, options)).status, 401);
+  assert.equal((await request('/company/details-file', accounts.staff.token, options)).status, 403);
+  assert.equal((await request('/company/details-file', accounts.integrationCompany.token, { ...options, raw:Buffer.from('not a pdf') })).status, 422);
+  const profile = await ok('/company/profile', accounts.integrationCompany.token);
+  const upload = await ok('/company/details-file', accounts.integrationCompany.token, options, 201);
+  const other = await ok('/company/details-file', accounts.otherCompany.token, options, 201);
+  assert.equal((await request(`/companies/${profile.company_id}/details-file`)).status, 404, 'Uncommitted uploads are not published');
+  assert.equal((await request('/company/profile', accounts.integrationCompany.token, {method:'PUT',body:{additional_file:other.key}})).status, 422);
+  await ok('/company/profile', accounts.integrationCompany.token, {method:'PUT',body:{allowance:'300 บาท/วัน', additional_info:'มีที่พัก', additional_file:upload.key}});
+  const company = await ok(`/companies/${profile.company_id}`);
+  assert.equal(company.allowance, '300 บาท/วัน');
+  assert.equal(company.has_additional_file, true);
+  assert.equal(company.additional_file, undefined, 'Storage key is not exposed publicly');
+  const file = await fetch(`${base}/companies/${profile.company_id}/details-file`);
+  assert.equal(file.status, 200);
+  assert.match(file.headers.get('content-type'), /^application\/pdf/);
+  assert.deepEqual(Buffer.from(await file.arrayBuffer()), pdf);
+  await ok('/company/profile', accounts.integrationCompany.token, {method:'PUT',body:{additional_file:null}});
+  assert.equal((await request(`/companies/${profile.company_id}/details-file`)).status, 404);
+});
+
 test('staff verifies the profile and the advisor certifies conduct before applying; any supervisor approves', async () => {
   const studentPath = `/students/${studentUser.student_id}`;
   const position = await ok('/positions', accounts.staff.token, { method: 'POST', body: { company_id: positions[0].company_id, name: 'Review flow position', quota: 1, term_id: null } }, 201);

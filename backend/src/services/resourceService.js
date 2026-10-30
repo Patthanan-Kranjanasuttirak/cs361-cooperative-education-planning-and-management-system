@@ -212,13 +212,18 @@ export async function companyProfile(actor, companyId, db = { query }) {
 
 export async function saveCompany(actor, companyId, body) {
   if (actor.role === 'company' && (!companyId || actor.company_id !== companyId)) denied();
-  v.object(body, ['name', 'logo', 'description', 'province', 'location', 'application_start', 'application_end']);
+  v.object(body, ['name', 'logo', 'description', 'province', 'location', 'allowance', 'additional_info', 'additional_file', 'application_start', 'application_end']);
   return transaction(async (db) => {
     if (companyId) await db.query('SELECT company_id FROM companies WHERE company_id=$1 FOR UPDATE', [companyId]);
     const old = companyId ? await companyProfile(actor, companyId, db) : null;
     const data = { name: v.text(body.name ?? old?.name, 'name', 255) };
-    for (const [key, max] of [['logo', 255], ['description', 20000], ['province', 100], ['location', 10000]]) {
+    for (const [key, max] of [['logo', 255], ['description', 20000], ['province', 100], ['location', 10000], ['allowance', 255], ['additional_info', 20000]]) {
       if (body[key] !== undefined) data[key] = v.text(body[key], key, max, { nullable: true });
+    }
+    if (body.additional_file !== undefined) {
+      data.additional_file = v.text(body.additional_file, 'additional_file', 255, { nullable: true });
+      // รับเฉพาะไฟล์ที่อัปโหลดผ่าน POST /company/details-file ของบริษัทนี้
+      if (data.additional_file && !new RegExp(`^company-files/${companyId}/details-[a-f0-9-]{36}\\.pdf$`).test(data.additional_file)) v.invalid('additional_file', 'ไฟล์ไม่ถูกต้อง');
     }
     for (const key of ['application_start', 'application_end']) if (body[key] !== undefined) data[key] = v.date(body[key], key, true);
     const start = data.application_start === undefined ? old?.application_start : data.application_start;

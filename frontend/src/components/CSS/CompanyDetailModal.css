@@ -291,3 +291,20 @@
 
 
 
+
+/* รักษาการขึ้นบรรทัดใหม่ที่บริษัทพิมพ์ไว้ */
+.modal-additional-text {
+  white-space: pre-line;
+}
+
+.modal-file-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: #ea580c;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.modal-file-link:hover {
+  text-decoration: underline;
+}

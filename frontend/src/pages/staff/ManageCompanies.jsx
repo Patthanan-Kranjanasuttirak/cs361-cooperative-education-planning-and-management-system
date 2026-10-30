@@ -14,7 +14,7 @@ import '../CSS/pendingApplications.css';
 import '../CSS/manageCompanies.css';
 
 const PAGE_SIZE = 15;
-const EMPTY_FORM = { logo: '', name: '', description: '', province: '', location: '', application_start: '', application_end: '' };
+const EMPTY_FORM = { logo: '', name: '', description: '', province: '', location: '', allowance: '', additional_info: '', application_start: '', application_end: '' };
 
 function CompanyDialog({ initial, provinces, onSave, onClose }) {
   const isNew = !initial;
@@ -98,6 +98,12 @@ function CompanyDialog({ initial, provinces, onSave, onClose }) {
               </div>
             </div>
             {errors.period && <p className="profile-error">{errors.period}</p>}
+
+            <label className="profile-label" htmlFor="cm-allowance">เบี้ยเลี้ยง</label>
+            <input id="cm-allowance" name="allowance" className="profile-input" maxLength={255} placeholder="เช่น 300 บาท/วัน หรือ ไม่มี" value={form.allowance} onChange={change} />
+
+            <label className="profile-label" htmlFor="cm-additional">รายละเอียดเพิ่มเติม</label>
+            <textarea id="cm-additional" name="additional_info" rows={3} className="profile-input cm-textarea" maxLength={20000} placeholder="เช่น สวัสดิการ ที่พัก การเดินทาง เวลาทำงาน" value={form.additional_info} onChange={change} />
           </fieldset>
           {isNew && <p className="profile-hint">บันทึกสถานประกอบการก่อน แล้วกด "ดูข้อมูล" เพื่อเพิ่มผู้ประสานงาน</p>}
         </div>
@@ -207,6 +213,8 @@ function pick(c) {
     description: c.description ?? '',
     province: c.province ?? '',
     location: c.location ?? '',
+    allowance: c.allowance ?? '',
+    additional_info: c.additional_info ?? '',
     application_start: c.application_start ?? '',
     application_end: c.application_end ?? '',
   };
