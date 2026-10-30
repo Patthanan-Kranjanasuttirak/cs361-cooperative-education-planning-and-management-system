@@ -154,3 +154,12 @@
 .students-row:hover .students-name-link {
   text-decoration: underline;
 }
+
+/* หน้าประกาศผลสหกิจศึกษา: ช่องเลือกผลการคัดเลือกเข้าแผน */
+.verify-coop-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  max-width: 320px;
+}

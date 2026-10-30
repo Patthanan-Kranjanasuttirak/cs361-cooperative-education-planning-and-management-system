@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
-import { api } from '../../services/api';
-import ReviewPanel from '../../components/ReviewPanel';
-import StudentReviewBadge from '../../components/StudentReviewBadge';
+import StudentPersonalInfo from '../../components/StudentPersonalInfo';
+import CoopResultBadge from '../../components/CoopResultBadge';
 import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
 import DocumentLink from '../../components/DocumentLink';
 import GpaxValue from '../../components/GpaxValue';
@@ -24,19 +22,8 @@ const formatDateTime = (iso) =>
 export default function StudentDetail() {
   const { studentId } = useParams();
   const { user } = useAuth();
-  const { data: detail, setData, loading, error } = useApi(`/advisor/students/${studentId}`, null);
-  const [notice, setNotice] = useState('');
+  const { data: detail, loading, error } = useApi(`/advisor/students/${studentId}`, null);
   const summary = detail;
-
-  // รับรองความประพฤติได้เฉพาะอาจารย์ที่ปรึกษาของนักศึกษา
-  const certify = async (decision, comment) => {
-    try {
-      const result = await api(`/students/${studentId}/conduct-review`, { method: 'POST', body: { status: decision === 'approved' ? 'certified' : 'rejected', comment } });
-      setData((prev) => ({ ...prev, ...result }));
-      setNotice('บันทึกผลการรับรองความประพฤติแล้ว');
-      return true;
-    } catch (err) { setNotice(err.message); return false; }
-  };
 
   const back = (
     <Link to="/advisor/students" className="sd-back">← นักศึกษาในความดูแล</Link>
@@ -54,7 +41,6 @@ export default function StudentDetail() {
   }
 
   const pending = detail.applications.filter((a) => a.status === 'submitted').length;
-  const isAdvisor = detail.advisor_id === user.user_id;
   const isSupervisor = user.is_supervisor;
   const info = [
     ['รหัสนักศึกษา', summary.student_code],
@@ -71,7 +57,6 @@ export default function StudentDetail() {
       <div className="app-header">
         <h1 className="app-title">{summary.th_name}</h1>
       </div>
-      {notice && <div className="app-banner" role="status">{notice}</div>}
 
       <div className="profile-form">
         <div className="profile-section">
@@ -87,32 +72,18 @@ export default function StudentDetail() {
         </div>
 
         <div className="profile-section">
-          <p className="profile-section-title">การตรวจก่อนสมัคร</p>
+          <p className="profile-section-title">ข้อมูลส่วนตัว</p>
+          <StudentPersonalInfo student={detail} />
+        </div>
+
+        <div className="profile-section">
+          <p className="profile-section-title">สถานะสหกิจศึกษา</p>
           <dl className="sd-info">
             <div className="sd-info-row">
-              <dt className="pending-label">ข้อมูลส่วนตัว (เจ้าหน้าที่)</dt>
-              <dd className="sd-info-value"><StudentReviewBadge kind="profile" status={detail.profile_status} /></dd>
-            </div>
-            <div className="sd-info-row">
-              <dt className="pending-label">ความประพฤติ (อาจารย์ที่ปรึกษา)</dt>
-              <dd className="sd-info-value">
-                <StudentReviewBadge kind="conduct" status={detail.conduct_status} />
-                {detail.conduct_comment && <p className="sd-muted">“{detail.conduct_comment}”</p>}
-              </dd>
+              <dt className="pending-label">ผลการคัดเลือกเข้าแผนสหกิจศึกษา</dt>
+              <dd className="sd-info-value"><CoopResultBadge student={detail} /></dd>
             </div>
           </dl>
-          {isAdvisor && (
-            <>
-              <p className="sd-muted sd-gap">{detail.conduct_status ? 'เปลี่ยนผลการรับรองได้หากข้อมูลเปลี่ยนไป' : 'ในฐานะอาจารย์ที่ปรึกษา กรุณารับรองความประพฤติของนักศึกษาก่อนนักศึกษายื่นใบสมัคร'}</p>
-              <ReviewPanel
-                id={`conduct-${detail.student_id}`}
-                labels={{ approved: 'รับรองความประพฤติ', rejected: 'ไม่รับรอง' }}
-                rejectPlaceholder="เหตุผลที่ไม่รับรอง"
-                onOpen={() => setNotice('')}
-                onSubmit={certify}
-              />
-            </>
-          )}
         </div>
 
         <div className="profile-section">

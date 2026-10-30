@@ -40,8 +40,7 @@ router.put('/students/:id/advisor', staff, async (req, res) => {
   v.object(req.body, ['advisor_id']);
   res.json(await resources.saveStudent(req.user, v.id(req.params.id), { advisor_id: v.id(req.body.advisor_id, 'advisor_id', true) }));
 });
-router.post('/students/:id/profile-review', staff, async (req, res) => res.json(await resources.reviewStudent(req.user, v.id(req.params.id), 'profile', req.body)));
-router.post('/students/:id/conduct-review', allowRoles('advisor'), async (req, res) => res.json(await resources.reviewStudent(req.user, v.id(req.params.id), 'conduct', req.body)));
+router.put('/students/:id/coop-result', staff, async (req, res) => res.json(await resources.setCoopResult(v.id(req.params.id), req.user, req.body)));
 router.get('/advisor/students', allowRoles('advisor'), async (req, res) => res.json(await resources.listStudents(req.user)));
 router.get('/advisor/students/:id', allowRoles('advisor'), async (req, res) => {
   const student = await resources.studentProfile(req.user, v.id(req.params.id));

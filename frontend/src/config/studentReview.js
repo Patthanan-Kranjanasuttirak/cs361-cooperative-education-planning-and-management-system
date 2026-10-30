@@ -1,24 +1,18 @@
-// การตรวจข้อมูลนักศึกษาก่อนสมัคร (ตรงกับ students.profile_status / conduct_status ใน database/init/001_schema.sql)
-// - เจ้าหน้าที่ตรวจข้อมูลส่วนตัว: null = ยังไม่ส่ง → pending → verified | returned (แก้แล้วกลับไป pending)
-// - อาจารย์ที่ปรึกษารับรองความประพฤติ: null = รอรับรอง → certified | rejected
+// สถานะสหกิจศึกษาของนักศึกษา (students.profile_status + students.coop_result ใน database/init/001_schema.sql)
+// - ยังไม่บันทึกข้อมูลส่วนตัว → บันทึกแล้วรอประกาศผล → เจ้าหน้าที่ประกาศว่าผ่าน/ไม่ผ่านเข้าแผนสหกิจศึกษา
 // tone ใช้สีเดียวกับป้ายสถานะใบสมัคร
-export const PROFILE_STATUS = {
-  none: { label: 'ยังไม่ส่งข้อมูล', tone: 'muted' },
-  pending: { label: 'รอเจ้าหน้าที่ตรวจ', tone: 'pending' },
-  verified: { label: 'ข้อมูลถูกต้อง', tone: 'success' },
-  returned: { label: 'ส่งกลับให้แก้ไข', tone: 'danger' },
+export const COOP_STATUS = {
+  none: { label: 'ยังไม่บันทึกข้อมูล', tone: 'muted' },
+  waiting: { label: 'รอประกาศผลสหกิจศึกษา', tone: 'pending' },
+  passed: { label: 'ผ่านเข้าแผนสหกิจศึกษา', tone: 'success' },
+  failed: { label: 'ไม่ผ่านเข้าแผนสหกิจศึกษา', tone: 'danger' },
 };
 
-export const CONDUCT_STATUS = {
-  none: { label: 'รอรับรองความประพฤติ', tone: 'pending' },
-  certified: { label: 'รับรองความประพฤติแล้ว', tone: 'success' },
-  rejected: { label: 'ไม่รับรองความประพฤติ', tone: 'danger' },
-};
+export function coopStatus(student) {
+  return student.coop_result ?? (student.profile_status ? 'waiting' : 'none');
+}
 
-// ยื่นใบสมัครได้เมื่อผ่านทั้งสองขั้น (backend ตรวจซ้ำตอน POST /applications)
+// ยื่นใบสมัครได้เมื่อผ่านเข้าแผนสหกิจศึกษา (backend ตรวจซ้ำตอน POST /applications)
 export function reviewBlockers(student) {
-  const blockers = [];
-  if (student.profile_status !== 'verified') blockers.push('เจ้าหน้าที่ยืนยันว่าข้อมูลส่วนตัวถูกต้อง');
-  if (student.conduct_status !== 'certified') blockers.push('อาจารย์ที่ปรึกษารับรองความประพฤติ');
-  return blockers;
+  return student.coop_result === 'passed' ? [] : ['ผ่านการคัดเลือกเข้าแผนสหกิจศึกษา'];
 }

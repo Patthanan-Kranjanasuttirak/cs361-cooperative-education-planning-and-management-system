@@ -33,4 +33,5 @@ export async function api(path, { method = 'GET', body, signal, headers = {}, an
   return blob ? response.blob() : response.json();
 }
 
-export const uploadDocument = (file, kind) => api(`/documents?kind=${kind}`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf' } });
+// kind: transcript | resume | cv (PDF) หรือ photo (JPG/PNG)
+export const uploadDocument = (file, kind) => api(`/documents?kind=${kind}`, { method: 'POST', body: file, headers: { 'Content-Type': kind === 'photo' ? file.type : 'application/pdf' } });

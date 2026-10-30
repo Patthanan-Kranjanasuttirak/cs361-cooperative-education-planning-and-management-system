@@ -8,6 +8,8 @@ import { issueDevelopmentToken } from '../src/middlewares/auth.js';
 
 let server, base, accounts = {}, positions, term, studentUser, student;
 const pdf = Buffer.from('%PDF-1.4\n1 0 obj<</Type /Catalog>>endobj\n%%EOF');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSAAAAABJRU5ErkJggg==', 'base64');
+const personalInfo = { address: '99 ถ.พหลโยธิน คลองหลวง ปทุมธานี', major: 'CIS', guardian_name: 'สมชาย ใจดี', guardian_relation: 'บิดา', guardian_address: '1 ถ.สุขุมวิท กรุงเทพฯ', guardian_phone: '0811111111' };
 const qualification66 = {
   curriculum: '66',
   course_grades: { 'คพ.100':'C+', 'คพ.101':'C+', 'คพ.102':'C+', 'คพ.111':'C+', 'คพ.216':'C+', 'คพ.251':'C+', 'คพ.261':'C+', 'คพ.180':'IP', 'คพ.331':'B' },
@@ -196,7 +198,28 @@ test('student profile, PDF upload, server-side eligibility and cross-student own
   // Staff can maintain records even when a student is ineligible; submission still rejects them.
   await ok(`/students/${studentUser.student_id}`, accounts.staff.token, { method: 'PUT', body: { gpax: 2.74, transcript_s3_key: transcript.key } });
   assert.equal((await request('/applications', student.token, { method: 'POST', body: { position_id: positions[0].position_id, resume_s3_key: resume.key } })).status, 422);
-  await ok('/students/me', student.token, { method: 'PUT', body: { ...qualification66, gpax: 2.75, phone: '0812345678', transcript_s3_key: transcript.key } });
+  // ข้อมูลส่วนตัว (CV, รูป, ที่อยู่, กลุ่มวิชาเอก, ผู้ปกครอง) ต้องครบก่อนบันทึก
+  const cv = await upload(student.token, 'cv');
+  assert.equal((await request('/documents?kind=photo', student.token, { method: 'POST', raw: pdf, headers: { 'Content-Type': 'image/png' } })).status, 422);
+  const photo = await ok('/documents?kind=photo', student.token, { method: 'POST', raw: png, headers: { 'Content-Type': 'image/png' } }, 201);
+  assert.match(photo.key, /\/photo-[a-f0-9-]+\.png$/);
+  const qualified = { ...qualification66, gpax: 2.75, phone: '0812345678', transcript_s3_key: transcript.key };
+  const beforeInfo = await ok('/students/me', student.token);
+  const missingInfo = await request('/students/me', student.token, { method: 'PUT', body: { ...qualified, ...personalInfo, guardian_name: '', cv_s3_key: cv.key } });
+  assert.equal(missingInfo.status, 422);
+  assert.deepEqual(missingInfo.body.error.details.profile, ['กรุณาอัปโหลดรูปนักศึกษา', 'กรุณากรอกชื่อ-นามสกุลผู้ปกครอง']);
+  assert.deepEqual(await ok('/students/me', student.token), beforeInfo, 'Incomplete personal info must not save anything');
+  for (const invalid of [{ major: 'CS' }, { guardian_phone: 'abc' }, { cv_s3_key: transcript.key }, { photo_s3_key: cv.key }]) {
+    assert.equal((await request('/students/me', student.token, { method: 'PUT', body: { ...qualified, ...personalInfo, cv_s3_key: cv.key, photo_s3_key: photo.key, ...invalid } })).status, 422, JSON.stringify(invalid));
+  }
+  const saved = await ok('/students/me', student.token, { method: 'PUT', body: { ...qualified, ...personalInfo, cv_s3_key: cv.key, photo_s3_key: photo.key } });
+  assert.equal(saved.major, 'CIS'); assert.equal(saved.guardian_relation, 'บิดา'); assert.equal(saved.cv_s3_key, cv.key);
+  assert.equal((await request('/students/me', student.token, { method: 'PUT', body: { address: null } })).status, 422, 'Required personal info cannot be cleared');
+  const image = await fetch(`${base}/documents/${encodeURIComponent(photo.key)}`, { headers: { Authorization: `Bearer ${accounts.staff.token}` } });
+  assert.equal(image.status, 200); assert.match(image.headers.get('content-type'), /^image\/png/);
+  assert.deepEqual(Buffer.from(await image.arrayBuffer()), png);
+  assert.equal((await fetch(`${base}/documents/${encodeURIComponent(cv.key)}`, { headers: { Authorization: `Bearer ${accounts.otherStudent.token}` } })).status, 403);
+  assert.equal((await fetch(`${base}/documents/${encodeURIComponent(cv.key)}`, { headers: { Authorization: `Bearer ${accounts.advisor.token}` } })).status, 200);
   assert.equal((await request(`/students/${studentUser.student_id}`, accounts.otherStudent.token)).status, 403);
   assert.equal((await request(`/students/${studentUser.student_id}`, accounts.otherStudent.token, { method: 'PUT', body: { gpax: 4 } })).status, 403);
   assert.equal((await request(`/advisor/students/${studentUser.student_id}`, accounts.otherAdvisor.token)).status, 403);
@@ -328,42 +351,45 @@ test('company details PDF is optional, owned by the company, and public only aft
   assert.equal((await request(`/companies/${profile.company_id}/details-file`)).status, 404);
 });
 
-test('staff verifies the profile and the advisor certifies conduct before applying; any supervisor approves', async () => {
+test('saving the profile waits for the co-op plan result; only passed students apply; results lock qualifications; profile CV is the default resume; any supervisor approves', async () => {
   const studentPath = `/students/${studentUser.student_id}`;
   const position = await ok('/positions', accounts.staff.token, { method: 'POST', body: { company_id: positions[0].company_id, name: 'Review flow position', quota: 1, term_id: null } }, 201);
-  const resume = await upload(student.token, 'resume');
-  const body = { position_id: position.position_id, resume_s3_key: resume.key };
-  assert.equal((await ok('/students/me', student.token)).profile_status, 'pending', 'A saved profile waits for staff');
+  // ไม่ส่ง resume_s3_key = ใช้ CV จากข้อมูลส่วนตัว
+  const body = { position_id: position.position_id };
+  const saved = await ok('/students/me', student.token);
+  assert.equal(saved.profile_status, 'pending', 'A saved profile waits for the announcement');
+  assert.equal(saved.coop_result, null);
   const blocked = await request('/applications', student.token, { method: 'POST', body });
   assert.equal(blocked.status, 422);
-  assert.equal(blocked.body.error.code, 'PROFILE_NOT_REVIEWED');
-  assert.equal(blocked.body.error.details.review.length, 2);
+  assert.equal(blocked.body.error.code, 'COOP_NOT_PASSED');
+  assert.equal(blocked.body.error.details.review.length, 1);
+  assert.equal((await request(`${studentPath}/profile-review`, accounts.staff.token, { method: 'POST', body: { status: 'verified' } })).status, 404, 'Staff profile review was removed');
+  assert.equal((await request(`${studentPath}/conduct-review`, accounts.advisor.token, { method: 'POST', body: { status: 'certified' } })).status, 404, 'Conduct certification was removed');
 
-  assert.equal((await request(`${studentPath}/profile-review`, accounts.advisor.token, { method: 'POST', body: { status: 'verified' } })).status, 403);
-  assert.equal((await request(`${studentPath}/profile-review`, accounts.staff.token, { method: 'POST', body: { status: 'returned' } })).status, 422, 'Returning needs a reason');
-  const returned = await ok(`${studentPath}/profile-review`, accounts.staff.token, { method: 'POST', body: { status: 'returned', comment: 'แนบ Transcript ฉบับล่าสุด' } });
-  assert.equal(returned.profile_status, 'returned'); assert.equal(returned.profile_comment, 'แนบ Transcript ฉบับล่าสุด');
-  const resubmitted = await ok('/students/me', student.token, { method: 'PUT', body: { phone: '0812345678' } });
-  assert.equal(resubmitted.profile_status, 'pending'); assert.equal(resubmitted.profile_comment, null);
-  await ok(`${studentPath}/profile-review`, accounts.staff.token, { method: 'POST', body: { status: 'verified' } });
+  // Staff announce the result; students and advisors cannot.
+  assert.equal((await request(`${studentPath}/coop-result`, accounts.advisor.token, { method: 'PUT', body: { coop_result: 'passed' } })).status, 403);
+  assert.equal((await request(`${studentPath}/coop-result`, accounts.staff.token, { method: 'PUT', body: { coop_result: 'maybe' } })).status, 422);
+  assert.equal((await request(`${studentPath}/coop-result`, accounts.staff.token, { method: 'PUT', body: {} })).status, 422);
+  assert.equal((await request('/students/me', student.token, { method: 'PUT', body: { coop_result: 'passed' } })).status, 422, 'Students cannot set their own result');
+  const unsaved = await ok('/users', accounts.staff.token, { method: 'POST', body: { username: '6609619998', th_name: 'Unsaved Student', en_name: 'Unsaved Student', email: 'unsaved@example.test', role: 'student' } }, 201);
+  assert.equal((await request(`/students/${unsaved.student_id}/coop-result`, accounts.staff.token, { method: 'PUT', body: { coop_result: 'passed' } })).status, 409, 'No result before the profile is saved');
 
-  for (const token of [accounts.otherAdvisor.token, accounts.staff.token, student.token]) {
-    assert.equal((await request(`${studentPath}/conduct-review`, token, { method: 'POST', body: { status: 'certified' } })).status, 403, 'Only the student\'s own advisor certifies conduct');
-  }
-  assert.equal((await request(`${studentPath}/conduct-review`, accounts.advisor.token, { method: 'POST', body: { status: 'rejected' } })).status, 422);
-  const certified = await ok(`${studentPath}/conduct-review`, accounts.advisor.token, { method: 'POST', body: { status: 'certified', comment: 'ประพฤติดี' } });
-  assert.equal(certified.conduct_status, 'certified'); assert.equal(certified.profile_status, 'verified');
-
-  // Contact edits keep the verification; qualification edits go back to staff.
-  assert.equal((await ok('/students/me', student.token, { method: 'PUT', body: { phone: '0812345670' } })).profile_status, 'verified');
-  assert.equal((await ok('/students/me', student.token, { method: 'PUT', body: { gpax: 2.8 } })).profile_status, 'pending');
-  assert.equal((await request('/applications', student.token, { method: 'POST', body })).body.error.details.review.length, 1);
-  await ok(`${studentPath}/profile-review`, accounts.staff.token, { method: 'POST', body: { status: 'verified' } });
+  const failed = await ok(`${studentPath}/coop-result`, accounts.staff.token, { method: 'PUT', body: { coop_result: 'failed' } });
+  assert.equal(failed.coop_result, 'failed'); assert.ok(failed.coop_result_at); assert.equal(failed.qualification_locked, true);
+  assert.equal((await request('/applications', student.token, { method: 'POST', body })).body.error.code, 'COOP_NOT_PASSED', 'Failed students cannot apply');
+  // After the announcement qualifications are frozen; contact/personal edits remain available.
+  assert.equal((await request('/students/me', student.token, { method: 'PUT', body: { gpax: 2.8 } })).status, 409);
+  assert.equal((await ok('/students/me', student.token, { method: 'PUT', body: { phone: '0812345670', guardian_relation: 'มารดา' } })).coop_result, 'failed');
+  const reset = await ok(`${studentPath}/coop-result`, accounts.staff.token, { method: 'PUT', body: { coop_result: null } });
+  assert.equal(reset.coop_result, null); assert.equal(reset.coop_result_at, null); assert.equal(reset.qualification_locked, false);
+  assert.equal((await ok('/students/me', student.token, { method: 'PUT', body: { gpax: 2.8 } })).gpax, 2.8, 'Waiting again unlocks qualifications');
+  assert.equal((await ok(`${studentPath}/coop-result`, accounts.staff.token, { method: 'PUT', body: { coop_result: 'passed' } })).coop_result, 'passed');
 
   // Supervising is an advisor-account permission, not a per-student assignment.
   const otherAdvisorId = accounts.otherAdvisor.user.user_id;
   assert.equal((await request(`/users/${studentUser.user_id}`, accounts.staff.token, { method: 'PATCH', body: { is_supervisor: true } })).status, 422);
   const application = await ok('/applications', student.token, { method: 'POST', body }, 201);
+  assert.equal(application.resume_s3_key, (await ok('/students/me', student.token)).cv_s3_key, 'Profile CV is used when no resume is attached');
   const listed = async (path, token) => (await ok(path, token)).some((a) => a.application_id === application.application_id);
   assert.equal((await request('/supervisor/applications', accounts.otherAdvisor.token)).status, 403, 'Advisors who do not supervise see no queue');
   assert.equal((await request('/supervisor/applications', accounts.staff.token)).status, 403);
@@ -375,7 +401,6 @@ test('staff verifies the profile and the advisor certifies conduct before applyi
   assert.equal(await listed('/supervisor/applications', accounts.advisor.token), true);
   assert.equal(await listed('/advisor/applications', accounts.otherAdvisor.token), false, 'Supervising does not make them the advisor');
   assert.equal((await ok(`/advisor/students/${studentUser.student_id}`, accounts.otherAdvisor.token)).student_id, studentUser.student_id, 'Supervisors can open any student');
-  assert.equal((await request(`${studentPath}/conduct-review`, accounts.otherAdvisor.token, { method: 'POST', body: { status: 'certified' } })).status, 403, 'Only the advisor certifies conduct');
   await ok(`/applications/${application.application_id}/reviews`, accounts.otherAdvisor.token, { method: 'POST', body: { status: 'approved' } });
   await ok(`/applications/${application.application_id}/withdraw`, student.token, { method: 'POST' });
   await ok(`/users/${otherAdvisorId}`, accounts.staff.token, { method: 'PATCH', body: { is_supervisor: false } });

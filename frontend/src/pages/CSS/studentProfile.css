@@ -5,6 +5,30 @@
   margin-bottom: 1.25rem;
 }
 
+/* หัวข้อหน้าข้อมูลส่วนตัว: ปุ่มแก้ไขอยู่ขวาบน */
+.profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.profile-header .profile-title {
+  margin-bottom: 0;
+}
+
+/* ปุ่มยกเลิกการแก้ไข: ขอบสีหลัก พื้นขาว */
+.profile-cancel {
+  background-color: #ffffff;
+  color: #222A4B;
+  border-color: #222A4B;
+}
+
+.profile-cancel:hover:not(:disabled) {
+  background-color: #f1f5f9;
+}
+
 .profile-form {
   display: flex;
   flex-direction: column;
@@ -22,6 +46,16 @@
 }
 
 /* หัวข้ออยู่ในกรอบ ไม่ทับเส้นขอบ (legend ปกติจะตัดเส้นกรอบ — float ทำให้ไม่ตัด) */
+/* กรอบสถานะสหกิจอยู่นอกฟอร์ม จึงเว้นระยะเท่ากับ gap ของ .profile-form */
+.profile-status-section {
+  margin-bottom: 1.5rem;
+}
+
+/* fieldset ด้านในไว้ปิดช่องกรอกอย่างเดียว ไม่มีกรอบและไม่กระทบ layout */
+.profile-fields {
+  display: contents;
+}
+
 .profile-section-title {
   float: left;
   width: 100%;
@@ -128,8 +162,13 @@ select.profile-input:disabled {
   cursor: pointer;
 }
 
-.profile-submit:hover {
+.profile-submit:hover:not(:disabled) {
   background-color: #2f3a66;
+}
+
+.profile-submit:disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
 }
 
 .profile-validation-dialog {
@@ -191,5 +230,30 @@ select.profile-input:disabled {
 @media (max-width: 768px) {
   .profile-readonly {
     grid-template-columns: 1fr;
+  }
+}
+
+/* รูปนักศึกษาคู่กับข้อมูลส่วนตัว */
+.student-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.student-info-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.student-info-value {
+  margin: 0;
+  color: #334155;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .student-info {
+    flex-direction: column;
   }
 }

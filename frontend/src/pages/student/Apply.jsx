@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 import FileInput from '../../components/FileInput';
+import DocumentLink from '../../components/DocumentLink';
 import SaveSuccessDialog from '../../components/SaveSuccessDialog';
 import { MIN_GPAX, isGpaxEligible } from '../../config/coopRules';
 import { reviewBlockers } from '../../config/studentReview';
@@ -10,6 +11,7 @@ import { fetchCompanies } from '../../services/companyApi';
 import { formatApplicationPeriod } from '../../utils/applicationPeriod';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
+import '../CSS/eligibility.css';
 import '../CSS/studentApply.css';
 
 // ตรงกับขนาดสูงสุดที่ backend รับ (POST /documents)
@@ -18,10 +20,12 @@ const MAX_SUGGESTIONS = 8;
 
 const openPositions = (company) => (company?.positions ?? []).filter((p) => p.is_open !== false);
 
-function validate({ company, positionId, resume }) {
+// useProfileCv = ใช้ CV จากข้อมูลส่วนตัว ไม่ต้องเลือกไฟล์
+function validate({ company, positionId, resume, useProfileCv }) {
   const errors = {};
   if (!company) errors.company = 'กรุณาเลือกสถานประกอบการจากรายการ';
   if (!positionId) errors.position = 'กรุณาเลือกตำแหน่ง';
+  if (useProfileCv) return errors;
   if (!resume) errors.resume = 'กรุณาอัปโหลดเรซูเม่';
   else if (resume.type !== 'application/pdf') errors.resume = 'รองรับเฉพาะไฟล์ PDF';
   else if (resume.size > MAX_RESUME_MB * 1024 * 1024) errors.resume = `ไฟล์ต้องไม่เกิน ${MAX_RESUME_MB} MB`;
@@ -41,6 +45,8 @@ export default function Apply() {
   const [company, setCompany] = useState(null);
   const [positionId, setPositionId] = useState('');
   const [resume, setResume] = useState(null);
+  // ค่าเริ่มต้นใช้ CV จากข้อมูลส่วนตัว (ถ้ามี)
+  const [useProfileCv, setUseProfileCv] = useState(Boolean(user.cv_s3_key));
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -100,15 +106,19 @@ export default function Apply() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!eligible || saving || submitted) return;
-    const nextErrors = validate({ company, positionId, resume });
+    const nextErrors = validate({ company, positionId, resume, useProfileCv });
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
     setSaving(true);
     try {
-      const document = uploadedResume?.file === resume ? uploadedResume : await uploadDocument(resume, 'resume');
-      setUploadedResume({ ...document, file: resume });
-      await api('/applications', { method: 'POST', body: { position_id: Number(positionId), resume_s3_key: document.key } });
+      const body = { position_id: Number(positionId) };
+      if (!useProfileCv) {
+        const document = uploadedResume?.file === resume ? uploadedResume : await uploadDocument(resume, 'resume');
+        setUploadedResume({ ...document, file: resume });
+        body.resume_s3_key = document.key;
+      }
+      await api('/applications', { method: 'POST', body });
       setSubmitted(true);
     } catch (error) { setErrors((prev) => ({ ...prev, submit: error.message })); }
     finally { setSaving(false); }
@@ -117,25 +127,24 @@ export default function Apply() {
   return (
     <section>
       <h1 className="profile-title">แบบสมัครสหกิจศึกษา</h1>
-      {submitted && <SaveSuccessDialog title="บันทึกใบสมัครเรียบร้อยแล้ว" to="/student" nextPageLabel="ใบสมัครของฉัน" />}
+      {submitted && <SaveSuccessDialog title="ส่งใบสมัครเรียบร้อยแล้ว" to="/student" nextPageLabel="ใบสมัครของฉัน" />}
 
       {/* เช็กเกณฑ์ GPAX ก่อนให้กรอก (backend ต้องเช็กซ้ำตอนรับใบสมัคร) */}
       {user.gpax == null ? (
         <div className="apply-gate">
-          <p>กรุณากรอกข้อมูลคุณสมบัติสหกิจศึกษาในหน้าข้อมูลส่วนตัว แล้วส่งให้เจ้าหน้าที่ตรวจสอบก่อน</p>
+          <p>กรุณากรอกข้อมูลคุณสมบัติสหกิจศึกษาในหน้าข้อมูลส่วนตัว เพื่อสมัครเข้าแผ่นสหกิจศึกษา</p>
           <Link to="/student/profile" className="app-btn app-btn--primary">ไปหน้าข้อมูลส่วนตัว</Link>
         </div>
       ) : !isGpaxEligible(user.gpax) ? (
         <div className="apply-gate apply-gate--blocked">
           <p>
-            GPAX ของคุณคือ <strong>{user.gpax.toFixed(2)}</strong> ต่ำกว่าเกณฑ์ขั้นต่ำ {MIN_GPAX.toFixed(2)} จึงยังสมัครสหกิจศึกษาไม่ได้
+            GPAX ของคุณคือ <strong>{user.gpax.toFixed(2)}</strong> ต่ำกว่าเกณฑ์ขั้นต่ำ {MIN_GPAX.toFixed(2)} จึงไม่ผ่านเกณฑ์สมัครสหกิจศึกษา
           </p>
           <p className="apply-gate-note">หากข้อมูลไม่ถูกต้อง กรุณาแก้ไขในหน้าข้อมูลส่วนตัวหรือติดต่อเจ้าหน้าที่</p>
         </div>
       ) : blockers.length > 0 && (
         <div className="apply-gate">
-          <p>ยังยื่นใบสมัครไม่ได้ ต้องรอให้</p>
-          <ul>{blockers.map((text) => <li key={text}>{text}</li>)}</ul>
+          <p>ยังไม่สามารถยื่นใบสมัครได้ เนื่องจากต้อง{blockers.join(' และ ')}ก่อน</p>
           <Link to="/student/profile" className="app-btn app-btn--primary">ดูสถานะในหน้าข้อมูลส่วนตัว</Link>
         </div>
       )}
@@ -217,24 +226,37 @@ export default function Apply() {
           <fieldset className="profile-section">
             <legend className="profile-section-title">เอกสารประกอบการสมัคร</legend>
 
-            <label className="profile-label" htmlFor="resume">เรซูเม่ (Resume) <span className="profile-required">*</span></label>
-            <FileInput
-              id="resume"
-              accept="application/pdf"
-              onChange={(e) => {
-                setResume(e.target.files[0] ?? null);
-                clearError('resume');
-              }}
-              error={errors.resume}
-              fileName={resume?.name}
-            />
-            {errors.resume && <p className="profile-error">{errors.resume}</p>}
-            <p className="profile-hint">ไฟล์ PDF ขนาดไม่เกิน {MAX_RESUME_MB} MB</p>
+            <p className="profile-label">เรซูเม่ (Resume) หรือ CV <span className="profile-required">*</span></p>
+            {user.cv_s3_key && <>
+              <label className="elig-declare">
+                <input type="radio" name="resume-source" checked={useProfileCv} onChange={() => { setUseProfileCv(true); clearError('resume'); }} />
+                <span>ใช้ CV เริ่มต้นที่แนบในข้อมูลส่วนตัว</span>
+              </label>
+              {useProfileCv && <DocumentLink url={`/documents/${encodeURIComponent(user.cv_s3_key)}`} label="ดู CV จากข้อมูลส่วนตัว" />}
+              <label className="elig-declare">
+                <input type="radio" name="resume-source" checked={!useProfileCv} onChange={() => setUseProfileCv(false)} />
+                <span>อัปโหลดไฟล์อื่นสำหรับบริษัทนี้</span>
+              </label>
+            </>}
+            {!useProfileCv && <>
+              <FileInput
+                id="resume"
+                accept="application/pdf"
+                onChange={(e) => {
+                  setResume(e.target.files[0] ?? null);
+                  clearError('resume');
+                }}
+                error={errors.resume}
+                fileName={resume?.name}
+              />
+              {errors.resume && <p className="profile-error">{errors.resume}</p>}
+              <p className="profile-hint">ไฟล์ PDF ขนาดไม่เกิน {MAX_RESUME_MB} MB</p>
+            </>}
           </fieldset>
 
           <div className="profile-actions">
             {errors.submit && <p className="profile-error" role="alert">{errors.submit}</p>}
-            <button type="submit" className="profile-submit" disabled={saving || submitted}>{saving ? 'กำลังบันทึก…' : submitted ? 'บันทึกแล้ว' : 'บันทึก'}</button>
+            <button type="submit" className="profile-submit" disabled={saving || submitted}>{saving ? 'กำลังส่งใบสมัคร…' : submitted ? 'สมัครแล้ว' : 'สมัคร'}</button>
           </div>
         </fieldset>
       </form>

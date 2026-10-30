@@ -6,32 +6,32 @@ import ApiState from '../../components/ApiState';
 import CourseGradesFields from '../../components/CourseGradesFields';
 import DocumentLink from '../../components/DocumentLink';
 import GpaxValue from '../../components/GpaxValue';
-import ReviewPanel from '../../components/ReviewPanel';
-import StudentReviewBadge from '../../components/StudentReviewBadge';
+import CoopResultBadge from '../../components/CoopResultBadge';
+import StudentPersonalInfo from '../../components/StudentPersonalInfo';
 import { curriculumLabel } from '../../config/coopCriteria';
+import { COOP_STATUS, coopStatus } from '../../config/studentReview';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
 import '../CSS/myStudents.css';
+import '../CSS/allApplications.css';
 
-// ตัวกรองตามผลตรวจข้อมูลส่วนตัว (students.profile_status)
+// ตัวกรองตามสถานะสหกิจศึกษา (ยังไม่บันทึกข้อมูล / รอประกาศผล / ผ่าน / ไม่ผ่าน)
 const FILTERS = [
-  { key: 'pending', label: 'รอตรวจ', match: (s) => s.profile_status === 'pending' },
-  { key: 'returned', label: 'ส่งกลับให้แก้ไข', match: (s) => s.profile_status === 'returned' },
-  { key: 'verified', label: 'ข้อมูลถูกต้อง', match: (s) => s.profile_status === 'verified' },
-  { key: 'none', label: 'ยังไม่ส่งข้อมูล', match: (s) => !s.profile_status },
+  ...['waiting', 'passed', 'failed', 'none'].map((key) => ({ key, label: COOP_STATUS[key].label, match: (s) => coopStatus(s) === key })),
   { key: 'all', label: 'ทั้งหมด', match: () => true },
 ];
 
 const formatDateTime = (iso) =>
   new Date(iso).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-// เจ้าหน้าที่ตรวจข้อมูลส่วนตัวของนักศึกษาก่อนสมัคร (อาจารย์ที่ปรึกษารับรองความประพฤติแยกต่างหาก)
+// เจ้าหน้าที่ดูข้อมูลนักศึกษาที่บันทึกแล้ว และประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษา
 export default function VerifyStudents() {
   const { data: students, setData, loading, error } = useApi('/students');
-  const [filter, setFilter] = useState('pending');
+  const [filter, setFilter] = useState('waiting');
   const [search, setSearch] = useState('');
   const [openGrades, setOpenGrades] = useState(null);
+  const [openInfo, setOpenInfo] = useState(null);
   const [notice, setNotice] = useState('');
 
   const active = students.filter((s) => s.is_active);
@@ -41,20 +41,21 @@ export default function VerifyStudents() {
       (!keyword || s.th_name.toLowerCase().includes(keyword) || s.student_code.includes(keyword))
   );
 
-  const review = async (student, decision, comment) => {
+  // ประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษา ('' = กลับเป็นรอประกาศผล)
+  const announce = async (student, value) => {
+    setNotice('');
     try {
-      const result = await api(`/students/${student.student_id}/profile-review`, { method: 'POST', body: { status: decision === 'approved' ? 'verified' : 'returned', comment } });
+      const result = await api(`/students/${student.student_id}/coop-result`, { method: 'PUT', body: { coop_result: value || null } });
       setData((prev) => prev.map((s) => (s.student_id === student.student_id ? { ...s, ...result } : s)));
-      setNotice(decision === 'approved' ? `ยืนยันข้อมูลของ ${student.th_name} แล้ว` : `ส่งข้อมูลของ ${student.th_name} กลับให้แก้ไขแล้ว`);
-      return true;
-    } catch (err) { setNotice(err.message); return false; }
+      setNotice(`บันทึกผลของ ${student.th_name}: ${COOP_STATUS[value || 'waiting'].label}`);
+    } catch (err) { setNotice(err.message); }
   };
 
   return (
     <section>
       <div className="app-header">
-        <h1 className="app-title">ตรวจข้อมูลนักศึกษา</h1>
-        <span className="app-term">รอตรวจ {active.filter(FILTERS[0].match).length} คน</span>
+        <h1 className="app-title">ประกาศผลสหกิจศึกษา</h1>
+        <span className="app-term">รอประกาศผล {active.filter(FILTERS[0].match).length} คน</span>
       </div>
 
       <ApiState loading={loading} error={error} />
@@ -100,13 +101,20 @@ export default function VerifyStudents() {
                   </p>
                 </div>
                 <div>
-                  <StudentReviewBadge kind="profile" status={s.profile_status} />
-                  <p className="pending-student-meta"><StudentReviewBadge kind="conduct" status={s.conduct_status} /></p>
+                  <CoopResultBadge student={s} />
                 </div>
               </div>
 
               <div className="pending-docs">
                 <DocumentLink url={s.transcript_s3_key ? `/documents/${encodeURIComponent(s.transcript_s3_key)}` : null} label="ดู Transcript" />
+                <button
+                  type="button"
+                  className="pending-doc"
+                  aria-expanded={openInfo === s.student_id}
+                  onClick={() => setOpenInfo(openInfo === s.student_id ? null : s.student_id)}
+                >
+                  {openInfo === s.student_id ? 'ซ่อนข้อมูลส่วนตัว' : 'ดูข้อมูลส่วนตัว'}
+                </button>
                 <button
                   type="button"
                   className="pending-doc"
@@ -116,20 +124,20 @@ export default function VerifyStudents() {
                   {openGrades === s.student_id ? 'ซ่อนผลการเรียนรายวิชา' : 'ดูผลการเรียนรายวิชา'}
                 </button>
               </div>
+              {openInfo === s.student_id && <StudentPersonalInfo student={s} />}
               {openGrades === s.student_id && <CourseGradesFields curriculum={s.curriculum} grades={s.course_grades ?? {}} disabled />}
 
-              {s.profile_comment && <p className="pending-student-meta">เหตุผลที่ส่งกลับ: “{s.profile_comment}”</p>}
-              {s.profile_status === 'pending' ? (
-                <ReviewPanel
-                  id={`profile-${s.student_id}`}
-                  labels={{ approved: 'ข้อมูลถูกต้อง', rejected: 'ส่งกลับให้แก้ไข' }}
-                  rejectPlaceholder="เช่น GPAX ไม่ตรงกับ Transcript"
-                  onOpen={() => setNotice('')}
-                  onSubmit={(decision, comment) => review(s, decision, comment)}
-                />
-              ) : s.profile_reviewed_at && (
-                <p className="app-date">ตรวจเมื่อ {formatDateTime(s.profile_reviewed_at)}</p>
+              {s.profile_status && (
+                <label className="verify-coop-result">
+                  <span className="pending-label">ผลการคัดเลือกเข้าแผนสหกิจศึกษา</span>
+                  <select className="all-select" value={s.coop_result ?? ''} onChange={(e) => announce(s, e.target.value)}>
+                    <option value="">{COOP_STATUS.waiting.label}</option>
+                    <option value="passed">{COOP_STATUS.passed.label}</option>
+                    <option value="failed">{COOP_STATUS.failed.label}</option>
+                  </select>
+                </label>
               )}
+              {s.coop_result_at && <p className="app-date">ประกาศผลเมื่อ {formatDateTime(s.coop_result_at)}</p>}
             </li>
           ))}
         </ul>

@@ -2,10 +2,10 @@
 -- ไฟล์นี้จะถูกรันอัตโนมัติครั้งแรกที่ container PostgreSQL ถูกสร้าง (docker-entrypoint-initdb.d)
 -- ข้อมูลมาจาก frontend/src/data/mockfile.json (ตำแหน่งงาน ช่วงเวลาเปิดรับสมัคร และภาคการศึกษาเป็นข้อมูลตัวอย่าง)
 --
--- ก่อนสมัคร: นักศึกษาบันทึกข้อมูลส่วนตัว (students.profile_status = pending)
---   เจ้าหน้าที่ตรวจข้อมูล      profile_status: pending → verified | returned (แก้แล้วส่งใหม่ได้)
---   อาจารย์ที่ปรึกษารับรองความประพฤติ  conduct_status: NULL → certified | rejected
---   ยื่นใบสมัครได้เมื่อ verified + certified
+-- ก่อนสมัคร: นักศึกษาบันทึกข้อมูลส่วนตัว (students.profile_status = pending = รอประกาศผล)
+--   เจ้าหน้าที่ประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษา  coop_result: NULL → passed | failed
+--   ยื่นใบสมัครได้เมื่อ passed และเมื่อประกาศผลแล้วนักศึกษาแก้ข้อมูลคุณสมบัติไม่ได้
+--   (การตรวจข้อมูลโดยเจ้าหน้าที่ verified/returned และการรับรองความประพฤติยกเลิกแล้ว คงคอลัมน์ไว้เพื่อไม่ลบข้อมูลเดิม)
 --
 -- ลำดับสถานะของใบสมัคร (applications.status)
 --   submitted → approved | rejected        อาจารย์นิเทศก์ (users.is_supervisor) คนใดก็ได้ ตรวจ (เจ้าหน้าที่ไม่มีสิทธิ์)
@@ -83,20 +83,33 @@ CREATE TABLE IF NOT EXISTS students (
     user_id           INTEGER NOT NULL UNIQUE REFERENCES users (user_id) ON DELETE CASCADE,
     gpax              NUMERIC(3, 2) CHECK (gpax IS NULL OR gpax BETWEEN 0 AND 4),
     transcript_s3_key VARCHAR(512),
+    cv_s3_key         VARCHAR(512),
+    photo_s3_key      VARCHAR(512),
+    address           TEXT,
+    -- กลุ่มวิชาเอก: CIS = คอมพิวเตอร์และวิทยาการสารสนเทศ (ภาคปกติ), ACS = คอมพิวเตอร์ประยุกต์ (ภาคพิเศษ)
+    major             VARCHAR(3) CHECK (major IN ('CIS', 'ACS')),
+    guardian_name     VARCHAR(255),
+    guardian_relation VARCHAR(100),
+    guardian_address  TEXT,
+    guardian_phone    VARCHAR(20),
     advisor_id        INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
     curriculum        VARCHAR(2) CHECK (curriculum IN ('61', '66')),
     course_grades     JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(course_grades) = 'object'),
     declarations      JSONB NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(declarations) = 'object'),
-    -- เจ้าหน้าที่ตรวจข้อมูล: NULL = ยังไม่ส่ง
+    -- NULL = ยังไม่บันทึกข้อมูลส่วนตัว, ค่าอื่น = บันทึกแล้ว (verified/returned เป็นค่าเก่าจากขั้นตอนตรวจที่ยกเลิกแล้ว)
     profile_status      VARCHAR(20) CHECK (profile_status IN ('pending', 'verified', 'returned')),
     profile_comment     TEXT,
     profile_reviewed_by INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
     profile_reviewed_at TIMESTAMPTZ,
-    -- อาจารย์ที่ปรึกษารับรองความประพฤติ: NULL = ยังไม่รับรอง
+    -- เดิมอาจารย์ที่ปรึกษารับรองความประพฤติ: ยกเลิกขั้นตอนนี้แล้ว (migration 008) คงคอลัมน์ไว้เพื่อไม่ลบข้อมูลเดิม
     conduct_status      VARCHAR(20) CHECK (conduct_status IN ('certified', 'rejected')),
     conduct_comment     TEXT,
     conduct_reviewed_by INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
-    conduct_reviewed_at TIMESTAMPTZ
+    conduct_reviewed_at TIMESTAMPTZ,
+    -- ผลการคัดเลือกเข้าแผนสหกิจศึกษา: NULL = รอประกาศผล
+    coop_result         VARCHAR(10) CHECK (coop_result IN ('passed', 'failed')),
+    coop_result_by      INTEGER REFERENCES users (user_id) ON DELETE SET NULL,
+    coop_result_at      TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_students_advisor_id ON students (advisor_id);

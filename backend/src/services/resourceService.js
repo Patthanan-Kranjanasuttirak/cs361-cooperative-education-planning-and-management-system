@@ -105,8 +105,15 @@ export async function studentProfile(actor, studentId) {
   return student;
 }
 
+// ข้อมูลส่วนตัวที่นักศึกษาต้องกรอกครบก่อนบันทึก: ช่อง → ข้อความเมื่อยังว่าง
+const PERSONAL_FIELDS = {
+  cv_s3_key: 'กรุณาอัปโหลดไฟล์ CV', photo_s3_key: 'กรุณาอัปโหลดรูปนักศึกษา', address: 'กรุณากรอกที่อยู่', major: 'กรุณาเลือกกลุ่มวิชาเอก',
+  guardian_name: 'กรุณากรอกชื่อ-นามสกุลผู้ปกครอง', guardian_relation: 'กรุณากรอกความสัมพันธ์กับนักศึกษา',
+  guardian_address: 'กรุณากรอกที่อยู่ผู้ปกครอง', guardian_phone: 'กรุณากรอกเบอร์โทรศัพท์ผู้ปกครอง',
+};
+
 export async function saveStudent(actor, studentId, body) {
-  const fields = ['gpax', 'phone', 'transcript_s3_key', 'curriculum', 'course_grades', 'declarations'];
+  const fields = ['gpax', 'phone', 'transcript_s3_key', 'curriculum', 'course_grades', 'declarations', ...Object.keys(PERSONAL_FIELDS)];
   v.object(body, actor.role === 'staff' ? [...fields, 'advisor_id'] : fields);
   return transaction(async (db) => {
     // username = เลขทะเบียน ใช้ตรวจชั้นปีและหลักสูตรใน qualificationChecks
@@ -115,7 +122,12 @@ export async function saveStudent(actor, studentId, body) {
     if (actor.role !== 'staff' && !(actor.role === 'student' && student.user_id === actor.user_id)) denied();
     const data = {};
     if (body.gpax !== undefined) data.gpax = v.gpax(body.gpax);
-    if (body.transcript_s3_key !== undefined) data.transcript_s3_key = v.documentKey(body.transcript_s3_key, 'transcript_s3_key', student.user_id);
+    for (const key of ['transcript_s3_key', 'cv_s3_key', 'photo_s3_key']) if (body[key] !== undefined) data[key] = v.documentKey(body[key], key, student.user_id);
+    for (const [key, max] of [['address', 1000], ['guardian_name', 255], ['guardian_relation', 100], ['guardian_address', 1000]]) {
+      if (body[key] !== undefined) data[key] = v.text(body[key], key, max, { nullable: true });
+    }
+    if (body.major !== undefined) data.major = body.major === null ? null : v.enumeration(body.major, 'major', ['CIS', 'ACS']);
+    if (body.guardian_phone !== undefined) data.guardian_phone = v.phone(body.guardian_phone, 'guardian_phone');
     if (body.curriculum !== undefined) data.curriculum = body.curriculum === null ? null : v.enumeration(body.curriculum, 'curriculum', ['61', '66']);
     if (body.course_grades !== undefined) data.course_grades = v.courseGrades(body.course_grades);
     if (body.declarations !== undefined) data.declarations = v.declarations(body.declarations);
@@ -130,17 +142,21 @@ export async function saveStudent(actor, studentId, body) {
       (data.course_grades !== undefined && !sameGrades(data.course_grades, student.course_grades)) ||
       (data.declarations !== undefined && Object.keys(data.declarations).some((key) => data.declarations[key] !== Boolean(student.declarations?.[key])));
     if (actor.role === 'student') {
+      // ประกาศผลคัดเลือกแล้ว หรือมีใบที่อนุมัติแล้ว = ข้อมูลคุณสมบัติถูกล็อก ข้อมูลติดต่อ/ส่วนตัวยังแก้ได้
       const approved = await db.query("SELECT 1 FROM applications WHERE student_id=$1 AND status IN ('approved','accepted','confirmed') LIMIT 1", [studentId]);
-      if (approved.rows.length && qualificationChanged) conflict('ข้อมูลคุณสมบัติถูกใช้ในใบสมัครที่อนุมัติแล้ว กรุณาติดต่อเจ้าหน้าที่เพื่อแก้ไข');
-      // Approved qualifications stay frozen; contact-only edits remain available.
-      if (!approved.rows.length) {
+      const locked = student.coop_result != null || approved.rows.length > 0;
+      if (locked && qualificationChanged) {
+        conflict(student.coop_result != null ? 'ประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษาแล้ว ไม่สามารถแก้ไขข้อมูลคุณสมบัติได้ กรุณาติดต่อเจ้าหน้าที่'
+          : 'ข้อมูลคุณสมบัติถูกใช้ในใบสมัครที่อนุมัติแล้ว กรุณาติดต่อเจ้าหน้าที่เพื่อแก้ไข');
+      }
+      if (!locked) {
         const failures = qualificationChecks({ ...student, ...data }).filter(([passed]) => !passed).map(([, label]) => label);
         if (failures.length) throw new HttpError(422, 'ข้อมูลคุณสมบัติไม่ถูกต้องหรือไม่ครบถ้วน ไม่สามารถบันทึกได้', 'INELIGIBLE', { qualification: failures });
-        // บันทึกครั้งแรก, แก้หลังถูกส่งกลับ หรือแก้คุณสมบัติหลังตรวจผ่าน = ส่งให้เจ้าหน้าที่ตรวจใหม่
-        if (student.profile_status !== 'pending' && (student.profile_status !== 'verified' || qualificationChanged)) {
-          Object.assign(data, { profile_status: 'pending', profile_comment: null, profile_reviewed_by: null, profile_reviewed_at: null });
-        }
       }
+      // บันทึกครั้งแรก = ส่งข้อมูลแล้ว รอประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษา
+      if (student.profile_status == null) data.profile_status = 'pending';
+      const incomplete = Object.entries(PERSONAL_FIELDS).filter(([key]) => (data[key] === undefined ? student[key] : data[key]) == null).map(([, message]) => message);
+      if (incomplete.length) throw new HttpError(422, 'กรุณากรอกข้อมูลส่วนตัวให้ครบถ้วน', 'VALIDATION_ERROR', { profile: incomplete });
     }
     if (Object.keys(data).length) await update(db, 'students', 'student_id', studentId, data);
     if (body.phone !== undefined) await db.query('UPDATE users SET phone=$1 WHERE user_id=$2', [v.phone(body.phone), student.user_id]);
@@ -148,25 +164,15 @@ export async function saveStudent(actor, studentId, body) {
   });
 }
 
-// เจ้าหน้าที่ตรวจข้อมูลส่วนตัว: verified = ถูกต้อง, returned = ส่งกลับให้นักศึกษาแก้ (ต้องมีเหตุผล)
-// อาจารย์ที่ปรึกษารับรองความประพฤติ: certified = รับรอง, rejected = ไม่รับรอง (ต้องมีเหตุผล)
-const STUDENT_REVIEWS = {
-  profile: { role: 'staff', statuses: ['verified', 'returned'], rejected: 'returned' },
-  conduct: { role: 'advisor', statuses: ['certified', 'rejected'], rejected: 'rejected' },
-};
-
-export async function reviewStudent(actor, studentId, kind, body) {
-  const rule = STUDENT_REVIEWS[kind];
-  v.object(body, ['status', 'comment']);
-  const status = v.enumeration(body.status, 'status', rule.statuses);
-  const comment = v.text(body.comment, 'comment', 10000, { nullable: true });
-  if (status === rule.rejected && !comment) v.invalid('comment', 'กรุณาระบุเหตุผล');
+// เจ้าหน้าที่ประกาศผลการคัดเลือกเข้าแผนสหกิจศึกษา: passed | failed, null = กลับเป็นรอประกาศผล (ปลดล็อกข้อมูลคุณสมบัติ)
+export async function setCoopResult(studentId, actor, body) {
+  v.object(body, ['coop_result']);
+  const result = body.coop_result === null ? null : v.enumeration(body.coop_result, 'coop_result', ['passed', 'failed']);
   return transaction(async (db) => {
-    const student = (await db.query('SELECT * FROM students WHERE student_id=$1 FOR UPDATE', [studentId])).rows[0] ?? missing();
-    if (actor.role !== rule.role || (kind === 'conduct' && student.advisor_id !== actor.user_id)) denied();
-    if (kind === 'profile' && student.profile_status == null) conflict('นักศึกษายังไม่ได้ส่งข้อมูลส่วนตัวให้ตรวจ');
-    await db.query(`UPDATE students SET ${kind}_status=$1, ${kind}_comment=$2, ${kind}_reviewed_by=$3, ${kind}_reviewed_at=now() WHERE student_id=$4`,
-      [status, comment, actor.user_id, studentId]);
+    const student = (await db.query('SELECT user_id, profile_status FROM students WHERE student_id=$1 FOR UPDATE', [studentId])).rows[0] ?? missing();
+    if (result && student.profile_status == null) conflict('นักศึกษายังไม่ได้บันทึกข้อมูลส่วนตัว');
+    await db.query('UPDATE students SET coop_result=$1, coop_result_by=$2, coop_result_at=$3 WHERE student_id=$4',
+      [result, result && actor.user_id, result && new Date(), studentId]);
     return userById(student.user_id, db);
   });
 }

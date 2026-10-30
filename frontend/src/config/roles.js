@@ -24,7 +24,7 @@ export const ROLES = {
     home: '/staff',
     menu: [
       { name: 'ภาพรวมสหกิจศึกษา', to: '/staff', end: true },
-      { name: 'ตรวจข้อมูลนักศึกษา', to: '/staff/students' },
+      { name: 'ประกาศผลสหกิจศึกษา', to: '/staff/students' },
       { name: 'สถานประกอบการ', to: '/staff/companies' },
       { name: 'ภาคการศึกษา', to: '/staff/terms' },
       { name: 'จัดการผู้ใช้งาน', to: '/staff/users' },

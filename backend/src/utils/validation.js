@@ -40,9 +40,9 @@ export function email(value) {
   return result.toLowerCase();
 }
 
-export function phone(value) {
-  const result = text(value, 'phone', 20, { nullable: true });
-  if (result != null && !/^\+?[0-9 ()-]{8,20}$/.test(result)) invalid('phone', 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง');
+export function phone(value, field = 'phone') {
+  const result = text(value, field, 20, { nullable: true });
+  if (result != null && !/^\+?[0-9 ()-]{8,20}$/.test(result)) invalid(field, 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง');
   return result;
 }
 
@@ -58,10 +58,13 @@ export function gpax(value) {
   return value;
 }
 
+// key ของไฟล์นักศึกษา: <user_id>/<kind>-<uuid>.<ext> (รูปนักศึกษาเป็น jpg/png ที่เหลือเป็น PDF)
+export const DOCUMENT_KEY = /^\d+\/((transcript|resume|cv)-[a-f0-9-]+\.pdf|photo-[a-f0-9-]+\.(jpg|png))$/;
+
 export function documentKey(value, field, userId) {
   const key = text(value, field, 512, { nullable: true });
-  const kind = field === 'transcript_s3_key' ? 'transcript' : 'resume';
-  if (key && (!key.startsWith(`${userId}/${kind}-`) || !/^\d+\/(transcript|resume)-[a-f0-9-]+\.pdf$/.test(key))) invalid(field, 'ประเภทเอกสารและเจ้าของต้องตรงกับบัญชีที่เข้าสู่ระบบ');
+  const kind = field.replace(/_s3_key$/, '');
+  if (key && (!key.startsWith(`${userId}/${kind}-`) || !DOCUMENT_KEY.test(key))) invalid(field, 'ประเภทเอกสารและเจ้าของต้องตรงกับบัญชีที่เข้าสู่ระบบ');
   return key;
 }
 

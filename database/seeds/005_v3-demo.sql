@@ -18,9 +18,9 @@ WHERE u.cognito_sub LIKE 'dev:v3:student%' AND a.username='v3.advisor'
 ON CONFLICT (user_id) DO UPDATE SET curriculum=COALESCE(students.curriculum,EXCLUDED.curriculum);
 -- อาจารย์ทดสอบเป็นทั้งที่ปรึกษาและนิเทศก์ ส่วนอาจารย์อีกคนเป็นที่ปรึกษาอย่างเดียว
 UPDATE users SET is_supervisor=TRUE WHERE username='v3.advisor';
--- นักศึกษา demo ผ่านการตรวจข้อมูลและรับรองความประพฤติแล้ว
-UPDATE students s SET profile_status=COALESCE(s.profile_status,'verified'),profile_reviewed_by=COALESCE(s.profile_reviewed_by,staff.user_id),profile_reviewed_at=COALESCE(s.profile_reviewed_at,now()),
-  conduct_status=COALESCE(s.conduct_status,'certified'),conduct_reviewed_by=COALESCE(s.conduct_reviewed_by,s.advisor_id),conduct_reviewed_at=COALESCE(s.conduct_reviewed_at,now())
+-- นักศึกษา demo ส่งข้อมูลแล้วและผ่านการคัดเลือกเข้าแผนสหกิจศึกษา (ต้องรัน migration 009 ก่อน)
+UPDATE students s SET profile_status=COALESCE(s.profile_status,'pending'),
+  coop_result=COALESCE(s.coop_result,'passed'),coop_result_by=COALESCE(s.coop_result_by,staff.user_id),coop_result_at=COALESCE(s.coop_result_at,now())
 FROM users u, users staff WHERE u.user_id=s.user_id AND u.cognito_sub LIKE 'dev:v3:student%' AND staff.username='v3.staff';
 INSERT INTO terms (code,plan_open_at,plan_close_at,coop_start,coop_end,is_active)
 SELECT '2/2569','2026-08-01','2027-01-15','2027-01-18','2027-05-14',NOT EXISTS (SELECT 1 FROM terms WHERE is_active)

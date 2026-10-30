@@ -69,12 +69,12 @@ function eligible(student) {
   }
 }
 
-// ก่อนสมัคร/อนุมัติ: เจ้าหน้าที่ตรวจข้อมูลผ่าน และอาจารย์ที่ปรึกษารับรองความประพฤติ
+// ก่อนสมัคร/อนุมัติ: ผ่านการคัดเลือกเข้าแผนสหกิจศึกษาแล้ว
 function reviewed(student) {
-  const missing = [];
-  if (student.profile_status !== 'verified') missing.push('เจ้าหน้าที่ยังไม่ได้ยืนยันว่าข้อมูลส่วนตัวถูกต้อง');
-  if (student.conduct_status !== 'certified') missing.push('อาจารย์ที่ปรึกษายังไม่ได้รับรองความประพฤติ');
-  if (missing.length) throw new HttpError(422, missing.join(' และ '), 'PROFILE_NOT_REVIEWED', { review: missing });
+  if (student.coop_result !== 'passed') {
+    const message = 'ยังไม่ผ่านการคัดเลือกเข้าแผนสหกิจศึกษา';
+    throw new HttpError(422, message, 'COOP_NOT_PASSED', { review: [message] });
+  }
 }
 
 async function lockStudent(db, applicationId) {
@@ -86,12 +86,14 @@ async function lockStudent(db, applicationId) {
 export async function createApplication(actor, body) {
   v.object(body, ['position_id', 'term_id', 'resume_s3_key']);
   const positionId = v.id(body.position_id, 'position_id');
-  const resume = v.documentKey(body.resume_s3_key, 'resume_s3_key', actor.user_id);
-  if (!resume) v.invalid('resume_s3_key', 'กรุณาแนบเรซูเม่');
+  // ไม่ส่ง resume_s3_key = ใช้ CV จากข้อมูลส่วนตัว
+  const ownResume = body.resume_s3_key === undefined ? null : v.documentKey(body.resume_s3_key, 'resume_s3_key', actor.user_id);
   const requestedTerm = body.term_id === undefined ? null : v.id(body.term_id, 'term_id');
   return transaction(async (db) => {
     const student = (await db.query('SELECT * FROM students WHERE user_id=$1 FOR UPDATE', [actor.user_id])).rows[0];
     if (!student) deny();
+    const resume = ownResume ?? student.cv_s3_key;
+    if (!resume) v.invalid('resume_s3_key', 'กรุณาแนบเรซูเม่ หรืออัปโหลด CV ในหน้าข้อมูลส่วนตัว');
     const position = (await db.query('SELECT * FROM positions WHERE position_id=$1 FOR SHARE', [positionId])).rows[0];
     if (!position) v.invalid('position_id', 'ไม่พบตำแหน่งงาน');
     const term = (await db.query(`SELECT *,((now() AT TIME ZONE 'Asia/Bangkok')::date BETWEEN plan_open_at AND plan_close_at) AS within_period
