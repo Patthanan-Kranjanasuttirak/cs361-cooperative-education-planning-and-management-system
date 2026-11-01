@@ -5,7 +5,7 @@
 | ผู้ใช้ | วิธีเข้าสู่ระบบ | ตรวจตัวตน | ตรวจสิทธิ์ |
 |---|---|---|---|
 | นักศึกษา | ชื่อผู้ใช้ TU (รหัสนักศึกษา) + รหัสผ่าน TU | Lambda `verify-auth-challenge` ส่งไปตรวจกับ TU API ทุกครั้ง รับเฉพาะรหัส `YY0961` / `YY0965` | backend สร้างบัญชีให้ตอนเข้าครั้งแรก จากชื่อ/อีเมลที่ Verify เก็บใน Cognito |
-| อาจารย์ / เจ้าหน้าที่ / ผู้ประสานงาน (mock) | อีเมลบัญชี mock + `MOCK_PASSWORD` | `verify-auth-challenge` เทียบกับ env (ไม่ถาม TU) | backend: อีเมลอยู่ใน `MOCK_LOGINS` และตรงกับบัญชีใน users |
+| กรรมการ / เจ้าหน้าที่ / ผู้ประสานงาน (mock) | อีเมลบัญชี mock + `MOCK_PASSWORD` | `verify-auth-challenge` เทียบกับ env (ไม่ถาม TU) | backend: อีเมลอยู่ใน `MOCK_LOGINS` และตรงกับบัญชีใน users |
 | ผู้ประสานงานสถานประกอบการ (ทางเลือก) | ปุ่ม Google (Cognito Hosted UI) | Google | backend: `users.email` ตรงกับอีเมลที่ Google ยืนยันแล้ว |
 
 ระบบไม่เก็บรหัสผ่านใน DB (รหัส mock อยู่ใน env ของ Lambda) ผู้ใช้ที่ไม่ใช่นักศึกษาต้องมีบัญชีใน users ก่อน
@@ -78,13 +78,13 @@ VITE_COGNITO_DOMAIN=<prefix>.auth.<region>.amazoncognito.com
 
 ## 5. ลงทะเบียนผู้ใช้
 
-- นักศึกษา / อาจารย์ / เจ้าหน้าที่: `username` = ชื่อผู้ใช้ TU (นักศึกษาใช้เลขทะเบียน) และ `auth_provider` ไม่ใช่ `dev`
+- นักศึกษา / กรรมการ / เจ้าหน้าที่: `username` = ชื่อผู้ใช้ TU (นักศึกษาใช้เลขทะเบียน) และ `auth_provider` ไม่ใช่ `dev`
 - ผู้ประสานงาน: `email` = อีเมลบัญชี Google ของคนนั้น และห้ามซ้ำกับบัญชีอื่น
   ถ้าบริษัทไม่ได้ใช้ Google ผู้ประสานงานสร้างบัญชี Google ด้วยอีเมลงานที่ accounts.google.com ได้ (ไม่ต้องเป็น Gmail)
 - บัญชี `dev` ใน seed ใช้ได้เฉพาะ `AUTH_MODE=development` และจะไม่ถูกผูกกับ Cognito
 
 ## ข้อจำกัด
 
-- อาจารย์/เจ้าหน้าที่ที่ใช้ชื่อผู้ใช้ TU จริงผ่าน Verify ได้ แต่ backend ผูกด้วย username เท่านั้น (โหมด development จับคู่อีเมลได้ด้วย) ตอนนี้ให้ใช้บัญชี mock
+- กรรมการ/เจ้าหน้าที่ที่ใช้ชื่อผู้ใช้ TU จริงผ่าน Verify ได้ แต่ backend ผูกด้วย username เท่านั้น (โหมด development จับคู่อีเมลได้ด้วย) ตอนนี้ให้ใช้บัญชี mock
 - ชื่อนักศึกษาจาก TU เก็บใน Cognito ตอน login ถ้า `AdminUpdateUserAttributes` ไม่ได้รับอนุญาต ชื่อจะเป็นรหัสนักศึกษาแทน
 - ยังไม่ได้ทดสอบกับ Cognito จริง ทดสอบ backend integration กับ claims จำลอง (ทั้ง HTTP API และ REST API) และ trigger กับ TU API จำลอง

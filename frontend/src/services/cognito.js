@@ -117,6 +117,11 @@ export async function cognitoIdToken() {
   return tokens?.idToken?.toString() ?? null;
 }
 
+// ขอ token ใหม่จาก Cognito ทันที (ได้ข้อมูลผู้ใช้ล่าสุด เช่นชื่อที่ Verify เพิ่งเขียนจาก TU)
+export async function refreshCognitoSession() {
+  await fetchAuthSession({ forceRefresh: true });
+}
+
 export async function signOutCognito() {
   await signOut().catch(() => {});
 }

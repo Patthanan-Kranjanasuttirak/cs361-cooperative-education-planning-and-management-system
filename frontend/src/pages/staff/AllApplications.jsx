@@ -1,12 +1,12 @@
 import { useApi } from '../../hooks/useApi';
-import { api } from '../../services/api';
 import ApiState from '../../components/ApiState';
 import { useState } from 'react';
 import ApplicationStatusBadge from '../../components/ApplicationStatusBadge';
+import CompanyFeedback from '../../components/CompanyFeedback';
 import DocumentLink from '../../components/DocumentLink';
 import GpaxValue from '../../components/GpaxValue';
-import ReviewPanel from '../../components/ReviewPanel';
-import { APPLICATION_STATUS } from '../../config/applicationStatus';
+import { formatPhone } from '../../utils/phone';
+import { APPLICATION_STATUS, STATUS_FILTERS, currentStatus } from '../../config/applicationStatus';
 import '../CSS/studentProfile.css';
 import '../CSS/myApplications.css';
 import '../CSS/pendingApplications.css';
@@ -20,7 +20,8 @@ const statusLabel = (status) => APPLICATION_STATUS[status]?.label ?? status;
 function History({ items }) {
   return (
     <ol className="history-list">
-      {items.map((h) => (
+      {/* ข้ามขั้นอาจารย์อนุมัติของใบสมัครเก่า (รอบริษัทพิจารณา → รอบริษัทพิจารณา) */}
+      {items.filter((h) => !h.from || currentStatus(h.from) !== currentStatus(h.to)).map((h) => (
         <li key={`${h.to}-${h.at}`} className="history-item">
           <span className="history-dot" aria-hidden="true" />
           <div>
@@ -38,25 +39,24 @@ function History({ items }) {
 }
 
 export default function AllApplications() {
-  const { data: applications, reload, loading, error } = useApi('/staff/applications');
+  const { data: applications, loading, error } = useApi('/staff/applications');
   const { data: terms } = useApi('/terms');
   const [term, setTerm] = useState('');
   const [status, setStatus] = useState('');
   const [company, setCompany] = useState('');
   const [search, setSearch] = useState('');
   const [openHistory, setOpenHistory] = useState(() => new Set());
-  const [notice, setNotice] = useState('');
 
   const inTerm = applications.filter((a) => !term || a.term === term);
   const companies = [...new Set(inTerm.map((a) => a.company_name))].sort((a, b) => a.localeCompare(b, 'th'));
   const keyword = search.trim().toLowerCase();
   const visible = inTerm.filter(
     (a) =>
-      (!status || a.status === status) &&
+      (!status || currentStatus(a.status) === status) &&
       (!company || a.company_name === company) &&
       (!keyword || a.student.th_name.toLowerCase().includes(keyword) || a.student.student_code.includes(keyword))
   );
-  const pendingCount = inTerm.filter((a) => a.status === 'submitted').length;
+  const pendingCount = inTerm.filter((a) => currentStatus(a.status) === 'submitted').length;
 
   const toggleHistory = (id) =>
     setOpenHistory((prev) => {
@@ -65,15 +65,6 @@ export default function AllApplications() {
       else next.add(id);
       return next;
     });
-
-  const submitReview = async (app, decision, comment) => {
-    try {
-      await api(`/applications/${app.application_id}/reviews`, { method: 'POST', body: { status: decision, comment } });
-      await reload();
-      setNotice(`บันทึกผลการพิจารณาของ ${app.student.th_name} แล้ว`);
-      return true;
-    } catch (err) { setNotice(err.message); return false; }
-  };
 
   const changeTerm = (value) => {
     setTerm(value);
@@ -85,12 +76,11 @@ export default function AllApplications() {
       <div className="app-header">
         <h1 className="app-title">ใบสมัครทั้งหมด</h1>
         <span className="app-term">
-          {inTerm.length} ใบ{pendingCount > 0 && <span className="all-pending"> · รออนุมัติ {pendingCount}</span>}
+          {inTerm.length} ใบ{pendingCount > 0 && <span className="all-pending"> · รอบริษัทพิจารณา {pendingCount}</span>}
         </span>
       </div>
 
       <ApiState loading={loading} error={error} />
-      {notice && <div className="app-banner">{notice}</div>}
 
       <div className="all-filters">
         <label className="all-filter">
@@ -104,8 +94,8 @@ export default function AllApplications() {
           <span className="pending-label">สถานะ</span>
           <select className="profile-input all-select" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">ทุกสถานะ</option>
-            {Object.entries(APPLICATION_STATUS).map(([key, s]) => (
-              <option key={key} value={key}>{s.label}</option>
+            {STATUS_FILTERS.map((key) => (
+              <option key={key} value={key}>{APPLICATION_STATUS[key].label}</option>
             ))}
           </select>
         </label>
@@ -141,7 +131,7 @@ export default function AllApplications() {
                   <div>
                     <p className="app-company">{app.student.th_name}</p>
                     <p className="pending-student-meta">
-                      รหัส {app.student.student_code} · GPAX <GpaxValue gpax={app.student.gpax} /> · อ.ที่ปรึกษา {app.student.advisor_name}
+                      รหัส {app.student.student_code} · GPAX <GpaxValue gpax={app.student.gpax} />
                     </p>
                   </div>
                   <ApplicationStatusBadge status={app.status} />
@@ -153,6 +143,21 @@ export default function AllApplications() {
                   <p className="app-position">{app.position_name}</p>
                 </div>
 
+                {/* ผลคัดเลือกที่บริษัทส่งกลับ: ใครเป็นผู้รับ/พิจารณา และติดต่อได้ทางไหน */}
+                {app.company_decision && (
+                  <div className={`company-decision company-decision--${app.company_decision.status}`}>
+                    <p className="pending-label">{app.company_name} {app.company_decision.status === 'accepted' ? 'รับนักศึกษา' : 'ไม่รับนักศึกษา'}</p>
+                    <p className="company-decision-who">
+                      {app.company_decision.status === 'accepted' ? 'ผู้รับ' : 'ผู้พิจารณา'}: {app.company_decision.by ?? '-'}
+                    </p>
+                    <p className="company-decision-contact">
+                      {[app.company_decision.email, formatPhone(app.company_decision.phone)].filter(Boolean).join(' · ') || '-'}
+                    </p>
+                    <p className="app-date">เมื่อ {formatDateTime(app.company_decision.at)}</p>
+                  </div>
+                )}
+                <CompanyFeedback app={app} title="ข้อความที่บริษัทส่งถึงนักศึกษา" />
+
                 <div className="pending-docs">
                   <DocumentLink url={app.resume_url} label="ดูเรซูเม่" />
                   <DocumentLink url={app.transcript_url} label="ดู Transcript" />
@@ -162,21 +167,14 @@ export default function AllApplications() {
                     aria-expanded={historyOpen}
                     onClick={() => toggleHistory(app.application_id)}
                   >
-                    {historyOpen ? 'ซ่อนประวัติ' : `ประวัติสถานะ (${app.history.length})`}
+                    {historyOpen ? 'ซ่อนประวัติ' : `ประวัติสถานะ`}
                   </button>
                 </div>
 
                 {historyOpen && <History items={app.history} />}
 
-                {app.status === 'submitted' ? (
-                  <ReviewPanel
-                    id={app.application_id}
-                    onOpen={() => setNotice('')}
-                    onSubmit={(decision, comment) => submitReview(app, decision, comment)}
-                  />
-                ) : (
-                  <p className="app-date all-submitted">ส่งเมื่อ {formatDateTime(app.submitted_at)}</p>
-                )}
+                {/* ใบสมัครส่งถึงบริษัทโดยตรง เจ้าหน้าที่ติดตามสถานะอย่างเดียว */}
+                <p className="app-date all-submitted">ส่งเมื่อ {formatDateTime(app.submitted_at)}</p>
               </li>
             );
           })}

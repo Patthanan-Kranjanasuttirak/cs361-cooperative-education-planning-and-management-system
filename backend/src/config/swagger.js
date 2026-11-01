@@ -168,7 +168,7 @@ export const swaggerSpec = {
         properties: {
           user_id: { type: "integer", example: 1 },
           username: { type: "string", example: "6609611111" },
-          role: { type: "string", enum: ["student", "advisor", "staff", "company"], example: "student" },
+          role: { type: "string", enum: ["student", "committee", "staff", "company"], example: "student" },
           th_name: { type: "string", example: "สมชาย ใจดี" },
           en_name: { type: "string", example: "Somchai Jaidee" },
           email: { type: "string", example: "somchai@dome.tu.ac.th" },

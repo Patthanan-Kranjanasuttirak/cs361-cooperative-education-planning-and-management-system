@@ -20,7 +20,7 @@ export default function RoleLayout() {
             <p className="role-sidebar-role">{role.label}</p>
           </div>
           <nav className="role-sidebar-menu">
-            {role.menu.map((item) => (
+            {role.menu.filter((item) => !item.requires || user[item.requires]).map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
