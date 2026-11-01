@@ -38,11 +38,16 @@ export async function userBySubject(subject) {
 }
 
 // identities มาเป็น array ใน ID token แต่ API Gateway ส่ง claims ที่เป็น array มาเป็น string
+// ผู้ใช้ Google มี identity เดียว API Gateway จึงส่งมาเป็น object เดี่ยว {"providerName":"Google",...} ไม่ห่อด้วย array
+// บางรูปแบบเป็นข้อความที่ไม่ใช่ JSON เช่น [{userId=1, providerName=Google, ...}]
 function identityProviders(claims) {
   let identities = claims.identities;
   if (typeof identities === 'string') {
-    try { identities = JSON.parse(identities); } catch { return []; }
+    try { identities = JSON.parse(identities); } catch {
+      return [...identities.matchAll(/providerName=([^,}\]\s]+)/g)].map((match) => match[1]);
+    }
   }
+  if (identities && typeof identities === 'object' && !Array.isArray(identities)) identities = [identities];
   return Array.isArray(identities) ? identities.map((i) => i?.providerName) : [];
 }
 

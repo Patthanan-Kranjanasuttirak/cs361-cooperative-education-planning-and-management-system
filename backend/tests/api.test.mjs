@@ -608,6 +608,7 @@ test('first Cognito login binds a pre-registered account once by TU username or 
     ).then((r) => r.rows[0].user_id);
     const tuUser = await insert('bind.tu.user', 'committee', 'bind.tu@tu.ac.th');
     const googleUser = await insert('bind.google', 'company', 'Bind.Coordinator@gmail.com');
+    const restUser = await insert('bind.google.rest', 'company', 'rest.coordinator@gmail.com');
     await insert('bind.dup.1', 'company', 'dup.coordinator@gmail.com');
     await insert('bind.dup.2', 'company', 'dup.coordinator@gmail.com');
     const { handler } = await import('../src/lambda.js');
@@ -634,6 +635,10 @@ test('first Cognito login binds a pre-registered account once by TU username or 
     result = await me(google('sub-g1', 'bind.coordinator@gmail.com'));
     assert.equal(result.status, 200); assert.equal(result.body.user_id, googleUser);
     assert.equal((await me(google('sub-g2', 'bind.coordinator@gmail.com'))).status, 403);
+    // REST API (Cognito authorizer) ส่ง identities เป็น object เดี่ยว (ไม่มี array ครอบ) หรือข้อความที่ไม่ใช่ JSON
+    result = await me(google('sub-g4', 'rest.coordinator@gmail.com', { identities:JSON.stringify({ userId:'sub-g4', providerName:'Google', providerType:'Google', issuer:null, primary:'true', dateCreated:'1700000000000' }) }));
+    assert.equal(result.status, 200); assert.equal(result.body.user_id, restUser);
+    assert.equal((await me(google('sub-g5', 'bind.tu@tu.ac.th', { identities:'[{userId=sub-g5, providerName=Google, primary=true}]' }))).status, 403, 'text-format Google identity still cannot bind a TU-role account');
     // อีเมลซ้ำหลายบัญชี: ไม่เดาว่าเป็นใคร
     assert.equal((await me(google('sub-g3', 'dup.coordinator@gmail.com'))).status, 403);
     // บัญชี dev ไม่ถูกผูก
