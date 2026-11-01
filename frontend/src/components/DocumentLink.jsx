@@ -59,7 +59,7 @@ export default function DocumentLink({ url, label }) {
   }
   return (
     <span>
-      {url.startsWith('/documents/')
+      {url.startsWith('/documents/') || url.startsWith('/applications/')
         ? <button type="button" className="pending-doc document-open" onClick={open} disabled={loading}>{loading ? 'กำลังเปิดเอกสาร…' : label}</button>
         : <a className="pending-doc" href={url} target="_blank" rel="noopener noreferrer">{label}</a>}
       {error && <span className="profile-error" role="alert">{error}</span>}

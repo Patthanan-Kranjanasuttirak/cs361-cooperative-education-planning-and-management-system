@@ -1,0 +1,204 @@
+/* คัดกรอง/คัดเลือกเข้าแผนสหกิจศึกษา (เจ้าหน้าที่และกรรมการ) และรายงานผู้ผ่าน */
+
+/* กรอบสถานะรอบคัดเลือก */
+.selection-panel {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.selection-panel-title {
+  font-weight: 600;
+  color: #222A4B;
+}
+
+.selection-panel-text {
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.selection-secondary {
+  background-color: #ffffff;
+  color: #222A4B;
+  border-color: #222A4B;
+}
+
+.selection-secondary:hover:not(:disabled) {
+  background-color: #f1f5f9;
+}
+
+.selection-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+/* โน้ตจากการคัดกรองของเจ้าหน้าที่ */
+.selection-note {
+  background-color: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  border-radius: 6px;
+  padding: 0.6rem 0.85rem;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+  color: #334155;
+  white-space: pre-line;
+}
+
+.selection-note span {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 0.15rem;
+}
+
+.selection-screening {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* ค้นหา + ตัวกรองผลคัดกรอง + เรียงลำดับ */
+.selection-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.selection-toolbar .pending-search {
+  flex: 1 1 16rem;
+  margin-bottom: 0;
+}
+
+.selection-toolbar .all-select {
+  flex: 0 1 14rem;
+}
+
+/* ปุ่มเลือกผ่าน/ไม่ผ่านของกรรมการ */
+.selection-choices {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.selection-choice {
+  min-width: 6.5rem;
+  background-color: #ffffff;
+}
+
+.selection-choice--passed {
+  color: #047857;
+  border-color: #6ee7b7;
+}
+
+.selection-choice--failed {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.selection-choice--passed.selection-choice--active {
+  background-color: #059669;
+  border-color: #059669;
+  color: #ffffff;
+}
+
+.selection-choice--failed.selection-choice--active {
+  background-color: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+}
+
+.selection-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.report-meta {
+  margin: -0.75rem 0 1rem;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.report-actions {
+  margin-top: 0;
+}
+
+/* พิมพ์/บันทึก PDF: เหลือเฉพาะหัวข้อและตารางรายชื่อ */
+@media print {
+  .navbar,
+  .footer,
+  .role-sidebar,
+  .report-actions {
+    display: none !important;
+  }
+
+  .role-content-wrapper,
+  .role-main {
+    display: block;
+    padding: 0;
+    margin: 0;
+  }
+
+  .report .cm-table-wrap {
+    overflow: visible;
+    border: none;
+  }
+
+  .report .cm-table {
+    font-size: 11pt;
+  }
+
+  .report .cm-table thead {
+    display: table-header-group;
+  }
+
+  .report .cm-table tr {
+    display: table-row;
+    break-inside: avoid;
+  }
+
+  .report .cm-table td,
+  .report .cm-table th {
+    display: table-cell;
+  }
+
+  .report .cm-table td::before {
+    content: none;
+  }
+}
+
+.report-filter {
+  display: block;
+  max-width: 16rem;
+  margin-bottom: 1rem;
+}
+
+.selection-bulk {
+  margin: 0 0 1rem;
+}
+
+.selection-bulk {
+  align-items: center;
+}
+
+.selection-bulk-count {
+  margin-right: auto;
+}

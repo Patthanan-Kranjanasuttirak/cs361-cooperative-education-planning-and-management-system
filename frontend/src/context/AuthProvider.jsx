@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AuthContext } from './authContext';
 import { ROLES } from '../config/roles';
 import { api } from '../services/api';
-import { cognitoEnabled, onGoogleRedirect, signInWithGoogle, signInWithTu, signOutCognito } from '../services/cognito';
+import { cognitoEnabled, onGoogleRedirect, refreshCognitoSession, signInWithGoogle, signInWithTu, signOutCognito } from '../services/cognito';
 
 const STORAGE_KEY = 'coop-auth';
 // ข้อความผิดพลาดที่ต้องอยู่รอดหลัง redirect (เช่น Google login แล้วไม่มีสิทธิ์ → signOut พาออกไป Hosted UI แล้วกลับมา)
@@ -58,6 +58,16 @@ async function fetchCognitoUser(role) {
   if (user.role !== role) {
     await signOutCognito();
     throw new Error('บทบาทที่เลือกไม่ตรงกับบัญชีนี้');
+  }
+  // login ครั้งแรก: Cognito ออก ID token จากข้อมูลก่อน Verify เขียนชื่อจาก TU ลงไป ชื่อจึงยังเป็นรหัสนักศึกษา
+  // ต่ออายุ token ทันทีให้ได้ชื่อ แล้วถาม backend ใหม่ (fillTuNames เติมชื่อลง DB) แทนการรอ token หมดอายุ ~1 ชั่วโมง
+  if (user.role === 'student' && user.th_name?.toLowerCase() === user.username?.toLowerCase()) {
+    try {
+      await refreshCognitoSession();
+      user = await api('/auth/me');
+    } catch {
+      // ต่ออายุไม่สำเร็จ ใช้ชื่อเดิมไปก่อน ครั้งหน้าที่ token ต่ออายุชื่อจะถูกเติมเอง
+    }
   }
   return user;
 }

@@ -11,21 +11,6 @@
   margin-left: 0.4rem;
 }
 
-.user-advisor-select {
-  margin-bottom: 0;
-  width: 100%;
-  min-width: 200px;
-  max-width: 240px;
-  padding-top: 0.4rem;
-  padding-bottom: 0.4rem;
-  font-size: 0.9rem;
-}
-
-.user-advisor-select--empty {
-  color: #b45309;
-  border-color: #fcd34d;
-}
-
 .user-readonly {
   margin-bottom: 0.5rem;
 }
@@ -41,12 +26,6 @@
 
 .cm-actions .cm-small-btn + .user-toggle {
   margin-left: 0.4rem;
-}
-
-@media (max-width: 768px) {
-  .user-advisor-select {
-    min-width: 0;
-  }
 }
 
 /* ช่องรหัส + ปุ่มดึงข้อมูลจาก TU */
@@ -74,4 +53,8 @@
 
 .user-readonly-empty {
   color: #94a3b8;
+}
+
+.user-student-hint {
+  margin: -0.5rem 0 1rem;
 }
