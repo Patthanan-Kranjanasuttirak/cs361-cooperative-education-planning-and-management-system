@@ -64,6 +64,21 @@ function Invoke-Aws {
   return $result
 }
 
+# Runs the AWS CLI where a failure is an expected answer (for example "parameter not found").
+# Windows PowerShell 5.1 turns native stderr into a terminating error when ErrorActionPreference is Stop,
+# even with 2>$null, so the preference is relaxed here. The exit code is left in $script:AwsQuietExit.
+function Invoke-AwsQuiet {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$CliArgs)
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $output = & $script:Aws @CliArgs 2>&1
+    $script:AwsQuietExit = $LASTEXITCODE
+  }
+  finally { $ErrorActionPreference = $previous }
+  return @($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
+}
+
 function Read-SecretValue([string]$Label, [string]$EnvName, [string]$Default = '') {
   $value = [Environment]::GetEnvironmentVariable($EnvName)
   if (-not [string]::IsNullOrEmpty($value)) { return $value }
@@ -88,8 +103,9 @@ function Get-DbPassword {
   $paramName = "/$Prefix/deploy/db-password"
   $password = [Environment]::GetEnvironmentVariable('DB_PASSWORD')
   if ([string]::IsNullOrEmpty($password)) {
-    $password = & $script:Aws ssm get-parameter --name $paramName --with-decryption --query Parameter.Value --output text --region $Region 2>$null
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($password)) {
+    $found = Invoke-AwsQuiet ssm get-parameter --name $paramName --with-decryption --query Parameter.Value --output text --region $Region
+    $password = if ($script:AwsQuietExit -eq 0) { ($found -join '').Trim() } else { '' }
+    if ([string]::IsNullOrEmpty($password)) {
       $password = New-RandomPassword 24
       Write-Host "Generated a new database password and stored it in SSM Parameter Store ($paramName)."
     }
@@ -109,8 +125,8 @@ function Get-StackOutputs([string]$StackName) {
 }
 
 function Test-StackExists([string]$StackName) {
-  & $script:Aws cloudformation describe-stacks --stack-name $StackName --region $Region 2>$null | Out-Null
-  return ($LASTEXITCODE -eq 0)
+  Invoke-AwsQuiet cloudformation describe-stacks --stack-name $StackName --region $Region | Out-Null
+  return ($script:AwsQuietExit -eq 0)
 }
 
 function New-Zip([string]$ZipPath, [string]$WorkDir, [string[]]$Items) {

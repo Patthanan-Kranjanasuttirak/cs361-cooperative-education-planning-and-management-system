@@ -136,7 +136,7 @@ powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-tes
 |---|---|
 | [`github-deploy-user.yaml`](github-deploy-user.yaml) | **ใช้ในบัญชีนี้** — สร้าง IAM user ที่ทำได้แค่อัปเดตโค้ดของ Lambda ตัวเดียว (ไม่สร้าง access key ใน template) ใช้ key ของ user นี้เก็บเป็น GitHub secrets |
 | [`github-oidc.yaml`](github-oidc.yaml) | ทางเลือกที่ปลอดภัยกว่า (OIDC ไม่เก็บ key) แต่ **ใช้ไม่ได้ในบัญชีนี้**: องค์กร AWS ตั้ง service control policy ปฏิเสธ `iam:CreateOpenIDConnectProvider` (stack ล้มด้วย "explicit deny in a service control policy") เก็บไว้ใช้กับบัญชีที่อนุญาต |
-| [`.github/workflows/deploy-backend.yml`](../.github/workflows/deploy-backend.yml) | เมื่อ push `main` ที่แก้ `backend/` หรือ `database/`: รันเทสต์ → build zip → อัปเดต Lambda (`--publish` เก็บเวอร์ชันไว้ย้อนกลับ) → smoke test `/health` ใช้ OIDC role ถ้าตั้งตัวแปร `AWS_DEPLOY_ROLE_ARN` ไม่เช่นนั้นใช้ access key จาก secrets |
+| [`.github/workflows/deploy-backend.yml`](../.github/workflows/deploy-backend.yml) | เมื่อ push `main` ที่แก้ `backend/` หรือ `database/`: รันเทสต์ → build zip → อัปเดต Lambda backend (`--publish` เก็บเวอร์ชันไว้ย้อนกลับ) → อัปเดต trigger 4 ตัวถ้าโค้ดเปลี่ยน → smoke test `/health` และกด Run workflow เพื่อรัน migrate ได้ ใช้ OIDC role ถ้าตั้งตัวแปร `AWS_DEPLOY_ROLE_ARN` ไม่เช่นนั้นใช้ access key จาก secrets |
 
 หน้าเว็บอัปเดตอัตโนมัติอยู่แล้วโดย Amplify (ผูกกับ GitHub ที่ branch `main`)
 
@@ -165,7 +165,17 @@ powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-tes
 
 **ย้อนกลับเมื่อพัง:** `git revert` คอมมิตที่มีปัญหาแล้ว push workflow จะ deploy โค้ดก่อนหน้าให้ หรือใน Lambda → Versions เลือกเวอร์ชันก่อนหน้า
 
-**ขอบเขต:** workflow อัปเดตเฉพาะโค้ด backend (เหมือน `-CodeOnly`) ไม่ deploy Cognito trigger, ไม่รัน migrate และไม่แก้ทรัพยากร AWS ส่วนนั้นรันด้วย `deploy.ps1`
+**ขอบเขต: อะไรอัตโนมัติ อะไรกดเอง**
+
+| สิ่งที่เปลี่ยน | สิ่งที่ workflow ทำ |
+|---|---|
+| โค้ด backend หรือไฟล์ใน `database/` | push `main` แล้วอัปเดต Lambda backend เอง |
+| โค้ดใน `backend/cognito-triggers/` | push `main` แล้วอัปเดต Lambda trigger ทั้ง 4 ตัวด้วย (ตรวจจากไฟล์ที่เปลี่ยนเทียบกับคอมมิตก่อนหน้า) หรือกด Run workflow แล้วติ๊ก `deploy_triggers` |
+| ไฟล์ migration ใหม่ใน `database/migrations/` | **ไม่รันเอง** workflow แสดงคำเตือนสีเหลืองบอกให้ทำ snapshot RDS แล้วกด Run workflow พร้อมติ๊ก `migrate` (รัน `{"action":"migrate","seeds":false}` ไม่ใส่ seed เสมอ) |
+| ทรัพยากร AWS (VPC, RDS, Cognito, API Gateway ฯลฯ) | ไม่ได้อยู่ใน workflow ใช้ `deploy.ps1` เพราะต้องใช้สิทธิ์กว้างและมีความเสี่ยงสูง |
+
+ตั้งค่าเพิ่ม: IAM user ต้องมีสิทธิ์อัปเดต trigger และเรียก backend (เพิ่มเมื่อ 9 พ.ย. 2026) ถ้าสร้างไว้ก่อนหน้านี้แล้ว ให้รันคำสั่ง deploy ข้อ 3 ซ้ำเพื่ออัปเดตสิทธิ์ (ไม่ต้องสร้าง access key ใหม่) workflow หาชื่อ Lambda trigger ให้เองทั้งแบบ `cs361-coop-define-auth` (ระบบจริงที่สร้างมือ) และ `cs361-coop-define-auth-challenge` (ชุด IaC) ถ้าใช้ prefix อื่นที่ไม่ใช่ `cs361-coop` ให้ตั้งตัวแปร GitHub `TRIGGER_FUNCTION_PREFIX` และส่ง `TriggerFunctionPrefix=<prefix>` ตอน deploy template ด้วย
+
 
 ## ตรวจ template อัตโนมัติ (CI)
 
@@ -178,5 +188,12 @@ cfn-lint --non-zero-exit-code error infra/network-data.yaml infra/app.yaml infra
 
 ## สถานะ
 
-ตรวจแล้ว: ไวยากรณ์ผ่าน `aws cloudformation validate-template` และ `cfn-lint` (เหลือคำเตือน W1011 ที่ยอมรับ), ส่วน build zip ทดสอบแล้ว (`-BuildOnly`) ว่าได้ไฟล์ที่ Lambda ใช้ได้
-ยังไม่ได้ตรวจ: การ deploy จริงทั้งชุด (stack 1 และ stack 2) และ smoke test ต้องรัน `deploy.ps1` เองและบันทึกผลในหลักฐาน
+ตรวจแล้ว (9 พ.ย. 2026):
+- ไวยากรณ์ผ่าน `aws cloudformation validate-template` และ `cfn-lint` (เหลือคำเตือน W1011 ที่ยอมรับ)
+- **Deploy จริงสำเร็จ** ด้วย `deploy.ps1 -Prefix cs361-coop-test`: stack `cs361-coop-test-data` (14 resources) และ `cs361-coop-test-app` (44 resources) เป็น `CREATE_COMPLETE` ทั้งหมด
+- migrate สำเร็จ (`init` และ migration 003 ถึง 011 พร้อม seed) และ smoke test ผ่านครบ 4 ข้อ (`/health` 200, `/companies` 200, `/auth/me` ไม่มี token 401, preflight CORS 204)
+- ตรวจเพิ่มด้วย AWS CLI: RDS ไม่ public, Lambda backend อยู่ใน VPC ส่วน trigger 4 ตัวอยู่นอก VPC, Cognito มี domain และ Google provider
+
+- **`-Destroy` ทดสอบแล้ว:** stack `cs361-coop-test-app` และ `cs361-coop-test-data` เป็น `DELETE_COMPLETE` ไม่เหลือ Lambda, VPC หรือ bucket ของชุดทดสอบ ระบบจริง (RDS `cs361-coop-db`, bucket `cs361-coop-files-2026`, Cognito pool เดิม) ไม่ถูกกระทบ เหลือเฉพาะ snapshot สุดท้ายของ RDS 1 ก้อนและพารามิเตอร์ SSM ของรหัสผ่านตามที่ออกแบบไว้
+
+ยังไม่ได้ตรวจ: `-CodeOnly` และ Google login กับชุดทดสอบ (ต้องมี OAuth client และเพิ่ม Redirect URI)

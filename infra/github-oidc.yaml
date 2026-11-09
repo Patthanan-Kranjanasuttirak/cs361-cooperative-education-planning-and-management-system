@@ -3,7 +3,7 @@ Description: CS361 Co-op - lets GitHub Actions deploy the backend Lambda without
 
 # GitHub Actions asks AWS for short-lived credentials with its own signed token.
 # AWS only hands them out when the token comes from the repository and branch named below,
-# and the role can do nothing except update the code of one Lambda function.
+# and the role can only update the code of the backend Lambda and the four Cognito trigger Lambdas, and invoke the backend (migration).
 # Keep this file ASCII-only: the AWS CLI on Windows reads templates with the system code page.
 
 Parameters:
@@ -26,6 +26,10 @@ Parameters:
     Type: String
     Default: cs361-coop-api
     Description: The backend Lambda that the workflow may update (the hand-made production one by default).
+  TriggerFunctionPrefix:
+    Type: String
+    Default: cs361-coop
+    Description: Prefix of the four Cognito trigger Lambdas (pre-sign-up, define-auth-challenge, create-auth-challenge, verify-auth-challenge) that the workflow may update.
   ExistingOidcProviderArn:
     Type: String
     Default: ''
@@ -70,6 +74,19 @@ Resources:
                   - lambda:GetFunction
                   - lambda:GetFunctionConfiguration
                   - lambda:ListVersionsByFunction
+                Resource:
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaFunctionName}'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${TriggerFunctionPrefix}-pre-sign-up'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${TriggerFunctionPrefix}-define-auth-challenge'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${TriggerFunctionPrefix}-create-auth-challenge'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${TriggerFunctionPrefix}-verify-auth-challenge'
+                  # The hand-made production triggers have shorter names (no -challenge suffix)
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${TriggerFunctionPrefix}-define-auth'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${TriggerFunctionPrefix}-create-auth'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${TriggerFunctionPrefix}-verify-auth'
+              # Invoke is needed only to run the on-demand database migration of the backend.
+              - Effect: Allow
+                Action: lambda:InvokeFunction
                 Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaFunctionName}'
       Tags:
         - { Key: Project, Value: cs361-coop }
