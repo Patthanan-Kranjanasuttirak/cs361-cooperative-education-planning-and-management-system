@@ -3,7 +3,7 @@ Description: CS361 Co-op - stack 2 of 2 - IAM roles, Lambda (backend + 4 Cognito
 
 # Built from DEPLOY_AWS.md sections 4, 5, 7 and 8. Deploy infra/network-data.yaml (stack 1) first:
 # this stack imports its Exports (VPC, subnets, security group, database, buckets).
-# The Lambda zip files must already be in the artifacts bucket of stack 1 (see infra/README.md).
+# The Lambda zip files must already be in the artifacts bucket of stack 1 (see AUTOMATION.md, section A4).
 # Keep this file ASCII-only: the AWS CLI on Windows reads templates with the system code page.
 
 Parameters:
