@@ -2,7 +2,7 @@
 
 คู่มือสร้างและดูแลระบบบน AWS แบบ manual (ระบบที่ใช้งานอยู่สร้างด้วยมือตามคู่มือนี้) 
 
-> **สร้างซ้ำด้วย Infrastructure as Code ได้แล้ว:** ดู [infra/README.md](infra/README.md) และข้อ 14 ท้ายเอกสารนี้ (V5)
+> **สร้างซ้ำด้วย Infrastructure as Code ได้แล้ว:** ดู [AUTOMATION.md](AUTOMATION.md) (สรุป IaC และ CI/CD พร้อมวิธีรันใหม่), [infra/README.md](infra/README.md) และข้อ 14 ท้ายเอกสารนี้ (V5)
 
 ## 1. ภาพรวม
 
