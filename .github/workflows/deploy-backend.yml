@@ -4,7 +4,7 @@ name: Deploy backend
 # Also updates the four Cognito trigger Lambdas when their code changed, and can run the database migration on demand
 # (Run workflow -> tick "migrate"). Migrations are never run automatically because they change the production database.
 # AWS access: an OIDC role when the variable AWS_DEPLOY_ROLE_ARN is set, otherwise an IAM user's access key from
-# the secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. Setup steps: infra/README.md, section "CI/CD".
+# the secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. Setup steps: AUTOMATION.md, section B5.
 # The infrastructure itself is not deployed here (see infra/deploy.ps1).
 
 on:

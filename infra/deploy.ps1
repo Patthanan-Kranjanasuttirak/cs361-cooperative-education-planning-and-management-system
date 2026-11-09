@@ -21,7 +21,7 @@
 .NOTES
   Secrets are read from environment variables or prompted (never written to disk, never committed):
     DB_PASSWORD (otherwise generated and kept in SSM Parameter Store), MOCK_PASSWORD, TU_API_KEY,
-    GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.
+    GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GITHUB_TOKEN (only with -GitHubRepo).
 #>
 [CmdletBinding()]
 param(
@@ -29,6 +29,10 @@ param(
   [string]$Region = 'ap-southeast-2',
   [string]$WebOrigin = 'http://localhost:5173',
   [string]$MockLogins = '',
+  # Optional frontend: with -GitHubRepo the script also creates an Amplify app (infra/frontend.yaml) connected to that
+  # repository and uses its URL as the web origin. Needs the GITHUB_TOKEN secret (a GitHub personal access token).
+  [string]$GitHubRepo = '',
+  [string]$GitHubBranch = 'main',
   [switch]$Seed,
   [switch]$SkipTests,
   [switch]$BuildOnly,
@@ -44,6 +48,7 @@ $RepoDir = Split-Path $InfraDir -Parent
 $BuildDir = Join-Path $InfraDir '.build'
 $DataStack = "$Prefix-data"
 $AppStack = "$Prefix-app"
+$FrontendStack = "$Prefix-web"
 $TriggerNames = @('pre-sign-up', 'define-auth-challenge', 'create-auth-challenge', 'verify-auth-challenge')
 
 function Write-Step([string]$Text) { Write-Host ''; Write-Host "==> $Text" -ForegroundColor Cyan }
@@ -224,6 +229,53 @@ function Test-Http {
   return $ok
 }
 
+function Wait-AmplifyJob([string]$AppId, [string]$Branch, [string]$JobId) {
+  $last = ''
+  for ($i = 0; $i -lt 90; $i++) {
+    $status = (Invoke-Aws amplify get-job --app-id $AppId --branch-name $Branch --job-id $JobId --region $Region --query job.summary.status --output text) -join ''
+    if ($status -ne $last) { Write-Host "  Amplify build: $status"; $last = $status }
+    if ($status -eq 'SUCCEED') { return }
+    if ($status -eq 'FAILED' -or $status -eq 'CANCELLED') {
+      throw "Amplify build $status. Open the Amplify console (app $AppId, branch $Branch) to read the build log."
+    }
+    Start-Sleep -Seconds 10
+  }
+  throw 'The Amplify build did not finish within 15 minutes.'
+}
+
+# Amplify serves the single-page app for client routes with its "404-200" rule, which in practice keeps the status 404
+# (the hand-made production site behaves the same) and redirects /login to /login/. So the check is on the content:
+# a client route must return the same app shell as the home page, whatever the status code is (200 or 404).
+function Test-SpaFallback([string]$Origin) {
+  $name = 'Frontend serves the app for a client route (SPA fallback)'
+  $rootHtml = ''; $deepHtml = ''; $deepStatus = 0
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    try { $rootHtml = (Invoke-WebRequest -UseBasicParsing -Uri "$Origin/").Content } catch { $rootHtml = '' }
+    try {
+      $response = Invoke-WebRequest -UseBasicParsing -Uri "$Origin/login/"
+      $deepStatus = [int]$response.StatusCode; $deepHtml = $response.Content
+    }
+    catch {
+      $deepHtml = ''
+      if ($_.Exception.Response) {
+        $deepStatus = [int]$_.Exception.Response.StatusCode
+        # Invoke-WebRequest has already read the body once, so rewind the stream before reading it again.
+        $stream = $_.Exception.Response.GetResponseStream()
+        if ($stream.CanSeek) { $stream.Position = 0 }
+        $reader = New-Object System.IO.StreamReader($stream)
+        $deepHtml = $reader.ReadToEnd(); $reader.Close()
+      }
+    }
+    if ($rootHtml -match 'id="root"') { break }
+    Start-Sleep -Seconds 5
+  }
+  $ok = ($rootHtml -match 'id="root"') -and ($deepHtml -match 'id="root"') -and (@(200, 404) -contains $deepStatus)
+  $label = if ($ok) { 'PASS' } else { 'FAIL' }
+  $color = if ($ok) { 'Green' } else { 'Red' }
+  Write-Host ("[{0}] {1} - /login/ returned HTTP {2}" -f $label, $name, $deepStatus) -ForegroundColor $color
+  return $ok
+}
+
 function Invoke-SmokeTests([string]$Api) {
   Write-Step 'Smoke tests'
   $passed = $true
@@ -257,6 +309,9 @@ if ($Prefix -eq 'cs361-coop' -and -not $AllowExistingNames) {
 if ($WebOrigin -notmatch '^https?://[A-Za-z0-9.-]+(:[0-9]+)?$') {
   throw "WebOrigin must look like https://example.com with no trailing slash (a trailing slash breaks CORS). Got: $WebOrigin"
 }
+if ($GitHubRepo -and $GitHubRepo -notmatch '^https://github\.com/[A-Za-z0-9-]+/(?!.*\.git$)[A-Za-z0-9._-]+$') {
+  throw "GitHubRepo must look like https://github.com/owner/repo (no .git, no trailing slash). Got: $GitHubRepo"
+}
 
 # ------------------------------------------------------------------ destroy
 if ($Destroy) {
@@ -267,6 +322,11 @@ if ($Destroy) {
   if (Test-StackExists $DataStack) {
     $dataOut = Get-StackOutputs $DataStack
     $buckets = @($dataOut['FilesBucketName'], $dataOut['ArtifactsBucketName'])
+  }
+  if (Test-StackExists $FrontendStack) {
+    Invoke-Aws cloudformation delete-stack --stack-name $FrontendStack --region $Region | Out-Null
+    Invoke-Aws cloudformation wait stack-delete-complete --stack-name $FrontendStack --region $Region | Out-Null
+    Write-Host "Deleted $FrontendStack"
   }
   if (Test-StackExists $AppStack) {
     Invoke-Aws cloudformation delete-stack --stack-name $AppStack --region $Region | Out-Null
@@ -323,9 +383,30 @@ $googleClientSecret = Read-SecretValue 'Google OAuth client secret (GOOGLE_CLIEN
 if ($mockPassword -and -not $MockLogins) {
   Write-Host 'Note: MOCK_PASSWORD is set but -MockLogins is empty, so no demo login will work.' -ForegroundColor Yellow
 }
+$githubToken = ''
+if ($GitHubRepo) {
+  $githubToken = Read-SecretValue 'GitHub personal access token (GITHUB_TOKEN)' 'GITHUB_TOKEN'
+  if ([string]::IsNullOrEmpty($githubToken)) {
+    throw '-GitHubRepo needs a GitHub personal access token: set GITHUB_TOKEN or enter it when asked.'
+  }
+}
 
 # ------------------------------------------------------------------ build
 Build-Packages
+
+# ------------------------------------------------------------------ stack 3, first pass (optional): the Amplify domain
+# The CORS origin and the Cognito callback URL of stack 2 need the frontend domain, and the frontend needs values from
+# stack 2, so the Amplify app is created first without a build and updated after stack 2.
+# It runs before the slow database stack so that a GitHub or Amplify problem shows up within a minute.
+if ($GitHubRepo) {
+  Write-Step "Deploying $FrontendStack (Amplify app, first pass)"
+  Invoke-Aws cloudformation deploy --stack-name $FrontendStack --template-file (Join-Path $InfraDir 'frontend.yaml') `
+    --parameter-overrides "Prefix=$Prefix" "Repository=$GitHubRepo" "GitHubAccessToken=$githubToken" "BranchName=$GitHubBranch" `
+    --no-fail-on-empty-changeset --region $Region | Out-Null
+  $frontendOut = Get-StackOutputs $FrontendStack
+  $WebOrigin = $frontendOut['WebOrigin']
+  Write-Host "Frontend origin: $WebOrigin"
+}
 
 # ------------------------------------------------------------------ stack 1
 Write-Step "Deploying $DataStack (network, database, buckets) - the database takes 10-15 minutes the first time"
@@ -364,15 +445,37 @@ Invoke-Aws cloudformation deploy --stack-name $AppStack --template-file (Join-Pa
   --no-fail-on-empty-changeset --region $Region | Out-Null
 $appOut = Get-StackOutputs $AppStack
 
+# ------------------------------------------------------------------ stack 3, second pass (optional): values and build
+if ($GitHubRepo) {
+  Write-Step "Updating $FrontendStack with the backend values and building the frontend"
+  Invoke-Aws cloudformation deploy --stack-name $FrontendStack --template-file (Join-Path $InfraDir 'frontend.yaml') `
+    --parameter-overrides "Prefix=$Prefix" "Repository=$GitHubRepo" "GitHubAccessToken=$githubToken" "BranchName=$GitHubBranch" `
+    "ApiUrl=$($appOut['ApiUrl'])" "UserPoolId=$($appOut['UserPoolId'])" "UserPoolClientId=$($appOut['UserPoolClientId'])" "CognitoDomain=$($appOut['CognitoDomain'])" `
+    --no-fail-on-empty-changeset --region $Region | Out-Null
+  $jobId = (Invoke-Aws amplify start-job --app-id $frontendOut['AppId'] --branch-name $GitHubBranch --job-type RELEASE --region $Region --query jobSummary.jobId --output text) -join ''
+  Write-Host "Started Amplify build $jobId"
+  Wait-AmplifyJob $frontendOut['AppId'] $GitHubBranch $jobId
+}
+
 # ------------------------------------------------------------------ migrate
 Invoke-Migration $appOut['BackendFunctionName']
 
 # ------------------------------------------------------------------ smoke tests
 $allPassed = $true
 if (-not $SkipTests) { $allPassed = Invoke-SmokeTests $appOut['ApiUrl'] }
+if ($GitHubRepo -and -not $SkipTests) {
+  $allPassed = (Test-SpaFallback $WebOrigin) -and $allPassed
+}
 
 # ------------------------------------------------------------------ summary
-Write-Step 'Done. Values for the frontend (Amplify environment variables or frontend/.env)'
+if ($GitHubRepo) {
+  Write-Step "Done. Frontend: $WebOrigin (built from $GitHubRepo, branch $GitHubBranch)"
+  Write-Host 'The values below were already set in the Amplify app (listed so you can check them):'
+}
+else {
+  Write-Step 'Done. Values for the frontend (Amplify environment variables or frontend/.env)'
+  Write-Host 'Also set AMPLIFY_MONOREPO_APP_ROOT=frontend and AMPLIFY_DIFF_DEPLOY=false in Amplify, then redeploy.'
+}
 Write-Host "VITE_AUTH_MODE            = cognito"
 Write-Host "VITE_API_URL              = $($appOut['ApiUrl'])"
 Write-Host "VITE_COGNITO_USER_POOL_ID = $($appOut['UserPoolId'])"
@@ -384,6 +487,6 @@ Write-Host "  $($appOut['GoogleRedirectUri'])"
 Write-Host ''
 Write-Host "Remove this copy when finished: powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix $Prefix -Destroy"
 if (-not $allPassed) {
-  Write-Host 'Some smoke tests failed. See infra/README.md (Troubleshooting).' -ForegroundColor Red
+  Write-Host 'Some smoke tests failed. See AUTOMATION.md (section A8, troubleshooting).' -ForegroundColor Red
   exit 1
 }

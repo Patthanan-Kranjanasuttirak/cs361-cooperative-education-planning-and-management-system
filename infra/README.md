@@ -1,186 +1,114 @@
-# infra/ — Infrastructure as Code 
+# infra/ — โครงสร้างโค้ด
 
-สร้างระบบ CS361 Co-op บน AWS ซ้ำได้ด้วยคำสั่งเดียว แทนการคลิกใน Console ตามคู่มือ [DEPLOY_AWS.md](../DEPLOY_AWS.md)
+ไฟล์นี้อธิบาย **โครงสร้างโค้ดในโฟลเดอร์ `infra/`** เท่านั้น (แต่ละไฟล์ทำอะไร ประกอบกันอย่างไร) วิธีรัน คำสั่ง พารามิเตอร์ การตั้งค่า CI/CD การแก้ปัญหา และผลทดสอบ อยู่ใน **[AUTOMATION.md](../AUTOMATION.md)**
 
-ไฟล์นี้เป็น **รายละเอียดคำสั่งและพารามิเตอร์** ส่วนภาพรวมของ IaC และ CI/CD, ตารางว่าอะไรอัตโนมัติ, ผลทดสอบจริง, วิธีรันตามสถานการณ์ และการล้างหลังส่งงาน อยู่ใน [AUTOMATION.md](../AUTOMATION.md)
-
-| ไฟล์ | ทำอะไร |
-|---|---|
-| [`network-data.yaml`](network-data.yaml) | **Stack 1** — VPC (private, ไม่มี NAT/IGW), security groups, S3 gateway endpoint, RDS PostgreSQL, S3 สองใบ (ไฟล์ผู้ใช้ และที่เก็บ zip ของ Lambda) |
-| [`app.yaml`](app.yaml) | **Stack 2** — IAM role, Lambda backend + trigger 4 ตัว, Cognito (pool, app client, domain, managed login, Google), API Gateway (routes, authorizer, CORS) |
-| [`deploy.ps1`](deploy.ps1) | สคริปต์รันทุกขั้นตอนตามลำดับ: build zip → stack 1 → อัปโหลด zip → stack 2 → migrate → smoke test |
-
-ข้อความในไฟล์ `.yaml` และ `.ps1` เป็นภาษาอังกฤษล้วนโดยตั้งใจ เพราะ AWS CLI และ PowerShell 5.1 บน Windows อ่านไฟล์ที่มีภาษาไทยผิดเพี้ยน
-
-## ลำดับการทำงาน
+## 1. ภาพรวมของโฟลเดอร์
 
 ```
-build zip (npm ci + tar)
-   → deploy stack 1 (network-data)      ← RDS ใช้เวลา 10-15 นาทีครั้งแรก
-   → อัปโหลด zip เข้า ArtifactsBucket ของ stack 1
-   → deploy stack 2 (app)               ← อ่านค่า VPC/DB/bucket จาก Exports ของ stack 1
-   → รัน migrate (สร้างตาราง)
-   → smoke test (health, public, 401, CORS)
-   → พิมพ์ค่าที่หน้าเว็บต้องใช้
+infra/
+├── network-data.yaml       Stack 1  เครือข่าย ฐานข้อมูล และ S3
+├── app.yaml                Stack 2  IAM, Lambda, Cognito, API Gateway
+├── frontend.yaml           Stack 3  Amplify Hosting 
+├── github-deploy-user.yaml IAM user สำหรับ GitHub Actions (CI/CD)
+├── github-oidc.yaml        ทางเลือกแบบ OIDC สำหรับ CI/CD (ใช้ไม่ได้ในบัญชีนี้)
+├── deploy.ps1              สคริปต์ที่ประกอบทุกอย่างเข้าด้วยกัน
+├── README.md               ไฟล์นี้
+└── .build/                 ผล build ชั่วคราว (สร้างโดย deploy.ps1, ไม่อยู่ใน git)
 ```
 
-Stack 2 deploy ก่อน stack 1 ไม่ได้ เพราะ import ค่าจาก stack 1 และต้องมี zip ใน ArtifactsBucket ก่อน
+และที่อยู่นอกโฟลเดอร์แต่เป็นส่วนหนึ่งของ Automation: `.github/workflows/deploy-backend.yml`, `.github/workflows/validate-infra.yml`
 
-## สิ่งที่ต้องมี
+## 2. ความสัมพันธ์ระหว่าง stack
 
-1. **AWS CLI v2** และล็อกอินแล้ว (`aws login` หรือ `aws configure`) ตรวจด้วย `aws sts get-caller-identity`
-2. **Node.js 20+ และ npm** (ใช้ `npm ci` build backend)
-3. Windows 10/11 (ใช้ `tar.exe` ที่มากับระบบสร้าง zip ที่ Lambda อ่านได้) และ PowerShell
-4. สิทธิ์สร้าง VPC, RDS, IAM, Lambda, Cognito, API Gateway (บัญชีที่ใช้ทดสอบมี `AccountFullAccessRole`)
-
-## สร้างระบบ (ครั้งแรก)
-
-รันที่โฟลเดอร์ root ของโปรเจกต์ โดยใช้ **prefix อื่นที่ไม่ใช่ `cs361-coop`** เพราะชื่อนั้นถูกใช้โดยทรัพยากรที่สร้างมือแล้ว (สคริปต์จะปฏิเสธถ้าใช้ prefix นั้น)
-
-```powershell
-powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-test -MockLogins "committee.v3@tu.ac.th,staff.v3@tu.ac.th,company.v3@example.test,company.other.v3@example.test" -Seed
+```
+frontend.yaml (stack 3, รอบแรก)  ──► โดเมน Amplify ──┐
+                                                      ▼
+network-data.yaml (stack 1) ──Exports──► app.yaml (stack 2) ──Outputs──► frontend.yaml (stack 3, รอบสอง)
+        │                                    ▲
+        └─ ArtifactsBucket ◄── zip ของ Lambda (อัปโหลดโดย deploy.ps1)
 ```
 
-สคริปต์จะถามความลับ (กด Enter เพื่อข้ามได้) ค่าเหล่านี้อยู่ในหน่วยความจำเท่านั้น ไม่เขียนลงไฟล์ ไม่ถูก commit และตั้งล่วงหน้าผ่านตัวแปรสภาพแวดล้อมได้:
+- **stack 2 อ่านค่าจาก stack 1** ผ่าน Exports ชื่อ `<Prefix>-...` (ด้วย `Fn::ImportValue`) จึงลบ stack 1 ไม่ได้ถ้า stack 2 ยังอยู่
+- **stack 3 ถูก deploy 2 รอบ** เพราะมีการอ้างอิงเป็นวงกลม: CORS origin และ callback URL ของ Cognito (stack 2) ต้องรู้โดเมนของ Amplify ส่วน Amplify ต้องรู้ค่า `VITE_*` จาก stack 2 รอบแรกจึงสร้างโดยไม่มีค่า backend และไม่ build รอบสองใส่ค่าแล้วสั่ง build
+- ทุกทรัพยากรชื่อขึ้นต้นด้วยพารามิเตอร์ `Prefix` เพื่อให้สร้างหลายชุดได้โดยไม่ชนกัน
 
-| ตัวแปร | ใช้ทำอะไร | ถ้าไม่ใส่ |
+## 3. แต่ละ template
+
+### `network-data.yaml` — Stack 1 (14 resources)
+| กลุ่ม | resource | หมายเหตุ |
 |---|---|---|
-| `DB_PASSWORD` | รหัสผ่านฐานข้อมูล (12-64 ตัว: ตัวอักษร ตัวเลข `_ + = . -`) | สุ่มให้และเก็บไว้ใน SSM Parameter Store (`/<prefix>/deploy/db-password`) |
-| `MOCK_PASSWORD` | รหัสผ่านร่วมของบัญชี demo ใน `-MockLogins` | บัญชี demo ใช้ไม่ได้ |
-| `TU_API_KEY` | Application-Key ของ TU API | ล็อกอินนักศึกษาไม่ได้ |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth client จาก Google Cloud | ใช้ค่า `unused` (Google login ใช้ไม่ได้ แต่ระบบอื่นทำงาน) |
+| เครือข่าย | `Vpc`, `PrivateSubnetA/B`, `PrivateRouteTable` และ association 2 ตัว | private 2 AZ ไม่มี NAT และไม่มี internet gateway |
+| S3 endpoint | `S3GatewayEndpoint` | ทางเดียวที่ Lambda ใน VPC ออกไปถึง S3 (ฟรี) |
+| Security group | `LambdaSecurityGroup`, `RdsSecurityGroup`, `RdsIngressFromLambda` | sg-lambda ออกได้เฉพาะ 5432 ไป sg-rds และ 443 ไป S3 prefix list; sg-rds รับเฉพาะ 5432 จาก sg-lambda และไม่มี outbound (ใช้กฎ `127.0.0.1/32` แทนการตัด allow-all) |
+| ฐานข้อมูล | `DbSubnetGroup`, `Database` | PostgreSQL ไม่ public เข้ารหัส gp3 `DeletionPolicy: Snapshot` (ลบ stack แล้วเหลือ snapshot สุดท้าย) |
+| S3 | `FilesBucket`, `ArtifactsBucket` | บล็อก public ทั้งหมด เข้ารหัส ชื่อสร้างอัตโนมัติ (ไม่ชน) ใบที่สองเก็บ zip ของ Lambda เพราะ CloudFormation สร้าง Lambda จากไฟล์ในเครื่องไม่ได้ |
 
-พารามิเตอร์ของสคริปต์:
+- **Parameters (13):** `Prefix`, `VpcCidr`, `PrivateSubnetACidr`, `PrivateSubnetBCidr`, `S3PrefixListId`, `DbInstanceClass`, `DbAllocatedStorage`, `DbEngineVersion`, `DbName`, `DbUsername`, `DbPassword` (NoEcho), `DbBackupRetentionDays`, `DbDeletionProtection`
+- **Exports:** `VpcId`, `PrivateSubnetIds`, `LambdaSecurityGroupId`, `DbHost`, `DbPort`, `DbName`, `DbUsername`, `FilesBucketName`, `FilesBucketArn`, `ArtifactsBucketName` (ขึ้นต้นด้วย `<Prefix>-`)
+- `S3PrefixListId` ไม่ได้กรอกเอง สคริปต์ค้นหาให้จาก region
 
-| พารามิเตอร์ | ค่าเริ่มต้น | ความหมาย |
-|---|---|---|
-| `-Prefix` | `cs361-coop-test` | คำนำหน้าชื่อทุกทรัพยากรและชื่อ stack (`<prefix>-data`, `<prefix>-app`) |
-| `-Region` | `ap-southeast-2` | region |
-| `-WebOrigin` | `http://localhost:5173` | URL หน้าเว็บ **ไม่มี `/` ท้าย** ใช้เป็น CORS origin และ callback URL ของ Cognito |
-| `-MockLogins` | ว่าง | อีเมลบัญชี demo คั่นด้วย `,` ไม่มีเว้นวรรค |
-| `-Seed` | ปิด | โหลดข้อมูลตัวอย่าง (`005_v3-demo.sql`) ตอน migrate |
-| `-SkipTests` | ปิด | ข้าม smoke test |
-| `-BuildOnly` | ปิด | build zip เท่านั้น ไม่เรียก AWS (ไว้ทดสอบ packaging) |
-| `-CodeOnly` | ปิด | อัปเดตเฉพาะโค้ด backend บน Lambda ที่มีอยู่แล้ว (ดูหัวข้อถัดไป) |
-| `-Migrate` | ปิด | ใช้คู่กับ `-CodeOnly` เพื่อรัน migrate หลังอัปเดตโค้ด (ใช้เมื่อมี migration ใหม่) |
-| `-Destroy` | ปิด | ลบชุดนี้ทั้งหมด |
-
-รันซ้ำได้ปลอดภัย CloudFormation จะเปลี่ยนเฉพาะสิ่งที่ต่างจากเดิม (zip ใช้ key ใหม่ทุกครั้ง Lambda จึงอัปเดตจริง)
-
-## อัปเดตโค้ด backend หลัง deploy ไปแล้ว
-
-ไม่ต้องทำมือและไม่ต้องสร้างอะไรใหม่ แก้โค้ดใน `backend/` แล้วรัน:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-test -CodeOnly
-```
-
-โหมดนี้ build เฉพาะ backend, อัปโหลด zip ใหม่ขึ้น S3, สั่ง Lambda `<prefix>-api` ให้ใช้ zip นั้น (`update-function-code`) รอจนอัปเดตเสร็จ แล้วรัน smoke test ใช้เวลาประมาณ 1 ถึง 3 นาที ไม่ถามความลับ และไม่แตะ stack 1, Cognito หรือ API Gateway (แก้โค้ดไม่ต้อง Deploy API ใหม่)
-
-- มี migration ใหม่ (ไฟล์ SQL ใน `database/migrations`) ให้เพิ่ม `-Migrate`
-- แก้โค้ด trigger ของ Cognito (`backend/cognito-triggers`) หรือแก้ `infra/*.yaml` ให้รันแบบเต็ม (ไม่ใส่ `-CodeOnly`) เพราะ trigger และทรัพยากรอยู่ใน stack 2 โดยครั้งนี้สคริปต์จะถามความลับอีกครั้ง
-- `-CodeOnly` ไม่ผ่าน CloudFormation stack จึงบันทึก zip เวอร์ชันเก่าไว้จนกว่าจะรันแบบเต็มครั้งถัดไป ซึ่งใช้ zip ใหม่เสมอ ไม่ทำให้ระบบเสียหาย
-- ระบบจริงไม่ต้องรันสคริปต์เอง: push เข้า `main` แล้ว GitHub Actions อัปเดต Lambda ให้ (ดูหัวข้อ CI/CD ด้านล่าง)
-
-## ผลที่ได้เมื่อรันสำเร็จ
-
-สคริปต์พิมพ์ผล smoke test 4 ข้อ (ต้อง `PASS` ทั้งหมด) และค่าสำหรับหน้าเว็บ:
-
-| Smoke test | คาดหวัง |
+### `app.yaml` — Stack 2 (44 resources)
+| กลุ่ม | resource |
 |---|---|
-| `GET /health` | 200 (สาธารณะ) |
-| `GET /companies` | 200 (สาธารณะ) |
-| `GET /auth/me` ไม่มี token | 401 (authorizer ทำงาน) |
-| `OPTIONS /auth/me` พร้อม Origin | 200/204 และ `Access-Control-Allow-Origin` ตรงกับ `-WebOrigin` (CORS ถูกต้อง) |
+| IAM (2) | `TriggerRole` (แก้ attribute ของ Cognito ได้), `BackendRole` (VPC และ S3 เฉพาะ bucket ไฟล์) |
+| Lambda trigger (4) + สิทธิ์ให้ Cognito เรียก (4) | `PreSignUpFunction`, `DefineAuthChallengeFunction`, `CreateAuthChallengeFunction`, `VerifyAuthChallengeFunction` และ `...Permission` ของแต่ละตัว อยู่นอก VPC เพราะ verify ต้องเรียก TU API |
+| Cognito (5) | `UserPool` (ผูก trigger, attribute `en_name`), `GoogleProvider` (map `email`, `email_verified`, `name`), `UserPoolClient`, `UserPoolDomain`, `ManagedLoginStyle` |
+| Lambda backend (1) | `BackendFunction` อยู่ใน VPC โค้ดมาจากไฟล์ใน ArtifactsBucket ตัวแปร env ทั้งหมดตั้งในส่วน `Environment` |
+| API Gateway (28) | `Api` (REST, binary `*/*`), `CognitoAuthorizer`, resource 9 ตัว (`api`, `{proxy+}`, `health`, `public`, `companies`, `company-logos` และลูก), method 12 ตัว, `Gateway4xxResponse` และ `Gateway5xxResponse` (header CORS), `ApiDeployment`, `ApiStage`, `ApiInvokePermission` |
 
-ค่าที่ต้องใส่ที่หน้าเว็บ (Amplify environment variables หรือ `frontend/.env`): `VITE_AUTH_MODE=cognito`, `VITE_API_URL`, `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_DOMAIN` และ **Redirect URI ของ Google** (`https://<โดเมน Cognito>/oauth2/idpresponse`) ที่ต้องเพิ่มใน Google Cloud ถ้าจะใช้ Google login
+- **Parameters (16):** `Prefix`, `LambdaRuntime`, `BackendCodeKey`, `TriggerKeyPrefix`, `WebOrigin` (มี pattern ไม่ให้มี `/` ท้าย), `CognitoDomainPrefix`, `DbPassword`, `MockLogins`, `MockPassword`, `TuApiKey`, `GoogleClientId`, `GoogleClientSecret`, `ApiStageName`, `ApiThrottleRate`, `ApiThrottleBurst`, `ApiDeploymentVersion`
+- **Outputs:** `ApiUrl`, `UserPoolId`, `UserPoolClientId`, `CognitoDomain`, `GoogleRedirectUri`, `BackendFunctionName` (สคริปต์เอาไปใช้ต่อ)
+- สิทธิ์ของ `TriggerRole` ผูกกับ user pool ในบัญชี/region นี้ด้วย wildcard เพราะ pool ยังไม่มีตอนสร้าง role (กันการอ้างอิงเป็นวงกลม)
+- method ทุกตัวใช้ Lambda proxy; `AuthorizationType` เป็น `COGNITO_USER_POOLS` เฉพาะ route ที่ต้องล็อกอิน (ตรงกับตารางใน DEPLOY_AWS.md ข้อ 8) และ OPTIONS เป็นสาธารณะ
+- `ApiDeploymentVersion` เปลี่ยนค่าทุกครั้งที่สคริปต์รัน เพื่อให้ API Gateway สร้าง deployment ใหม่ (CloudFormation ไม่ทำให้เองเมื่อแก้ method)
 
-## ลบชุดทดสอบ
+### `frontend.yaml` — Stack 3 (2 resources, ไม่บังคับ)
+- `AmplifyApp` (ผูก GitHub, build spec แบบ monorepo, กฎ rewrite `/<*>` → `/index.html` 404-200, env รวม `VITE_*`) และ `AmplifyBranch`
+- **Parameters:** `Prefix`, `Repository` (pattern ไม่รับ `.git`), `GitHubAccessToken` (NoEcho), `BranchName`, `AppRoot`, `ApiUrl`, `UserPoolId`, `UserPoolClientId`, `CognitoDomain` ค่า backend 4 ตัวหลังว่างได้ (รอบแรก) ซึ่งเงื่อนไข `HasBackend` ใช้ตัดสินว่าจะใส่ env `VITE_*` และเปิด auto build หรือไม่
+- **Outputs:** `AppId`, `WebOrigin`
 
-```powershell
-powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-test -Destroy
-```
+### `github-deploy-user.yaml` และ `github-oidc.yaml` — สิทธิ์ AWS ของ CI/CD
+- `github-deploy-user.yaml`: `DeployUser` (IAM user) พร้อมนโยบายอัปเดตและ publish version ของ Lambda backend กับ trigger 4 ตัว (ทั้งชื่อ `-challenge` และชื่อสั้น) และเรียก backend ไม่สร้าง access key ใน template
+- `github-oidc.yaml`: `GitHubOidcProvider` (สร้างตามเงื่อนไข) และ `DeployRole` ที่ GitHub assume ได้เฉพาะ repo และ branch ที่ระบุ ใช้สิทธิ์ชุดเดียวกัน
 
-สคริปต์ให้พิมพ์ prefix ยืนยัน แล้วลบ stack 2 → ล้าง bucket → ลบ stack 1 RDS จะเหลือ snapshot สุดท้าย 1 ก้อน (ลบเองในหน้า RDS ถ้าไม่ต้องการ) และพารามิเตอร์ SSM ของรหัสผ่านถูกเก็บไว้ (คำสั่งลบอยู่ท้ายผลลัพธ์) ทรัพยากรที่สร้างมือ (prefix `cs361-coop`) ไม่ถูกแตะเพราะไม่อยู่ใน stack เหล่านี้
+## 4. `deploy.ps1` — โครงสร้างภายใน
 
-## หลักฐานที่ควรเก็บเมื่อส่งงาน
+**ฟังก์ชันหลัก**
 
-- ภาพ terminal ที่รัน `deploy.ps1` จบพร้อม `PASS` ทุกข้อ
-- ภาพหน้า CloudFormation ที่ stack `<prefix>-data` และ `<prefix>-app` เป็น `CREATE_COMPLETE`
-- ภาพรายการ resource ที่ถูกสร้าง (แท็บ Resources ของแต่ละ stack)
-- ภาพหลัง `-Destroy` ที่ stack หายไป (พิสูจน์ว่าสร้าง/ลบซ้ำได้)
-
-## ข้อจำกัด และขั้นตอนที่ยังต้องทำมือ
-
-| ขั้นตอน | เหตุผล |
+| ฟังก์ชัน | ทำอะไร |
 |---|---|
-| สร้าง Google OAuth client และ consent screen ใน Google Cloud | ไม่มี API ของ CloudFormation สำหรับส่วนนี้ ต้องเพิ่ม Redirect URI ที่สคริปต์พิมพ์ให้ |
-| ขอ `TU_API_KEY` จากมหาวิทยาลัย | เป็นความลับที่ต้องขอเอง |
-| เชื่อม Amplify กับ GitHub และตั้ง env ของหน้าเว็บ | ต้องอนุญาตสิทธิ์ GitHub และ repo ของ Amplify เป็นคนละส่วนกับ stack นี้ จึงยังไม่ได้ทำเป็น template (ค่าที่ต้องใส่สคริปต์พิมพ์ให้ครบ) |
-| ข้อมูลใน RDS เดิม | IaC สร้างโครงสร้าง ไม่ย้ายข้อมูล ชุดใหม่เป็นฐานข้อมูลว่าง (ใช้ `-Seed` เพื่อข้อมูลตัวอย่าง) |
-| รหัสผ่านฐานข้อมูลใน Lambda เป็น environment variable | VPC ไม่มี NAT จึงเรียก Secrets Manager ไม่ได้ (ตามที่ DEPLOY_AWS.md อธิบาย) cfn-lint จึงเตือน W1011 ซึ่งยอมรับได้ |
+| `Resolve-Aws`, `Invoke-Aws`, `Invoke-AwsQuiet` | เรียก AWS CLI; `Invoke-Aws` หยุดเมื่อล้ม, `Invoke-AwsQuiet` ใช้เมื่อความล้มเหลวคือคำตอบที่คาดไว้ (PowerShell 5.1 แปลง stderr เป็น error ที่หยุดสคริปต์) |
+| `Read-SecretValue`, `Get-DbPassword`, `New-RandomPassword` | รับความลับจาก env หรือถามแบบไม่แสดงตัวอักษร; รหัสผ่านฐานข้อมูลเก็บใน SSM |
+| `Get-StackOutputs`, `Test-StackExists` | อ่าน Outputs ของ stack และตรวจว่า stack มีอยู่ |
+| `Build-Packages`, `New-Zip` | build zip ของ backend และ trigger (`npm ci` และ `tar.exe` เพราะ `Compress-Archive` ของ 5.1 ใช้ `\` ซึ่ง Lambda อ่านไม่ได้) |
+| `Invoke-Migration` | เรียก Lambda ด้วย `{"action":"migrate"}` |
+| `Test-Http`, `Test-SpaFallback`, `Invoke-SmokeTests`, `Wait-AmplifyJob` | smoke test (ของ API ตรวจ status; ของหน้าเว็บตรวจเนื้อหา เพราะ Amplify ตอบ 404 พร้อมแอป) และรอ build ของ Amplify |
 
-## ปัญหาที่อาจเจอ
+**ลำดับในสคริปต์** (บล็อกตามที่เรียงอยู่ในไฟล์): build only → pre-checks → destroy → code only → inputs → build → Amplify รอบแรก → stack 1 → upload → stack 2 → Amplify รอบสอง → migrate → smoke test → summary โหมด `-BuildOnly`, `-Destroy` และ `-CodeOnly` ออกจากสคริปต์ (`return`) ก่อนถึงขั้นสร้างเต็ม
 
-| อาการ | สาเหตุ / วิธีแก้ |
+**ที่เก็บชั่วคราว:** `infra/.build/` (zip และ payload) และพารามิเตอร์ SSM `/<prefix>/deploy/db-password`
+
+## 5. Workflow ของ GitHub Actions
+
+| ไฟล์ | โครงสร้าง |
 |---|---|
-| `aws` ไม่พบ | เปิด terminal ใหม่หลังติดตั้ง หรือรัน `aws login` ใหม่ถ้า token หมดอายุ |
-| Stack 1 ล้มที่ RDS | ดูสาเหตุ: `aws cloudformation describe-stack-events --stack-name <prefix>-data --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].[LogicalResourceId,ResourceStatusReason]" --output text` stack ที่ล้มค้างสถานะ `ROLLBACK_COMPLETE` ต้องลบก่อน: `aws cloudformation delete-stack --stack-name <prefix>-data` |
-| ชื่อซ้ำ (`already exists`) | prefix นี้ถูกใช้แล้ว ใช้ prefix อื่น หรือรัน `-Destroy` ก่อน |
-| Smoke test `/health` ไม่ผ่านเป็น 5xx | Lambda ใน VPC ใช้เวลาเริ่มครั้งแรก (cold start) รันซ้ำอีกครั้ง หรือดู CloudWatch Logs ของ `<prefix>-api` |
-| `/auth/me` preflight ผิด | `-WebOrigin` ต้องตรงกับ URL หน้าเว็บ ไม่มี `/` ท้าย แล้วรันซ้ำ |
-| Managed login ขึ้น Unavailable | สร้าง domain และ style ใน stack 2 อยู่แล้ว ถ้ายังขึ้นให้ตรวจ stack events ของ `<prefix>-app` |
-| Google ขึ้น `redirect_uri_mismatch` | เพิ่ม Redirect URI ที่สคริปต์พิมพ์ให้ใน Google Cloud ให้ตรงทุกตัวอักษร |
+| `.github/workflows/deploy-backend.yml` | **ทำงานเมื่อ** push เข้า `main` (ที่แก้ `backend/` หรือ `database/`) หรือกดรันเอง (`workflow_dispatch` มี input `deploy_triggers` และ `migrate`) **ขั้นตอน:** job `test` (เทสต์ trigger ที่ไม่ใช้ฐานข้อมูล) → job `deploy`: ตรวจไฟล์ที่เปลี่ยน → build zip → ขอสิทธิ์ AWS (OIDC role ถ้ามีตัวแปร ไม่เช่นนั้น access key) → อัปเดต Lambda backend → อัปเดต trigger (ตามเงื่อนไข) → เตือนเรื่อง migration → migrate (เฉพาะกดเอง) → smoke test |
+| `.github/workflows/validate-infra.yml` | job `cfn-lint` รัน `cfn-lint` กับ `infra/*.yaml` เมื่อ push (`main`, `develop`) หรือ pull request ที่แก้ `infra/` |
 
-## CI/CD: push ขึ้น GitHub แล้ว backend อัปเดตเอง
+## 6. ข้อกำหนดของโค้ดในโฟลเดอร์นี้
 
-| ไฟล์ | ทำอะไร |
+- **ไฟล์ `.yaml` และ `.ps1` ต้องเป็น ASCII ล้วน** ข้อความภาษาไทยทำให้ AWS CLI และ PowerShell 5.1 บน Windows อ่านผิดเพี้ยน (ภาษาไทยใช้ได้ในไฟล์ `.md`)
+- **ห้ามใช้ YAML anchor/alias** CloudFormation ไม่รองรับ (จึงเขียน method ของ API Gateway ซ้ำทีละตัว)
+- **ห้ามฝังความลับในไฟล์** ใช้พารามิเตอร์ `NoEcho` หรือ SSM
+- **ตั้งชื่อด้วย `Prefix`** ทุก resource ที่มีชื่อ เพื่อให้สร้างหลายชุดได้
+- **ตรวจก่อน commit:** `cfn-lint infra/*.yaml` และ `aws cloudformation validate-template` (คำเตือน W1011 เรื่องรหัสผ่านเป็นพารามิเตอร์ ยอมรับได้เพราะ VPC ไม่มี NAT จึงเรียก Secrets Manager ไม่ได้)
+
+## 7. เพิ่มหรือแก้ของใหม่ (แนวทาง)
+
+| ต้องการ | แก้ที่ไหน |
 |---|---|
-| [`github-deploy-user.yaml`](github-deploy-user.yaml) | **ใช้ในบัญชีนี้** — สร้าง IAM user ที่ทำได้แค่อัปเดตโค้ดของ Lambda ตัวเดียว (ไม่สร้าง access key ใน template) ใช้ key ของ user นี้เก็บเป็น GitHub secrets |
-| [`github-oidc.yaml`](github-oidc.yaml) | ทางเลือกที่ปลอดภัยกว่า (OIDC ไม่เก็บ key) แต่ **ใช้ไม่ได้ในบัญชีนี้**: องค์กร AWS ตั้ง service control policy ปฏิเสธ `iam:CreateOpenIDConnectProvider` (stack ล้มด้วย "explicit deny in a service control policy") เก็บไว้ใช้กับบัญชีที่อนุญาต |
-| [`.github/workflows/deploy-backend.yml`](../.github/workflows/deploy-backend.yml) | เมื่อ push `main` ที่แก้ `backend/` หรือ `database/`: รันเทสต์ → build zip → อัปเดต Lambda backend (`--publish` เก็บเวอร์ชันไว้ย้อนกลับ) → อัปเดต trigger 4 ตัวถ้าโค้ดเปลี่ยน → smoke test `/health` และกด Run workflow เพื่อรัน migrate ได้ ใช้ OIDC role ถ้าตั้งตัวแปร `AWS_DEPLOY_ROLE_ARN` ไม่เช่นนั้นใช้ access key จาก secrets |
-
-หน้าเว็บอัปเดตอัตโนมัติอยู่แล้วโดย Amplify (ผูกกับ GitHub ที่ branch `main`)
-
-**ตั้งค่าครั้งเดียว (แบบ IAM user)**
-1. ตรวจว่ามีสิทธิ์ตั้งค่า repo (เห็นแท็บ Settings ใน GitHub) ถ้าไม่มี ให้เจ้าของ repo ทำขั้น 4
-2. ถ้าเคยรัน `github-oidc.yaml` แล้วล้ม ให้ลบ stack ที่ค้างอยู่ก่อน (สถานะ `ROLLBACK_COMPLETE`):
-   ```powershell
-   aws cloudformation delete-stack --stack-name cs361-coop-github-oidc --region ap-southeast-2
-   ```
-3. สร้าง IAM user:
-   ```powershell
-   aws cloudformation deploy --stack-name cs361-coop-github-deploy-user --template-file infra/github-deploy-user.yaml --capabilities CAPABILITY_IAM --region ap-southeast-2
-   ```
-   แล้วดูชื่อ user: `aws cloudformation describe-stacks --stack-name cs361-coop-github-deploy-user --query "Stacks[0].Outputs" --output table --region ap-southeast-2`
-4. สร้าง access key (แสดง secret ครั้งเดียว อย่าส่งให้ใครหรือถ่ายภาพ):
-   ```powershell
-   aws iam create-access-key --user-name <ชื่อ user จากข้อ 3> --query "AccessKey.[AccessKeyId,SecretAccessKey]" --output text
-   ```
-5. GitHub → repo → Settings → Secrets and variables → Actions:
-   - แท็บ **Secrets** → เพิ่ม `AWS_ACCESS_KEY_ID` และ `AWS_SECRET_ACCESS_KEY` (ค่าจากข้อ 4)
-   - แท็บ **Variables** → เพิ่ม `API_URL` (เช่น `https://<api-id>.execute-api.ap-southeast-2.amazonaws.com/prod/api` ใช้ตรวจ `/health` ถ้าไม่ตั้งจะข้าม smoke test) และ `LAMBDA_FUNCTION_NAME` ถ้าจะอัปเดต Lambda อื่นนอกจาก `cs361-coop-api` (ต้องส่ง `LambdaFunctionName=<ชื่อ>` ตอน deploy template ข้อ 3 ด้วย)
-   - **ห้ามตั้ง** ตัวแปร `AWS_DEPLOY_ROLE_ARN` เมื่อใช้ access key
-6. push ไฟล์ workflow ขึ้น `main` แล้วทดสอบ: แท็บ Actions → Deploy backend → Run workflow
-
-**ข้อควรระวังของ access key:** เป็นความลับระยะยาว ใครได้ไปจะอัปเดตโค้ด Lambda ตัวนั้นได้ จึงจำกัดสิทธิ์ไว้ที่ Lambda ตัวเดียวและเก็บเฉพาะใน GitHub secrets เมื่อส่งงานเสร็จให้ลบ key และ stack ตามขั้นตอนใน [AUTOMATION.md](../AUTOMATION.md) ข้อ D
-
-**ย้อนกลับเมื่อพัง:** ดู [AUTOMATION.md](../AUTOMATION.md) ข้อ B7
-
-**ขอบเขต:** ตารางว่าอะไรอัตโนมัติและอะไรกดเอง (โค้ด backend, trigger, migration, ทรัพยากร AWS) และวิธีใช้ปุ่ม Run workflow อยู่ใน [AUTOMATION.md](../AUTOMATION.md) ข้อ B3 และ B6
-
-ตั้งค่าเพิ่ม: IAM user ต้องมีสิทธิ์อัปเดต trigger และเรียก backend (เพิ่มเมื่อ 9 พ.ย. 2026) ถ้าสร้างไว้ก่อนหน้านี้แล้ว ให้รันคำสั่ง deploy ข้อ 3 ซ้ำเพื่ออัปเดตสิทธิ์ (ไม่ต้องสร้าง access key ใหม่) workflow หาชื่อ Lambda trigger ให้เองทั้งแบบ `cs361-coop-define-auth` (ระบบจริงที่สร้างมือ) และ `cs361-coop-define-auth-challenge` (ชุด IaC) ถ้าใช้ prefix อื่นที่ไม่ใช่ `cs361-coop` ให้ตั้งตัวแปร GitHub `TRIGGER_FUNCTION_PREFIX` และส่ง `TriggerFunctionPrefix=<prefix>` ตอน deploy template ด้วย
-
-
-## ตรวจ template อัตโนมัติ (CI)
-
-[`.github/workflows/validate-infra.yml`](../.github/workflows/validate-infra.yml) รัน `cfn-lint` ทุกครั้งที่แก้ไฟล์ใน `infra/` (push และ pull request) โดยไม่ต้องใช้ความลับหรือเข้าบัญชี AWS ตรวจในเครื่องได้ด้วย:
-
-```powershell
-pip install cfn-lint
-cfn-lint --non-zero-exit-code error infra/*.yaml
-```
-
-## สถานะและผลทดสอบ
-
-ผลทดสอบจริงของ IaC (deploy, migrate, smoke test, `-Destroy`) และของ CI/CD (Deploy backend ที่เขียว) รวมถึงสิ่งที่ยังไม่ได้ทดสอบ อยู่ใน [AUTOMATION.md](../AUTOMATION.md) ข้อ A4 และ B9
+| เพิ่มตัวแปร env ให้ Lambda backend | เพิ่ม Parameter (ถ้าเป็นค่าจากภายนอก) และบรรทัดใน `Environment.Variables` ของ `BackendFunction` ใน `app.yaml` และเพิ่ม override ใน `deploy.ps1` (ส่วน stack 2) |
+| เพิ่ม route ของ API ที่อยู่นอก `/api/{proxy+}` | เพิ่ม `AWS::ApiGateway::Resource` และ `Method` ใน `app.yaml` แล้วใส่ชื่อ method ใน `DependsOn` ของ `ApiDeployment` (route ใต้ `/api/{proxy+}` เดิมไม่ต้องเพิ่ม) |
+| เพิ่ม Lambda หรือ resource ใหม่ | เพิ่มใน `app.yaml` (ถ้าต้องใช้ VPC/ฐานข้อมูลให้ import ค่าจาก Exports ของ stack 1) แล้วเช็คจำนวนและ lint |
+| เปลี่ยนขนาด RDS หรือเครือข่าย | แก้ Parameter/ค่าใน `network-data.yaml` (บางอย่างเช่น engine ทำให้ resource ถูกสร้างใหม่ ตรวจ change set ก่อน) |
+| เพิ่มสิทธิ์ให้ CI/CD | แก้นโยบายใน `github-deploy-user.yaml` (และ `github-oidc.yaml` ให้ตรงกัน) แล้ว deploy ซ้ำ |

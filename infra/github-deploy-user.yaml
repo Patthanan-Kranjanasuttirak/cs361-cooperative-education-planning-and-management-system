@@ -4,7 +4,7 @@ Description: CS361 Co-op - IAM user that GitHub Actions uses to update the backe
 # Use this when the AWS Organization blocks OIDC identity providers (infra/github-oidc.yaml fails with
 # "explicit deny in a service control policy"). The user can only update the code of the backend Lambda and the four Cognito trigger Lambdas, and invoke the backend.
 # The template creates the user WITHOUT an access key, so no secret is ever stored in CloudFormation.
-# Create the key yourself with the AWS CLI and paste it into GitHub secrets (see infra/README.md).
+# Create the key yourself with the AWS CLI and paste it into GitHub secrets (see AUTOMATION.md, section B5).
 # Keep this file ASCII-only: the AWS CLI on Windows reads templates with the system code page.
 
 Parameters:

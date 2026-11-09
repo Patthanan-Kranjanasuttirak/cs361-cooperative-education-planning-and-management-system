@@ -2,7 +2,7 @@
 
 คู่มือสร้างและดูแลระบบบน AWS แบบ manual (ระบบที่ใช้งานอยู่สร้างด้วยมือตามคู่มือนี้) 
 
-> **สร้างซ้ำด้วย Infrastructure as Code ได้แล้ว:** ดู [AUTOMATION.md](AUTOMATION.md) (สรุป IaC และ CI/CD พร้อมวิธีรันใหม่), [infra/README.md](infra/README.md) และข้อ 14 ท้ายเอกสารนี้ (V5)
+> **สร้างซ้ำด้วย Infrastructure as Code ได้แล้ว:** ดู [AUTOMATION.md](AUTOMATION.md) (IaC, CI/CD และวิธีรันทั้งหมด), [infra/README.md](infra/README.md) (โครงสร้างโค้ด) และข้อ 14 ท้ายเอกสารนี้ (V5)
 
 ## 1. ภาพรวม
 
@@ -342,7 +342,7 @@ backend ต้องการ `Authorization: Bearer <ID token>` (ใช้ **ID
 
 ## 14. Infrastructure as Code (V5)
 
-เขียนไว้ใน `infra/` (รายละเอียดและวิธีรัน: [infra/README.md](infra/README.md)) สร้างระบบอีกชุดแยกจากของจริงด้วยคำสั่งเดียว:
+เขียนไว้ใน `infra/` (วิธีรันทั้งหมด: [AUTOMATION.md](AUTOMATION.md), โครงสร้างโค้ด: [infra/README.md](infra/README.md)) สร้างระบบอีกชุดแยกจากของจริงด้วยคำสั่งเดียว:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-test
@@ -356,7 +356,7 @@ powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-tes
 | `infra/app.yaml` | IAM, Lambda backend + trigger 4 ตัว, Cognito + Google, API Gateway | ข้อ 4, 7, 8 |
 | `infra/deploy.ps1` | build zip, อัปโหลด, deploy 2 stack, migrate, smoke test, ลบชุดทดสอบ (`-Destroy`) | ข้อ 5, 6, 9 |
 | `.github/workflows/validate-infra.yml` | รัน `cfn-lint` อัตโนมัติเมื่อแก้ `infra/` | (ใหม่) |
-| `infra/github-deploy-user.yaml`, `infra/github-oidc.yaml` และ `.github/workflows/deploy-backend.yml` | CI/CD: push `main` แล้วเทสต์ build และอัปเดต Lambda backend อัตโนมัติ (รวม trigger 4 ตัวเมื่อโค้ดเปลี่ยน และรัน migrate แบบกดเอง) บัญชีนี้ใช้ OIDC ไม่ได้ (องค์กรตั้ง SCP ปฏิเสธ) จึงใช้ IAM user + access key ใน GitHub secrets ดู infra/README.md หัวข้อ CI/CD | ข้อ 5 (อัปโหลด Lambda) |
+| `infra/github-deploy-user.yaml`, `infra/github-oidc.yaml` และ `.github/workflows/deploy-backend.yml` | CI/CD: push `main` แล้วเทสต์ build และอัปเดต Lambda backend อัตโนมัติ (รวม trigger 4 ตัวเมื่อโค้ดเปลี่ยน และรัน migrate แบบกดเอง) บัญชีนี้ใช้ OIDC ไม่ได้ (องค์กรตั้ง SCP ปฏิเสธ) จึงใช้ IAM user + access key ใน GitHub secrets ดู AUTOMATION.md ข้อ B | ข้อ 5 (อัปโหลด Lambda) |
 
 **สถานะของแต่ละข้อใน manual → automation (ข้อ 13)**
 
@@ -371,6 +371,6 @@ powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-tes
 | 7 smoke test | ทำแล้วใน `deploy.ps1` (4 ข้อ) |
 | 8 ลงทะเบียนผู้ใช้เป็นกลุ่ม | ยังไม่ทำ |
 | 9 Budget, retention, alarm | ทำบางส่วน (RDS backup, throttling ของ API) ที่เหลือยังทำมือ |
-| 10 Amplify | ยังไม่ทำ ต้องอนุญาตสิทธิ์ GitHub ก่อน |
+| 10 Amplify | เขียนแล้วเป็น `infra/frontend.yaml` ใช้ผ่าน `deploy.ps1 -GitHubRepo ...` (ต้องมี GitHub token) ยังไม่ได้ทดสอบ deploy จริง |
 
 **สถานะการตรวจ:** template ผ่าน `aws cloudformation validate-template` และ `cfn-lint` และ deploy ชุดทดสอบ (`cs361-coop-test`) สำเร็จทั้ง 2 stack (14 และ 44 resources เป็น `CREATE_COMPLETE`) พร้อม migrate และ smoke test ผ่านครบ 4 ข้อ (9 พ.ย. 2026) และทดสอบ `-Destroy` แล้ว (ทั้งสอง stack เป็น `DELETE_COMPLETE` ระบบจริงไม่ถูกกระทบ) ส่วน `-CodeOnly` ยังไม่ได้ทดสอบ
