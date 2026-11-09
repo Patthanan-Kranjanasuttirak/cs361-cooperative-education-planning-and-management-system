@@ -24,7 +24,7 @@ Parameters:
   S3PrefixListId:
     Type: String
     AllowedPattern: '^pl-[0-9a-f]+$'
-    Description: Managed prefix list of S3 in this region. The deploy script looks it up (see infra/README.md).
+    Description: Managed prefix list of S3 in this region. The deploy script looks it up (see AUTOMATION.md, section A4).
   DbInstanceClass:
     Type: String
     Default: db.t4g.micro

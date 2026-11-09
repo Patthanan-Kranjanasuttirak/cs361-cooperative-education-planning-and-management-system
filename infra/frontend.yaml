@@ -1,0 +1,132 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CS361 Co-op - optional stack 3 - Amplify Hosting for the frontend, connected to a GitHub repository
+
+# Opt-in: deploy.ps1 only creates this stack when -GitHubRepo is given.
+# It is deployed twice by the script because of a circular dependency:
+#   1) without the backend values, to learn the Amplify domain (the CORS origin and the Cognito callback URL need it),
+#   2) again with ApiUrl / UserPoolId / UserPoolClientId / CognitoDomain, then a build is started.
+# The GitHub token is only used while the app is created (the Amplify GitHub App must be installed on the repository).
+# Keep this file ASCII-only: the AWS CLI on Windows reads templates with the system code page.
+
+Parameters:
+  Prefix:
+    Type: String
+    Default: cs361-coop
+    AllowedPattern: '^[a-z][a-z0-9-]{2,30}$'
+    Description: Must be the same Prefix used for the other stacks.
+  Repository:
+    Type: String
+    AllowedPattern: '^https://github\.com/[A-Za-z0-9-]+/(?!.*\.git$)[A-Za-z0-9._-]+$'
+    Description: GitHub repository URL, for example https://github.com/owner/repo (no .git, no trailing slash).
+  GitHubAccessToken:
+    Type: String
+    NoEcho: true
+    MinLength: 1
+    Description: GitHub personal access token that may read the repository and create webhooks. Never commit it.
+  BranchName:
+    Type: String
+    Default: main
+    AllowedPattern: '^[A-Za-z0-9._/-]+$'
+  AppRoot:
+    Type: String
+    Default: frontend
+    AllowedPattern: '^[A-Za-z0-9._/-]+$'
+    Description: Folder of the frontend inside the repository (monorepo app root).
+  ApiUrl:
+    Type: String
+    Default: ''
+    Description: VITE_API_URL. Leave empty in the first deployment.
+  UserPoolId:
+    Type: String
+    Default: ''
+    Description: VITE_COGNITO_USER_POOL_ID. Leave empty in the first deployment.
+  UserPoolClientId:
+    Type: String
+    Default: ''
+    Description: VITE_COGNITO_CLIENT_ID. Leave empty in the first deployment.
+  CognitoDomain:
+    Type: String
+    Default: ''
+    Description: VITE_COGNITO_DOMAIN (host name only, no https://). Leave empty in the first deployment.
+
+Conditions:
+  HasBackend: !Not [!Equals [!Ref ApiUrl, '']]
+
+Resources:
+  AmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: !Sub '${Prefix}-web'
+      Repository: !Ref Repository
+      AccessToken: !Ref GitHubAccessToken
+      Platform: WEB
+      # Same build as the hand-made app: Vite build of the frontend folder.
+      BuildSpec: !Sub |
+        version: 1
+        applications:
+          - appRoot: ${AppRoot}
+            frontend:
+              phases:
+                preBuild:
+                  commands:
+                    - npm ci
+                build:
+                  commands:
+                    - npm run build
+              artifacts:
+                baseDirectory: dist
+                files:
+                  - "**/*"
+              cache:
+                paths:
+                  - node_modules/**/*
+      # Single-page app: unknown paths (for example /login) must serve index.html.
+      CustomRules:
+        - Source: '/<*>'
+          Target: /index.html
+          Status: '404-200'
+      EnvironmentVariables:
+        - Name: AMPLIFY_MONOREPO_APP_ROOT
+          Value: !Ref AppRoot
+        - Name: AMPLIFY_DIFF_DEPLOY
+          Value: 'false'
+        - !If
+          - HasBackend
+          - { Name: VITE_AUTH_MODE, Value: cognito }
+          - !Ref 'AWS::NoValue'
+        - !If
+          - HasBackend
+          - { Name: VITE_API_URL, Value: !Ref ApiUrl }
+          - !Ref 'AWS::NoValue'
+        - !If
+          - HasBackend
+          - { Name: VITE_COGNITO_USER_POOL_ID, Value: !Ref UserPoolId }
+          - !Ref 'AWS::NoValue'
+        - !If
+          - HasBackend
+          - { Name: VITE_COGNITO_CLIENT_ID, Value: !Ref UserPoolClientId }
+          - !Ref 'AWS::NoValue'
+        - !If
+          - HasBackend
+          - { Name: VITE_COGNITO_DOMAIN, Value: !Ref CognitoDomain }
+          - !Ref 'AWS::NoValue'
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: !Ref BranchName
+      Stage: PRODUCTION
+      # No build before the backend values exist (the first deployment): the script starts the build itself afterwards.
+      EnableAutoBuild: !If [HasBackend, true, false]
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+Outputs:
+  AppId:
+    Value: !GetAtt AmplifyApp.AppId
+  WebOrigin:
+    Description: Frontend origin for -WebOrigin, CORS_ORIGIN and the Cognito callback URL
+    Value: !Sub 'https://${BranchName}.${AmplifyApp.DefaultDomain}'
