@@ -2,6 +2,8 @@
 
 สร้างระบบ CS361 Co-op บน AWS ซ้ำได้ด้วยคำสั่งเดียว แทนการคลิกใน Console ตามคู่มือ [DEPLOY_AWS.md](../DEPLOY_AWS.md)
 
+ไฟล์นี้เป็น **รายละเอียดคำสั่งและพารามิเตอร์** ส่วนภาพรวมของ IaC และ CI/CD, ตารางว่าอะไรอัตโนมัติ, ผลทดสอบจริง, วิธีรันตามสถานการณ์ และการล้างหลังส่งงาน อยู่ใน [AUTOMATION.md](../AUTOMATION.md)
+
 | ไฟล์ | ทำอะไร |
 |---|---|
 | [`network-data.yaml`](network-data.yaml) | **Stack 1** — VPC (private, ไม่มี NAT/IGW), security groups, S3 gateway endpoint, RDS PostgreSQL, S3 สองใบ (ไฟล์ผู้ใช้ และที่เก็บ zip ของ Lambda) |
@@ -78,7 +80,7 @@ powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-tes
 - มี migration ใหม่ (ไฟล์ SQL ใน `database/migrations`) ให้เพิ่ม `-Migrate`
 - แก้โค้ด trigger ของ Cognito (`backend/cognito-triggers`) หรือแก้ `infra/*.yaml` ให้รันแบบเต็ม (ไม่ใส่ `-CodeOnly`) เพราะ trigger และทรัพยากรอยู่ใน stack 2 โดยครั้งนี้สคริปต์จะถามความลับอีกครั้ง
 - `-CodeOnly` ไม่ผ่าน CloudFormation stack จึงบันทึก zip เวอร์ชันเก่าไว้จนกว่าจะรันแบบเต็มครั้งถัดไป ซึ่งใช้ zip ใหม่เสมอ ไม่ทำให้ระบบเสียหาย
-- ถ้าไม่ต้องการรันสคริปต์เอง ทำเป็น GitHub Actions (build แล้ว `update-function-code` เมื่อ push) ได้ แต่ต้องตั้งสิทธิ์ AWS ให้ GitHub ก่อน ซึ่งยังไม่ได้ทำ
+- ระบบจริงไม่ต้องรันสคริปต์เอง: push เข้า `main` แล้ว GitHub Actions อัปเดต Lambda ให้ (ดูหัวข้อ CI/CD ด้านล่าง)
 
 ## ผลที่ได้เมื่อรันสำเร็จ
 
@@ -161,18 +163,11 @@ powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-tes
    - **ห้ามตั้ง** ตัวแปร `AWS_DEPLOY_ROLE_ARN` เมื่อใช้ access key
 6. push ไฟล์ workflow ขึ้น `main` แล้วทดสอบ: แท็บ Actions → Deploy backend → Run workflow
 
-**ข้อควรระวังของ access key:** เป็นความลับระยะยาว ใครได้ไปจะอัปเดตโค้ด Lambda ตัวนั้นได้ จึงจำกัดสิทธิ์ไว้ที่ Lambda ตัวเดียวและเก็บเฉพาะใน GitHub secrets เมื่อส่งงานเสร็จให้ลบ key (`aws iam delete-access-key --user-name <ชื่อ user> --access-key-id <id>`) หรือลบ stack ทิ้ง
+**ข้อควรระวังของ access key:** เป็นความลับระยะยาว ใครได้ไปจะอัปเดตโค้ด Lambda ตัวนั้นได้ จึงจำกัดสิทธิ์ไว้ที่ Lambda ตัวเดียวและเก็บเฉพาะใน GitHub secrets เมื่อส่งงานเสร็จให้ลบ key และ stack ตามขั้นตอนใน [AUTOMATION.md](../AUTOMATION.md) ข้อ D
 
-**ย้อนกลับเมื่อพัง:** `git revert` คอมมิตที่มีปัญหาแล้ว push workflow จะ deploy โค้ดก่อนหน้าให้ หรือใน Lambda → Versions เลือกเวอร์ชันก่อนหน้า
+**ย้อนกลับเมื่อพัง:** ดู [AUTOMATION.md](../AUTOMATION.md) ข้อ B7
 
-**ขอบเขต: อะไรอัตโนมัติ อะไรกดเอง**
-
-| สิ่งที่เปลี่ยน | สิ่งที่ workflow ทำ |
-|---|---|
-| โค้ด backend หรือไฟล์ใน `database/` | push `main` แล้วอัปเดต Lambda backend เอง |
-| โค้ดใน `backend/cognito-triggers/` | push `main` แล้วอัปเดต Lambda trigger ทั้ง 4 ตัวด้วย (ตรวจจากไฟล์ที่เปลี่ยนเทียบกับคอมมิตก่อนหน้า) หรือกด Run workflow แล้วติ๊ก `deploy_triggers` |
-| ไฟล์ migration ใหม่ใน `database/migrations/` | **ไม่รันเอง** workflow แสดงคำเตือนสีเหลืองบอกให้ทำ snapshot RDS แล้วกด Run workflow พร้อมติ๊ก `migrate` (รัน `{"action":"migrate","seeds":false}` ไม่ใส่ seed เสมอ) |
-| ทรัพยากร AWS (VPC, RDS, Cognito, API Gateway ฯลฯ) | ไม่ได้อยู่ใน workflow ใช้ `deploy.ps1` เพราะต้องใช้สิทธิ์กว้างและมีความเสี่ยงสูง |
+**ขอบเขต:** ตารางว่าอะไรอัตโนมัติและอะไรกดเอง (โค้ด backend, trigger, migration, ทรัพยากร AWS) และวิธีใช้ปุ่ม Run workflow อยู่ใน [AUTOMATION.md](../AUTOMATION.md) ข้อ B3 และ B6
 
 ตั้งค่าเพิ่ม: IAM user ต้องมีสิทธิ์อัปเดต trigger และเรียก backend (เพิ่มเมื่อ 9 พ.ย. 2026) ถ้าสร้างไว้ก่อนหน้านี้แล้ว ให้รันคำสั่ง deploy ข้อ 3 ซ้ำเพื่ออัปเดตสิทธิ์ (ไม่ต้องสร้าง access key ใหม่) workflow หาชื่อ Lambda trigger ให้เองทั้งแบบ `cs361-coop-define-auth` (ระบบจริงที่สร้างมือ) และ `cs361-coop-define-auth-challenge` (ชุด IaC) ถ้าใช้ prefix อื่นที่ไม่ใช่ `cs361-coop` ให้ตั้งตัวแปร GitHub `TRIGGER_FUNCTION_PREFIX` และส่ง `TriggerFunctionPrefix=<prefix>` ตอน deploy template ด้วย
 
@@ -183,17 +178,9 @@ powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-tes
 
 ```powershell
 pip install cfn-lint
-cfn-lint --non-zero-exit-code error infra/network-data.yaml infra/app.yaml infra/github-oidc.yaml
+cfn-lint --non-zero-exit-code error infra/*.yaml
 ```
 
-## สถานะ
+## สถานะและผลทดสอบ
 
-ตรวจแล้ว (9 พ.ย. 2026):
-- ไวยากรณ์ผ่าน `aws cloudformation validate-template` และ `cfn-lint` (เหลือคำเตือน W1011 ที่ยอมรับ)
-- **Deploy จริงสำเร็จ** ด้วย `deploy.ps1 -Prefix cs361-coop-test`: stack `cs361-coop-test-data` (14 resources) และ `cs361-coop-test-app` (44 resources) เป็น `CREATE_COMPLETE` ทั้งหมด
-- migrate สำเร็จ (`init` และ migration 003 ถึง 011 พร้อม seed) และ smoke test ผ่านครบ 4 ข้อ (`/health` 200, `/companies` 200, `/auth/me` ไม่มี token 401, preflight CORS 204)
-- ตรวจเพิ่มด้วย AWS CLI: RDS ไม่ public, Lambda backend อยู่ใน VPC ส่วน trigger 4 ตัวอยู่นอก VPC, Cognito มี domain และ Google provider
-
-- **`-Destroy` ทดสอบแล้ว:** stack `cs361-coop-test-app` และ `cs361-coop-test-data` เป็น `DELETE_COMPLETE` ไม่เหลือ Lambda, VPC หรือ bucket ของชุดทดสอบ ระบบจริง (RDS `cs361-coop-db`, bucket `cs361-coop-files-2026`, Cognito pool เดิม) ไม่ถูกกระทบ เหลือเฉพาะ snapshot สุดท้ายของ RDS 1 ก้อนและพารามิเตอร์ SSM ของรหัสผ่านตามที่ออกแบบไว้
-
-ยังไม่ได้ตรวจ: `-CodeOnly` และ Google login กับชุดทดสอบ (ต้องมี OAuth client และเพิ่ม Redirect URI)
+ผลทดสอบจริงของ IaC (deploy, migrate, smoke test, `-Destroy`) และของ CI/CD (Deploy backend ที่เขียว) รวมถึงสิ่งที่ยังไม่ได้ทดสอบ อยู่ใน [AUTOMATION.md](../AUTOMATION.md) ข้อ A4 และ B9
