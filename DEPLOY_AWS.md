@@ -1,6 +1,8 @@
 # DEPLOY_AWS.md — ระบบจัดการแผนสหกิจศึกษา (CS361, V3)
 
-คู่มือสร้างและดูแลระบบบน AWS แบบ manual (ยังไม่ใช้ IaC) 
+คู่มือสร้างและดูแลระบบบน AWS แบบ manual (ระบบที่ใช้งานอยู่สร้างด้วยมือตามคู่มือนี้) 
+
+> **สร้างซ้ำด้วย Infrastructure as Code ได้แล้ว:** ดู [infra/README.md](infra/README.md) และข้อ 14 ท้ายเอกสารนี้ (V5)
 
 ## 1. ภาพรวม
 
@@ -313,7 +315,7 @@ backend ต้องการ `Authorization: Bearer <ID token>` (ใช้ **ID
 - เปิด API Gateway access log, CloudTrail, RDS deletion protection และ automated backup
 - ลบ user pool เก่า `cs361-coop-web` และ branch `develop` ใน Amplify เมื่อไม่ใช้แล้ว
 - โดเมนของตัวเอง (ถ้าเปลี่ยนโดเมน ต้องแก้ `CORS_ORIGIN` และ Gateway responses)
-- Infrastructure as Code (V5) ดูรายการขั้นตอนที่ควร automate ในข้อ 13
+- Infrastructure as Code (V5): เขียนแล้วใน `infra/` (ดูข้อ 14) เหลือเชื่อม Amplify กับ GitHub และยังไม่ได้บันทึกผล deploy จริงทั้งชุดเป็นหลักฐาน
 
 ## 13. Manual steps ที่เปลี่ยนเป็น Automation ได้
 
@@ -332,6 +334,43 @@ backend ต้องการ `Authorization: Bearer <ID token>` (ใช้ **ID
 | 9 | Budget alert, log retention, alarm, backup ตั้งมือ (ข้อ 11) | IaC (AWS Budgets, `RetentionInDays`, CloudWatch Alarms, RDS backup retention) | ไม่ลืมตั้งเมื่อสร้างสภาพแวดล้อมใหม่ |
 | 10 | เพิ่ม/แก้กฎ rewrite และ env ของ Amplify (ข้อ 8.1) | `amplify.yml` + ตั้งค่าผ่าน AWS CLI/IaC | หน้าเว็บ deploy ซ้ำได้ ไม่ต้องจำกฎ |
 
+สถานะการทำ automation ของแต่ละข้อดูในข้อ 14
+
 **ที่ยังต้องทำมือต่อไป** (ทำอัตโนมัติไม่ได้หรือไม่คุ้ม): สร้าง Google OAuth client และตั้ง consent screen/Test users, ขอ Application-Key จาก TU, ใส่ความลับ (รหัสผ่าน DB, Client secret) ครั้งแรก
 
 **ลำดับที่แนะนำ:** เริ่มจากข้อ 1, 3 และ 7 ก่อน (ได้ผลเร็วและเสี่ยงต่ำ) ค่อยทำ IaC ข้อ 5 และ 6
+
+## 14. Infrastructure as Code (V5)
+
+เขียนไว้ใน `infra/` (รายละเอียดและวิธีรัน: [infra/README.md](infra/README.md)) สร้างระบบอีกชุดแยกจากของจริงด้วยคำสั่งเดียว:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-test
+```
+
+ใช้ prefix อื่นที่ไม่ใช่ `cs361-coop` เพราะชื่อนั้นถูกใช้โดยทรัพยากรที่สร้างมือในคู่มือนี้ (สคริปต์ปฏิเสธถ้าใช้ prefix นั้น)
+
+| ไฟล์ | หน้าที่ | แทนข้อไหนของคู่มือ |
+|---|---|---|
+| `infra/network-data.yaml` | VPC, security groups, S3 endpoint, RDS, S3 สองใบ | ข้อ 2, 3 (ขั้น 1 ถึง 3) |
+| `infra/app.yaml` | IAM, Lambda backend + trigger 4 ตัว, Cognito + Google, API Gateway | ข้อ 4, 7, 8 |
+| `infra/deploy.ps1` | build zip, อัปโหลด, deploy 2 stack, migrate, smoke test, ลบชุดทดสอบ (`-Destroy`) | ข้อ 5, 6, 9 |
+| `.github/workflows/validate-infra.yml` | รัน `cfn-lint` อัตโนมัติเมื่อแก้ `infra/` | (ใหม่) |
+| `infra/github-deploy-user.yaml`, `infra/github-oidc.yaml` และ `.github/workflows/deploy-backend.yml` | CI/CD: push `main` แล้วเทสต์ build และอัปเดต Lambda อัตโนมัติ บัญชีนี้ใช้ OIDC ไม่ได้ (องค์กรตั้ง SCP ปฏิเสธ) จึงใช้ IAM user + access key ใน GitHub secrets ดู infra/README.md หัวข้อ CI/CD | ข้อ 5 (อัปโหลด Lambda) |
+
+**สถานะของแต่ละข้อใน manual → automation (ข้อ 13)**
+
+| ข้อ | สถานะ |
+|---|---|
+| 1 build zip และอัปโหลด Lambda | ทำแล้วใน `deploy.ps1` (ทดสอบส่วน build แล้ว) อัปเดตเฉพาะโค้ดด้วย `-CodeOnly` และมี GitHub Actions deploy อัตโนมัติเมื่อ push `main` (เขียนแล้ว ต้องสร้าง IAM user และใส่ secrets ใน GitHub ก่อนใช้งาน ยังไม่ได้ทดสอบรันจริง) |
+| 2 env ของ Lambda | ทำแล้วใน `app.yaml` (ส่งเป็นพารามิเตอร์) Amplify env ยังพิมพ์ให้คัดลอก |
+| 3 migrate | ทำแล้วใน `deploy.ps1` |
+| 4 API Gateway | ทำแล้วใน `app.yaml` (ทุก route, authorizer, gateway responses, deployment) |
+| 5 VPC, RDS, S3, IAM | ทำแล้วใน `network-data.yaml` และ `app.yaml` |
+| 6 Cognito และ Google provider | ทำแล้วใน `app.yaml` (ยกเว้นสร้าง OAuth client ที่ Google Cloud) |
+| 7 smoke test | ทำแล้วใน `deploy.ps1` (4 ข้อ) |
+| 8 ลงทะเบียนผู้ใช้เป็นกลุ่ม | ยังไม่ทำ |
+| 9 Budget, retention, alarm | ทำบางส่วน (RDS backup, throttling ของ API) ที่เหลือยังทำมือ |
+| 10 Amplify | ยังไม่ทำ ต้องอนุญาตสิทธิ์ GitHub ก่อน |
+
+**สถานะการตรวจ:** template ผ่าน `aws cloudformation validate-template` และ `cfn-lint` ส่วน deploy จริงทั้งชุดต้องรันและบันทึกผลเป็นหลักฐานเอง

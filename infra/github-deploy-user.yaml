@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CS361 Co-op - IAM user that GitHub Actions uses to update the backend Lambda (fallback when OIDC is not allowed)
+
+# Use this when the AWS Organization blocks OIDC identity providers (infra/github-oidc.yaml fails with
+# "explicit deny in a service control policy"). The user can do one thing only: update the code of one Lambda.
+# The template creates the user WITHOUT an access key, so no secret is ever stored in CloudFormation.
+# Create the key yourself with the AWS CLI and paste it into GitHub secrets (see infra/README.md).
+# Keep this file ASCII-only: the AWS CLI on Windows reads templates with the system code page.
+
+Parameters:
+  LambdaFunctionName:
+    Type: String
+    Default: cs361-coop-api
+    Description: The backend Lambda that the workflow may update (the hand-made production one by default).
+
+Resources:
+  DeployUser:
+    Type: AWS::IAM::User
+    Properties:
+      Policies:
+        - PolicyName: update-backend-lambda
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:UpdateFunctionCode
+                  - lambda:PublishVersion
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:ListVersionsByFunction
+                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaFunctionName}'
+      Tags:
+        - { Key: Project, Value: cs361-coop }
+
+Outputs:
+  DeployUserName:
+    Description: Create the access key with - aws iam create-access-key --user-name <this value>
+    Value: !Ref DeployUser

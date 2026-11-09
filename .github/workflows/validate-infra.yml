@@ -1,0 +1,22 @@
+name: Validate infrastructure templates
+
+on:
+  push:
+    branches: [main, develop]
+    paths: ['infra/**', '.github/workflows/validate-infra.yml']
+  pull_request:
+    paths: ['infra/**', '.github/workflows/validate-infra.yml']
+
+jobs:
+  cfn-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+      # W1011 (use dynamic references for secrets) is expected: the VPC has no NAT, so Lambda cannot read Secrets Manager.
+      - name: Lint CloudFormation templates
+        run: cfn-lint --non-zero-exit-code error infra/network-data.yaml infra/app.yaml infra/github-oidc.yaml infra/github-deploy-user.yaml

@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CS361 Co-op - lets GitHub Actions deploy the backend Lambda without any stored AWS access key (OIDC)
+
+# GitHub Actions asks AWS for short-lived credentials with its own signed token.
+# AWS only hands them out when the token comes from the repository and branch named below,
+# and the role can do nothing except update the code of one Lambda function.
+# Keep this file ASCII-only: the AWS CLI on Windows reads templates with the system code page.
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Default: Patthanan-Kranjanasuttirak
+    AllowedPattern: '^[A-Za-z0-9-]+$'
+    Description: GitHub user or organization that owns the repository (case sensitive).
+  GitHubRepo:
+    Type: String
+    Default: cs361-cooperative-education-planning-and-management-system
+    AllowedPattern: '^[A-Za-z0-9._-]+$'
+    Description: Repository name (case sensitive).
+  GitHubBranch:
+    Type: String
+    Default: main
+    AllowedPattern: '^[A-Za-z0-9._/-]+$'
+    Description: Only workflows running on this branch can assume the role.
+  LambdaFunctionName:
+    Type: String
+    Default: cs361-coop-api
+    Description: The backend Lambda that the workflow may update (the hand-made production one by default).
+  ExistingOidcProviderArn:
+    Type: String
+    Default: ''
+    Description: An AWS account can hold only one GitHub OIDC provider. If one already exists, put its ARN here; otherwise leave empty to create it.
+
+Conditions:
+  CreateProvider: !Equals [!Ref ExistingOidcProviderArn, '']
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Assumed by GitHub Actions to update the backend Lambda code
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If [CreateProvider, !Ref GitHubOidcProvider, !Ref ExistingOidcProviderArn]
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': sts.amazonaws.com
+                'token.actions.githubusercontent.com:sub': !Sub 'repo:${GitHubOwner}/${GitHubRepo}:ref:refs/heads/${GitHubBranch}'
+      Policies:
+        - PolicyName: update-backend-lambda
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:UpdateFunctionCode
+                  - lambda:PublishVersion
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:ListVersionsByFunction
+                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${LambdaFunctionName}'
+      Tags:
+        - { Key: Project, Value: cs361-coop }
+
+Outputs:
+  DeployRoleArn:
+    Description: Put this in the GitHub repository variable AWS_DEPLOY_ROLE_ARN
+    Value: !GetAtt DeployRole.Arn
