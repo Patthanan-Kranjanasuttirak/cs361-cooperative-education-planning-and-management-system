@@ -1,0 +1,667 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CS361 Co-op - stack 2 of 2 - IAM roles, Lambda (backend + 4 Cognito triggers), Cognito (Google login), API Gateway
+
+# Built from DEPLOY_AWS.md sections 4, 5, 7 and 8. Deploy infra/network-data.yaml (stack 1) first:
+# this stack imports its Exports (VPC, subnets, security group, database, buckets).
+# The Lambda zip files must already be in the artifacts bucket of stack 1 (see infra/README.md).
+# Keep this file ASCII-only: the AWS CLI on Windows reads templates with the system code page.
+
+Parameters:
+  Prefix:
+    Type: String
+    Default: cs361-coop
+    AllowedPattern: '^[a-z][a-z0-9-]{2,30}$'
+    Description: Must be the same Prefix used for stack 1.
+  LambdaRuntime:
+    Type: String
+    Default: nodejs22.x
+  BackendCodeKey:
+    Type: String
+    Description: S3 key of the backend zip in the artifacts bucket (use a new key for every build so Lambda updates).
+  TriggerKeyPrefix:
+    Type: String
+    Default: triggers/
+    Description: S3 key prefix of the four trigger zips (pre-sign-up.zip, define-auth-challenge.zip, create-auth-challenge.zip, verify-auth-challenge.zip). Must end with a slash.
+  WebOrigin:
+    Type: String
+    AllowedPattern: '^https?://[A-Za-z0-9.-]+(:[0-9]+)?$'
+    Description: Frontend origin, for example https://main.d2hk33ncom62gs.amplifyapp.com. No trailing slash (a trailing slash breaks CORS).
+  CognitoDomainPrefix:
+    Type: String
+    Default: ''
+    Description: Cognito domain prefix. Empty means use Prefix. Must be unique in the region and must not contain aws, amazon or cognito.
+  DbPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 12
+    MaxLength: 64
+    AllowedPattern: '^[A-Za-z0-9_+=.-]+$'
+    Description: Same value as stack 1. Never commit it.
+  MockLogins:
+    Type: String
+    Default: ''
+    Description: Comma separated demo login emails (no spaces). Leave empty in production.
+  MockPassword:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Shared password of the demo logins. Leave empty to disable demo logins.
+  TuApiKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Application-Key of the TU API. Without it TU logins fail.
+  GoogleClientId:
+    Type: String
+    MinLength: 1
+    Description: OAuth client ID from Google Cloud. Use the word unused if this copy does not need Google login.
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 1
+    Description: OAuth client secret from Google Cloud. Never commit it. Use the word unused if this copy does not need Google login.
+  ApiStageName:
+    Type: String
+    Default: prod
+    AllowedPattern: '^[a-z][a-z0-9]{0,15}$'
+  ApiThrottleRate:
+    Type: Number
+    Default: 20
+  ApiThrottleBurst:
+    Type: Number
+    Default: 40
+  ApiDeploymentVersion:
+    Type: String
+    Default: '1'
+    Description: Change this value after editing API routes so that API Gateway creates a new deployment.
+
+Conditions:
+  HasDomainPrefix: !Not [!Equals [!Ref CognitoDomainPrefix, '']]
+  # Cognito rejects duplicate callback URLs, so the localhost entry is added only when WebOrigin is not localhost already.
+  WebOriginIsLocalhost: !Equals [!Ref WebOrigin, 'http://localhost:5173']
+
+Resources:
+  # ---------------------------------------------------------------- IAM
+  TriggerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: update-user-attributes
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # The pool does not exist yet when this role is created, so the policy is scoped to pools in this account and region.
+              - Effect: Allow
+                Action: cognito-idp:AdminUpdateUserAttributes
+                Resource: !Sub 'arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*'
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  BackendRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: files-bucket-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub
+                  - '${BucketArn}/*'
+                  - BucketArn: { 'Fn::ImportValue': !Sub '${Prefix}-FilesBucketArn' }
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: { 'Fn::ImportValue': !Sub '${Prefix}-FilesBucketArn' }
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  # ---------------------------------------------------------------- Cognito trigger Lambdas (outside the VPC, they call the TU API)
+  PreSignUpFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${Prefix}-pre-sign-up'
+      Runtime: !Ref LambdaRuntime
+      Handler: index.handler
+      Role: !GetAtt TriggerRole.Arn
+      Timeout: 3
+      Code:
+        S3Bucket: { 'Fn::ImportValue': !Sub '${Prefix}-ArtifactsBucketName' }
+        S3Key: !Sub '${TriggerKeyPrefix}pre-sign-up.zip'
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  DefineAuthChallengeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${Prefix}-define-auth-challenge'
+      Runtime: !Ref LambdaRuntime
+      Handler: index.handler
+      Role: !GetAtt TriggerRole.Arn
+      Timeout: 3
+      Code:
+        S3Bucket: { 'Fn::ImportValue': !Sub '${Prefix}-ArtifactsBucketName' }
+        S3Key: !Sub '${TriggerKeyPrefix}define-auth-challenge.zip'
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  CreateAuthChallengeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${Prefix}-create-auth-challenge'
+      Runtime: !Ref LambdaRuntime
+      Handler: index.handler
+      Role: !GetAtt TriggerRole.Arn
+      Timeout: 3
+      Code:
+        S3Bucket: { 'Fn::ImportValue': !Sub '${Prefix}-ArtifactsBucketName' }
+        S3Key: !Sub '${TriggerKeyPrefix}create-auth-challenge.zip'
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  VerifyAuthChallengeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${Prefix}-verify-auth-challenge'
+      Runtime: !Ref LambdaRuntime
+      Handler: index.handler
+      Role: !GetAtt TriggerRole.Arn
+      Timeout: 5
+      Environment:
+        Variables:
+          TU_API_KEY: !Ref TuApiKey
+          MOCK_LOGINS: !Ref MockLogins
+          MOCK_PASSWORD: !Ref MockPassword
+      Code:
+        S3Bucket: { 'Fn::ImportValue': !Sub '${Prefix}-ArtifactsBucketName' }
+        S3Key: !Sub '${TriggerKeyPrefix}verify-auth-challenge.zip'
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  # Cognito must be allowed to invoke the four triggers.
+  PreSignUpPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref PreSignUpFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  DefineAuthChallengePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DefineAuthChallengeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  CreateAuthChallengePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CreateAuthChallengeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  VerifyAuthChallengePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VerifyAuthChallengeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  # ---------------------------------------------------------------- Cognito
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${Prefix}-users'
+      UserPoolTier: ESSENTIALS
+      UsernameConfiguration:
+        CaseSensitive: false
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      MfaConfiguration: 'OFF'
+      DeletionProtection: INACTIVE
+      Schema:
+        - Name: en_name
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+          StringAttributeConstraints:
+            MinLength: '0'
+            MaxLength: '256'
+      LambdaConfig:
+        PreSignUp: !GetAtt PreSignUpFunction.Arn
+        DefineAuthChallenge: !GetAtt DefineAuthChallengeFunction.Arn
+        CreateAuthChallenge: !GetAtt CreateAuthChallengeFunction.Arn
+        VerifyAuthChallengeResponse: !GetAtt VerifyAuthChallengeFunction.Arn
+      UserPoolTags:
+        Project: !Ref Prefix
+
+  GoogleProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: 'openid email profile'
+      # email_verified must be mapped, otherwise the backend refuses to bind the account.
+      AttributeMapping:
+        email: email
+        email_verified: email_verified
+        name: name
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: GoogleProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Sub '${Prefix}-web'
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_CUSTOM_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: LEGACY
+      SupportedIdentityProviders: [Google]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      CallbackURLs: !If
+        - WebOriginIsLocalhost
+        - [http://localhost:5173/login]
+        - [!Sub '${WebOrigin}/login', 'http://localhost:5173/login']
+      LogoutURLs: !If
+        - WebOriginIsLocalhost
+        - [http://localhost:5173/login]
+        - [!Sub '${WebOrigin}/login', 'http://localhost:5173/login']
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      Domain: !If [HasDomainPrefix, !Ref CognitoDomainPrefix, !Ref Prefix]
+      ManagedLoginVersion: 2
+
+  # Without a managed login style the app client shows "Unavailable" and the login page does not open.
+  ManagedLoginStyle:
+    Type: AWS::Cognito::ManagedLoginBranding
+    DependsOn: UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientId: !Ref UserPoolClient
+      UseCognitoProvidedValues: true
+
+  # ---------------------------------------------------------------- Backend Lambda (inside the VPC)
+  BackendFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${Prefix}-api'
+      Runtime: !Ref LambdaRuntime
+      Handler: src/lambda.handler
+      Role: !GetAtt BackendRole.Arn
+      Timeout: 30
+      MemorySize: 512
+      VpcConfig:
+        SubnetIds: !Split [',', { 'Fn::ImportValue': !Sub '${Prefix}-PrivateSubnetIds' }]
+        SecurityGroupIds:
+          - { 'Fn::ImportValue': !Sub '${Prefix}-LambdaSecurityGroupId' }
+      Environment:
+        Variables:
+          AUTH_MODE: api-gateway
+          COGNITO_USER_POOL_ID: !Ref UserPool
+          COGNITO_CLIENT_ID: !Ref UserPoolClient
+          CORS_ORIGIN: !Ref WebOrigin
+          FILE_BUCKET: { 'Fn::ImportValue': !Sub '${Prefix}-FilesBucketName' }
+          DB_HOST: { 'Fn::ImportValue': !Sub '${Prefix}-DbHost' }
+          DB_PORT: { 'Fn::ImportValue': !Sub '${Prefix}-DbPort' }
+          DB_NAME: { 'Fn::ImportValue': !Sub '${Prefix}-DbName' }
+          DB_USER: { 'Fn::ImportValue': !Sub '${Prefix}-DbUsername' }
+          DB_PASSWORD: !Ref DbPassword
+          MOCK_LOGINS: !Ref MockLogins
+          MOCK_PASSWORD: !Ref MockPassword
+      Code:
+        S3Bucket: { 'Fn::ImportValue': !Sub '${Prefix}-ArtifactsBucketName' }
+        S3Key: !Ref BackendCodeKey
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  # ---------------------------------------------------------------- API Gateway (REST)
+  Api:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub '${Prefix}-api'
+      BinaryMediaTypes: ['*/*']
+      EndpointConfiguration:
+        Types: [REGIONAL]
+
+  CognitoAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: !Sub '${Prefix}-cognito-authorizer'
+      RestApiId: !Ref Api
+      Type: COGNITO_USER_POOLS
+      IdentitySource: method.request.header.Authorization
+      ProviderARNs: [!GetAtt UserPool.Arn]
+
+  ApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !GetAtt Api.RootResourceId
+      PathPart: api
+
+  ApiProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !Ref ApiResource
+      PathPart: '{proxy+}'
+
+  HealthResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !Ref ApiResource
+      PathPart: health
+
+  PublicResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !Ref ApiResource
+      PathPart: public
+
+  PublicProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !Ref PublicResource
+      PathPart: '{proxy+}'
+
+  CompaniesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !Ref ApiResource
+      PathPart: companies
+
+  CompaniesProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !Ref CompaniesResource
+      PathPart: '{proxy+}'
+
+  LogosResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !Ref ApiResource
+      PathPart: company-logos
+
+  LogosProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref Api
+      ParentId: !Ref LogosResource
+      PathPart: '{proxy+}'
+
+  # Methods. Every one is a Lambda proxy integration (YAML anchors are not allowed in CloudFormation, so each is spelled out). AuthorizationType COGNITO_USER_POOLS means "login required".
+  # Preflight (OPTIONS) is always public and answered by the backend (cors middleware).
+  MethodApiProxyAny:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref ApiProxyResource
+      HttpMethod: ANY
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodApiProxyOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref ApiProxyResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodHealthGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref HealthResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodHealthOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref HealthResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodPublicProxyAny:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref PublicProxyResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodCompaniesGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref CompaniesResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodCompaniesAny:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref CompaniesResource
+      HttpMethod: ANY
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodCompaniesOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref CompaniesResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodCompaniesProxyGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref CompaniesProxyResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodCompaniesProxyAny:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref CompaniesProxyResource
+      HttpMethod: ANY
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodCompaniesProxyOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref CompaniesProxyResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  MethodLogosProxyGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref Api
+      ResourceId: !Ref LogosProxyResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendFunction.Arn}/invocations'
+
+  # CORS headers on errors produced by API Gateway itself (401 from the authorizer, 403, 5XX).
+  # The origin must match WebOrigin and CORS_ORIGIN exactly (no trailing slash).
+  Gateway4xxResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref Api
+      ResponseType: DEFAULT_4XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: !Sub "'${WebOrigin}'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
+      ResponseTemplates:
+        application/json: '{"message":$context.error.messageString}'
+
+  Gateway5xxResponse:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref Api
+      ResponseType: DEFAULT_5XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: !Sub "'${WebOrigin}'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
+      ResponseTemplates:
+        application/json: '{"message":$context.error.messageString}'
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - MethodApiProxyAny
+      - MethodApiProxyOptions
+      - MethodHealthGet
+      - MethodHealthOptions
+      - MethodPublicProxyAny
+      - MethodCompaniesGet
+      - MethodCompaniesAny
+      - MethodCompaniesOptions
+      - MethodCompaniesProxyGet
+      - MethodCompaniesProxyAny
+      - MethodCompaniesProxyOptions
+      - MethodLogosProxyGet
+      - Gateway4xxResponse
+      - Gateway5xxResponse
+    Properties:
+      RestApiId: !Ref Api
+      Description: !Sub 'deployment ${ApiDeploymentVersion}'
+
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref Api
+      DeploymentId: !Ref ApiDeployment
+      StageName: !Ref ApiStageName
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          ThrottlingRateLimit: !Ref ApiThrottleRate
+          ThrottlingBurstLimit: !Ref ApiThrottleBurst
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref BackendFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*'
+
+Outputs:
+  # The values below are what the frontend (Amplify environment variables) needs.
+  ApiUrl:
+    Description: VITE_API_URL
+    Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${ApiStageName}/api'
+  UserPoolId:
+    Description: VITE_COGNITO_USER_POOL_ID
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Description: VITE_COGNITO_CLIENT_ID
+    Value: !Ref UserPoolClient
+  CognitoDomain:
+    Description: VITE_COGNITO_DOMAIN
+    Value: !Sub
+      - '${DomainName}.auth.${AWS::Region}.amazoncognito.com'
+      - DomainName: !If [HasDomainPrefix, !Ref CognitoDomainPrefix, !Ref Prefix]
+  GoogleRedirectUri:
+    Description: Add this as an Authorized redirect URI in the Google Cloud OAuth client
+    Value: !Sub
+      - 'https://${DomainName}.auth.${AWS::Region}.amazoncognito.com/oauth2/idpresponse'
+      - DomainName: !If [HasDomainPrefix, !Ref CognitoDomainPrefix, !Ref Prefix]
+  BackendFunctionName:
+    Value: !Ref BackendFunction
