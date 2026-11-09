@@ -33,7 +33,7 @@ Browser ──► Amplify Hosting (React/Vite)
 | S3 bucket | `cs361-coop-files-<suffix>`, Block all public access เปิดไว้ |
 | S3 Gateway endpoint | `cs361-coop-s3-endpoint` ผูกกับ route table ของ private subnet |
 | Lambda backend | `cs361-coop-api` (Node.js Express + serverless-http), อยู่ใน VPC |
-| Lambda triggers (นอก VPC) | `cs361-coop-pre-sign-up`, `cs361-coop-define-auth-challenge`, `cs361-coop-create-auth-challenge`, `cs361-coop-verify-auth-challenge` |
+| Lambda triggers (นอก VPC) | ที่สร้างมือในระบบจริงชื่อ `cs361-coop-pre-sign-up`, `cs361-coop-define-auth`, `cs361-coop-create-auth`, `cs361-coop-verify-auth` (ชุดที่สร้างด้วย IaC ใช้ชื่อ `...-define-auth-challenge` ฯลฯ ตามชื่อโฟลเดอร์) |
 | IAM role | `cs361-coop-trigger-role` (+ inline policy `cs361-coop-update-attrs`), role ของ backend (VPC access + S3) |
 | Cognito | user pool `cs361-coop-users-v2`, app client `cs361-coop-web` ไม่มี secret, Cognito domain `cs361-coop` (managed login + style ผูกกับ app client), identity provider **Google** |
 | Google Cloud | project `cs361-coop`: OAuth consent screen (External, Testing) และ OAuth client แบบ Web application ใช้กับ Cognito เท่านั้น |
@@ -73,7 +73,7 @@ Browser ──► Amplify Hosting (React/Vite)
 ห้ามตั้งบน Lambda: `DB_SECRET_ARN`, `DEV_AUTH_PASSWORD`, `DEV_AUTH_SECRET`, `UPLOAD_DIR`
 Timeout 30 วินาที, memory 512 MB
 
-**Lambda `cs361-coop-verify-auth-challenge`**
+**Lambda `cs361-coop-verify-auth` (verify-auth-challenge)**
 
 | ตัวแปร | ค่า |
 |---|---|
@@ -356,7 +356,7 @@ powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-tes
 | `infra/app.yaml` | IAM, Lambda backend + trigger 4 ตัว, Cognito + Google, API Gateway | ข้อ 4, 7, 8 |
 | `infra/deploy.ps1` | build zip, อัปโหลด, deploy 2 stack, migrate, smoke test, ลบชุดทดสอบ (`-Destroy`) | ข้อ 5, 6, 9 |
 | `.github/workflows/validate-infra.yml` | รัน `cfn-lint` อัตโนมัติเมื่อแก้ `infra/` | (ใหม่) |
-| `infra/github-deploy-user.yaml`, `infra/github-oidc.yaml` และ `.github/workflows/deploy-backend.yml` | CI/CD: push `main` แล้วเทสต์ build และอัปเดต Lambda อัตโนมัติ บัญชีนี้ใช้ OIDC ไม่ได้ (องค์กรตั้ง SCP ปฏิเสธ) จึงใช้ IAM user + access key ใน GitHub secrets ดู infra/README.md หัวข้อ CI/CD | ข้อ 5 (อัปโหลด Lambda) |
+| `infra/github-deploy-user.yaml`, `infra/github-oidc.yaml` และ `.github/workflows/deploy-backend.yml` | CI/CD: push `main` แล้วเทสต์ build และอัปเดต Lambda backend อัตโนมัติ (รวม trigger 4 ตัวเมื่อโค้ดเปลี่ยน และรัน migrate แบบกดเอง) บัญชีนี้ใช้ OIDC ไม่ได้ (องค์กรตั้ง SCP ปฏิเสธ) จึงใช้ IAM user + access key ใน GitHub secrets ดู infra/README.md หัวข้อ CI/CD | ข้อ 5 (อัปโหลด Lambda) |
 
 **สถานะของแต่ละข้อใน manual → automation (ข้อ 13)**
 
@@ -373,4 +373,4 @@ powershell -ExecutionPolicy Bypass -File infra\deploy.ps1 -Prefix cs361-coop-tes
 | 9 Budget, retention, alarm | ทำบางส่วน (RDS backup, throttling ของ API) ที่เหลือยังทำมือ |
 | 10 Amplify | ยังไม่ทำ ต้องอนุญาตสิทธิ์ GitHub ก่อน |
 
-**สถานะการตรวจ:** template ผ่าน `aws cloudformation validate-template` และ `cfn-lint` ส่วน deploy จริงทั้งชุดต้องรันและบันทึกผลเป็นหลักฐานเอง
+**สถานะการตรวจ:** template ผ่าน `aws cloudformation validate-template` และ `cfn-lint` และ deploy ชุดทดสอบ (`cs361-coop-test`) สำเร็จทั้ง 2 stack (14 และ 44 resources เป็น `CREATE_COMPLETE`) พร้อม migrate และ smoke test ผ่านครบ 4 ข้อ (9 พ.ย. 2026) และทดสอบ `-Destroy` แล้ว (ทั้งสอง stack เป็น `DELETE_COMPLETE` ระบบจริงไม่ถูกกระทบ) ส่วน `-CodeOnly` ยังไม่ได้ทดสอบ

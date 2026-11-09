@@ -1,15 +1,26 @@
 name: Deploy backend
 
-# Push to main (backend or database files changed) -> test -> build zip -> update the Lambda -> smoke test.
+# Push to main (backend or database files changed) -> test -> build zip -> update the backend Lambda -> smoke test.
+# Also updates the four Cognito trigger Lambdas when their code changed, and can run the database migration on demand
+# (Run workflow -> tick "migrate"). Migrations are never run automatically because they change the production database.
 # AWS access: an OIDC role when the variable AWS_DEPLOY_ROLE_ARN is set, otherwise an IAM user's access key from
 # the secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. Setup steps: infra/README.md, section "CI/CD".
-# Cognito trigger Lambdas and the infrastructure are not deployed here (see infra/deploy.ps1).
+# The infrastructure itself is not deployed here (see infra/deploy.ps1).
 
 on:
   push:
     branches: [main]
     paths: ['backend/**', 'database/**', '.github/workflows/deploy-backend.yml']
   workflow_dispatch:
+    inputs:
+      deploy_triggers:
+        description: Also update the four Cognito trigger Lambdas
+        type: boolean
+        default: false
+      migrate:
+        description: Run the database migration after the update (changes the production database)
+        type: boolean
+        default: false
 
 # One deployment at a time; a newer push waits instead of cancelling a running deployment.
 concurrency:
@@ -22,6 +33,7 @@ permissions:
 env:
   AWS_REGION: ap-southeast-2
   FUNCTION_NAME: ${{ vars.LAMBDA_FUNCTION_NAME || 'cs361-coop-api' }}
+  TRIGGER_PREFIX: ${{ vars.TRIGGER_FUNCTION_PREFIX || 'cs361-coop' }}
 
 jobs:
   test:
@@ -48,11 +60,35 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the change detection below compares with the previous commit
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: backend/package-lock.json
+
+      - name: Detect what changed
+        id: changes
+        run: |
+          set -euo pipefail
+          triggers=false
+          migrations=false
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            triggers="${{ inputs.deploy_triggers }}"
+          else
+            before="${{ github.event.before }}"
+            if [ -z "$before" ] || ! git cat-file -e "$before^{commit}" 2>/dev/null; then
+              files="$(git ls-files)"
+            else
+              files="$(git diff --name-only "$before" "${{ github.sha }}")"
+            fi
+            if grep -q '^backend/cognito-triggers/' <<< "$files"; then triggers=true; fi
+            if grep -q '^database/migrations/' <<< "$files"; then migrations=true; fi
+          fi
+          echo "triggers=$triggers" >> "$GITHUB_OUTPUT"
+          echo "migrations=$migrations" >> "$GITHUB_OUTPUT"
+          echo "trigger code changed or requested: $triggers; new migration files: $migrations"
 
       - name: Build the Lambda package
         run: |
@@ -100,6 +136,48 @@ jobs:
             --zip-file fileb://backend/function.zip --publish \
             --query '{Version:Version,CodeSha256:CodeSha256}' --output table
           aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+
+      # Only when a file in backend/cognito-triggers changed (or "deploy_triggers" was ticked).
+      # Environment variables of the triggers (TU_API_KEY, MOCK_*) are not touched by a code update.
+      - name: Update the Cognito trigger Lambdas
+        if: ${{ steps.changes.outputs.triggers == 'true' }}
+        run: |
+          set -euo pipefail
+          for name in pre-sign-up define-auth-challenge create-auth-challenge verify-auth-challenge; do
+            # The hand-made production Lambdas are named without the "-challenge" suffix (cs361-coop-define-auth),
+            # the ones created by infra/app.yaml keep it. Use whichever exists.
+            function=""
+            for candidate in "${TRIGGER_PREFIX}-${name}" "${TRIGGER_PREFIX}-${name%-challenge}"; do
+              if aws lambda get-function-configuration --function-name "$candidate" > /dev/null 2>&1; then
+                function="$candidate"
+                break
+              fi
+            done
+            if [ -z "$function" ]; then echo "No Lambda found for trigger ${name} (prefix ${TRIGGER_PREFIX})"; exit 1; fi
+            echo "${name} -> ${function}"
+            (cd "backend/cognito-triggers/${name}" && zip -q "${RUNNER_TEMP}/${name}.zip" index.mjs)
+            aws lambda update-function-code --function-name "$function" \
+              --zip-file "fileb://${RUNNER_TEMP}/${name}.zip" --publish \
+              --query '{Function:FunctionName,Version:Version}' --output text
+            aws lambda wait function-updated --function-name "$function"
+          done
+
+      # Migrations change the production database, so they are never run on their own. Tell the person who merged.
+      - name: Remind about new migration files
+        if: ${{ steps.changes.outputs.migrations == 'true' && inputs.migrate != true }}
+        run: |
+          echo "::warning title=New migration files::database/migrations changed. Take an RDS snapshot, then run this workflow manually (Run workflow) with migrate ticked."
+
+      - name: Run the database migration
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.migrate == true }}
+        run: |
+          set -euo pipefail
+          echo '{"action":"migrate","seeds":false}' > "${RUNNER_TEMP}/migrate-payload.json"
+          error="$(aws lambda invoke --function-name "$FUNCTION_NAME" \
+            --payload "fileb://${RUNNER_TEMP}/migrate-payload.json" --cli-read-timeout 300 \
+            --query FunctionError --output text "${RUNNER_TEMP}/migrate-result.json")"
+          cat "${RUNNER_TEMP}/migrate-result.json"; echo
+          if [ "$error" != "None" ]; then echo "Migration failed ($error)"; exit 1; fi
 
       - name: Smoke test
         if: ${{ vars.API_URL != '' }}
