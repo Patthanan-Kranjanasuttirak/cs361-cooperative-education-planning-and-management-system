@@ -1,0 +1,115 @@
+name: Deploy backend
+
+# Push to main (backend or database files changed) -> test -> build zip -> update the Lambda -> smoke test.
+# AWS access: an OIDC role when the variable AWS_DEPLOY_ROLE_ARN is set, otherwise an IAM user's access key from
+# the secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. Setup steps: infra/README.md, section "CI/CD".
+# Cognito trigger Lambdas and the infrastructure are not deployed here (see infra/deploy.ps1).
+
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', 'database/**', '.github/workflows/deploy-backend.yml']
+  workflow_dispatch:
+
+# One deployment at a time; a newer push waits instead of cancelling a running deployment.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-2
+  FUNCTION_NAME: ${{ vars.LAMBDA_FUNCTION_NAME || 'cs361-coop-api' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+      # These tests need no database. The API integration tests (tests/api.test.mjs) need PostgreSQL and run locally.
+      - name: Unit tests (Cognito triggers)
+        run: node --test backend/tests/cognito-triggers.test.mjs
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # lets the job request an OIDC token for AWS
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Build the Lambda package
+        run: |
+          set -euo pipefail
+          cd backend
+          rm -rf build function.zip
+          mkdir build
+          cp -r src cognito-triggers package.json package-lock.json build/
+          mkdir -p build/src/schema
+          cp -r ../database/init ../database/migrations ../database/seeds build/src/schema/
+          cd build
+          npm ci --omit=dev --no-audit --no-fund
+          zip -qr ../function.zip src cognito-triggers node_modules package.json
+          cd ..
+          ls -lh function.zip
+          unzip -l function.zip | grep -E "src/lambda.js|cognito-triggers/verify-auth-challenge/index.mjs|src/schema/migrations/" | head
+
+      # Preferred: a role that GitHub assumes through OIDC (no stored key). Set the variable AWS_DEPLOY_ROLE_ARN to use it.
+      - name: Configure AWS credentials (OIDC role)
+        if: ${{ vars.AWS_DEPLOY_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Fallback when the organization blocks OIDC: an IAM user whose key lives in GitHub secrets.
+      - name: Configure AWS credentials (access key)
+        if: ${{ vars.AWS_DEPLOY_ROLE_ARN == '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Show the version that is live before the update
+        run: |
+          aws lambda get-function-configuration --function-name "$FUNCTION_NAME" \
+            --query '{LastModified:LastModified,CodeSha256:CodeSha256,Runtime:Runtime}' --output table
+
+      # --publish also stores the new code as a numbered version, so older code stays available for rollback.
+      - name: Update the Lambda code
+        run: |
+          set -euo pipefail
+          aws lambda update-function-code --function-name "$FUNCTION_NAME" \
+            --zip-file fileb://backend/function.zip --publish \
+            --query '{Version:Version,CodeSha256:CodeSha256}' --output table
+          aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+
+      - name: Smoke test
+        if: ${{ vars.API_URL != '' }}
+        run: |
+          set -u
+          for attempt in 1 2 3 4 5; do
+            status=$(curl -s -o /dev/null -w '%{http_code}' "${{ vars.API_URL }}/health" || true)
+            echo "attempt $attempt: GET /health -> HTTP $status"
+            if [ "$status" = "200" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "Smoke test failed. To roll back, revert the commit and push (this workflow redeploys the previous code)."
+          exit 1

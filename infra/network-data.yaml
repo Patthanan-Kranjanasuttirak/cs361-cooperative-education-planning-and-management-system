@@ -1,0 +1,271 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CS361 Co-op - stack 1 of 2 - VPC (private, no NAT/IGW), security groups, RDS PostgreSQL, S3 buckets
+
+# Built from DEPLOY_AWS.md sections 2-3: 2 private subnets in 2 AZs, S3 gateway endpoint,
+# sg-lambda / sg-rds, RDS not publicly accessible.
+# Stack 2 (app.yaml) reads the Exports of this stack.
+# Keep this file ASCII-only: the AWS CLI on Windows reads templates with the system code page.
+
+Parameters:
+  Prefix:
+    Type: String
+    Default: cs361-coop
+    AllowedPattern: '^[a-z][a-z0-9-]{2,30}$'
+    Description: Resource name prefix. Use another prefix (for example cs361-coop-test) to create a separate test copy.
+  VpcCidr:
+    Type: String
+    Default: 10.20.0.0/16
+  PrivateSubnetACidr:
+    Type: String
+    Default: 10.20.1.0/24
+  PrivateSubnetBCidr:
+    Type: String
+    Default: 10.20.2.0/24
+  S3PrefixListId:
+    Type: String
+    AllowedPattern: '^pl-[0-9a-f]+$'
+    Description: Managed prefix list of S3 in this region. The deploy script looks it up (see infra/README.md).
+  DbInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+  DbAllocatedStorage:
+    Type: Number
+    Default: 20
+    MinValue: 20
+    MaxValue: 100
+  DbEngineVersion:
+    Type: String
+    Default: ''
+    Description: Leave empty to use the current RDS default for PostgreSQL, or set a version available in the region (for example 16.4).
+  DbName:
+    Type: String
+    Default: coopdb
+    AllowedPattern: '^[a-zA-Z][a-zA-Z0-9_]{0,62}$'
+  DbUsername:
+    Type: String
+    Default: coopadmin
+    AllowedPattern: '^[a-zA-Z][a-zA-Z0-9_]{0,30}$'
+  DbPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 12
+    MaxLength: 64
+    AllowedPattern: '^[A-Za-z0-9_+=.-]+$'
+    Description: Never commit this value. Pass it at deploy time only. Allowed characters are letters, digits and _ + = . -
+  DbBackupRetentionDays:
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 35
+    Description: The AWS Free plan limits backup retention to 1 day.
+  DbDeletionProtection:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+
+Conditions:
+  HasEngineVersion: !Not [!Equals [!Ref DbEngineVersion, '']]
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - { Key: Name, Value: !Sub '${Prefix}-vpc' }
+        - { Key: Project, Value: !Ref Prefix }
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PrivateSubnetACidr
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub '${Prefix}-private-a' }
+        - { Key: Project, Value: !Ref Prefix }
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PrivateSubnetBCidr
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub '${Prefix}-private-b' }
+        - { Key: Project, Value: !Ref Prefix }
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${Prefix}-private-rt' }
+        - { Key: Project, Value: !Ref Prefix }
+
+  PrivateSubnetARouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetBRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+
+  # No NAT and no internet gateway: Lambda inside the VPC can only reach S3,
+  # through this gateway endpoint (free of charge).
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: Gateway
+      RouteTableIds: [!Ref PrivateRouteTable]
+
+  # sg-lambda: outbound 5432 to sg-rds and 443 to the S3 prefix list only (no allow-all rule).
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Backend Lambda (outbound 5432 to RDS, 443 to S3)
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          DestinationSecurityGroupId: !Ref RdsSecurityGroup
+          Description: PostgreSQL to RDS
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          DestinationPrefixListId: !Ref S3PrefixListId
+          Description: HTTPS to S3 via gateway endpoint
+      Tags:
+        - { Key: Name, Value: !Sub '${Prefix}-sg-lambda' }
+        - { Key: Project, Value: !Ref Prefix }
+
+  # sg-rds: inbound 5432 from sg-lambda only, no outbound.
+  # The 127.0.0.1/32 rule replaces the default allow-all egress rule.
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS PostgreSQL (inbound 5432 from sg-lambda only)
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 127.0.0.1/32
+          Description: Block all outbound
+      Tags:
+        - { Key: Name, Value: !Sub '${Prefix}-sg-rds' }
+        - { Key: Project, Value: !Ref Prefix }
+
+  RdsIngressFromLambda:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RdsSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+      Description: PostgreSQL from backend Lambda
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub '${Prefix} private subnets'
+      SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  # Deleting the stack takes a final snapshot first (delete the snapshot yourself if you do not need it).
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub '${Prefix}-db'
+      Engine: postgres
+      EngineVersion: !If [HasEngineVersion, !Ref DbEngineVersion, !Ref 'AWS::NoValue']
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: !Ref DbAllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: !Ref DbName
+      MasterUsername: !Ref DbUsername
+      MasterUserPassword: !Ref DbPassword
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups: [!Ref RdsSecurityGroup]
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: !Ref DbBackupRetentionDays
+      DeletionProtection: !Ref DbDeletionProtection
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  # User uploads (company logos, PDFs). The bucket name is generated, so it never collides.
+  FilesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+  # Built Lambda zip files that stack 2 deploys from.
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      Tags:
+        - { Key: Project, Value: !Ref Prefix }
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+    Export: { Name: !Sub '${Prefix}-VpcId' }
+  PrivateSubnetIds:
+    Value: !Join [',', [!Ref PrivateSubnetA, !Ref PrivateSubnetB]]
+    Export: { Name: !Sub '${Prefix}-PrivateSubnetIds' }
+  LambdaSecurityGroupId:
+    Value: !Ref LambdaSecurityGroup
+    Export: { Name: !Sub '${Prefix}-LambdaSecurityGroupId' }
+  DbHost:
+    Value: !GetAtt Database.Endpoint.Address
+    Export: { Name: !Sub '${Prefix}-DbHost' }
+  DbPort:
+    Value: !GetAtt Database.Endpoint.Port
+    Export: { Name: !Sub '${Prefix}-DbPort' }
+  DbName:
+    Value: !Ref DbName
+    Export: { Name: !Sub '${Prefix}-DbName' }
+  DbUsername:
+    Value: !Ref DbUsername
+    Export: { Name: !Sub '${Prefix}-DbUsername' }
+  FilesBucketName:
+    Value: !Ref FilesBucket
+    Export: { Name: !Sub '${Prefix}-FilesBucketName' }
+  FilesBucketArn:
+    Value: !GetAtt FilesBucket.Arn
+    Export: { Name: !Sub '${Prefix}-FilesBucketArn' }
+  ArtifactsBucketName:
+    Value: !Ref ArtifactsBucket
+    Export: { Name: !Sub '${Prefix}-ArtifactsBucketName' }
