@@ -32,3 +32,6 @@ Thumbs.db
 
 backend/build
 backend/function.zip
+
+# Load test tokens (Cognito ID tokens)
+loadtest/tokens.json
