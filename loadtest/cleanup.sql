@@ -5,7 +5,8 @@
 BEGIN;
 
 CREATE TEMP TABLE lt_users ON COMMIT DROP AS
-SELECT user_id FROM users WHERE username LIKE 'lt.%' AND email LIKE '%@loadtest.example.test';
+SELECT user_id FROM users
+WHERE (username LIKE 'lt.%' OR username LIKE '6799999%') AND email LIKE '%@loadtest.example.test';
 
 CREATE TEMP TABLE lt_companies ON COMMIT DROP AS
 SELECT company_id FROM companies WHERE name LIKE '[LOADTEST]%';
@@ -26,7 +27,7 @@ DELETE FROM terms t WHERE t.code = 'LT-TEST'
   AND NOT EXISTS (SELECT 1 FROM applications a WHERE a.term_id = t.term_id)
   AND NOT EXISTS (SELECT 1 FROM positions p WHERE p.term_id = t.term_id);
 
-SELECT (SELECT count(*) FROM users WHERE username LIKE 'lt.%') AS remaining_lt_users,
+SELECT (SELECT count(*) FROM users WHERE email LIKE '%@loadtest.example.test') AS remaining_lt_users,
        (SELECT count(*) FROM companies WHERE name LIKE '[LOADTEST]%') AS remaining_lt_companies,
        (SELECT count(*) FROM terms WHERE code = 'LT-TEST') AS remaining_lt_term;
 

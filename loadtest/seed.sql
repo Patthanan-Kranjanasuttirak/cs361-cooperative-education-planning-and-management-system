@@ -3,12 +3,13 @@
 -- ห้ามย้ายไฟล์นี้ไปไว้ใน database/seeds เพราะ migrate {"seeds":true} จะรันทุก seed ในทุก environment
 --
 -- เครื่องหมายข้อมูลทดสอบ (cleanup.sql ลบตามนี้):
---   users      username LIKE 'lt.%' และ email LIKE '%@loadtest.example.test'
+--   users      (username LIKE 'lt.%' หรือ username LIKE '6799999%') และ email LIKE '%@loadtest.example.test'
 --   companies  name LIKE '[LOADTEST]%'  (positions / company_users ลบตามแบบ CASCADE)
 --   terms      code = 'LT-TEST'         (สร้างเฉพาะเมื่อยังไม่มีภาคการศึกษาที่ active)
 --
 -- สิ่งที่สร้าง:
 --   บัญชี login 10 บัญชี: lt.student01–08 (ผ่านเข้าแผน มี transcript/CV), lt.staff, lt.company
+--   บัญชียื่นแผน 8 บัญชี: lt.plan01–08 รหัสสมมติ 6799999001–008 (ยังไม่ยื่นสมัครแผน ใช้ทดสอบ PUT /api/students/me)
 --   นักศึกษา background 300 คน (login ไม่ได้: auth_provider='loadtest', cognito_sub ตั้งไว้แล้ว)
 --   บริษัท 60 แห่ง × 5 ตำแหน่ง = 300 ตำแหน่ง (term_id NULL, เปิดรับ, อยู่ในช่วงรับสมัคร)
 --   ใบสมัคร background 600 ใบ + history ตามลำดับสถานะ (นักศึกษา login ยังไม่มีใบสมัคร ใช้ทดสอบการเขียน)
@@ -19,8 +20,13 @@ BEGIN
   IF current_setting('loadtest.target', true) IS DISTINCT FROM 'non-production' THEN
     RAISE EXCEPTION 'ไม่รัน seed: ต้อง SET loadtest.target = ''non-production'' ก่อน (ห้ามใช้กับ Production)';
   END IF;
-  IF EXISTS (SELECT 1 FROM users WHERE username LIKE 'lt.%') OR EXISTS (SELECT 1 FROM companies WHERE name LIKE '[LOADTEST]%') THEN
+  IF EXISTS (SELECT 1 FROM users WHERE username LIKE 'lt.%' OR email LIKE '%@loadtest.example.test')
+     OR EXISTS (SELECT 1 FROM companies WHERE name LIKE '[LOADTEST]%') THEN
     RAISE EXCEPTION 'มีข้อมูล Load Test อยู่แล้ว ให้รัน loadtest/cleanup.sql ก่อน';
+  END IF;
+  -- รหัสสมมติของบัญชียื่นแผนต้องไม่ชนกับผู้ใช้ที่มีอยู่ (ไม่ใช้ข้อมูลผู้ใช้จริง)
+  IF EXISTS (SELECT 1 FROM users WHERE username LIKE '6799999%') THEN
+    RAISE EXCEPTION 'มีผู้ใช้ username 6799999xxx อยู่แล้ว ไม่สร้างบัญชียื่นแผนทับ';
   END IF;
 END $$;
 
@@ -66,6 +72,20 @@ SELECT u.user_id, 2.75 + (u.user_id * 37 % 125) / 100.0,
        'pending', 'passed', staff.user_id, now(), 'passed', now(), 'passed', staff.user_id, now()
 FROM users u CROSS JOIN users staff
 WHERE u.role = 'student' AND u.username LIKE 'lt.%' AND staff.username = 'lt.staff';
+
+-- บัญชียื่นสมัครแผนสหกิจ: username = รหัสนักศึกษาสมมติ 10 หลัก (ขึ้นต้น 67 → หลักสูตร 66, ปี 3 ในปีการศึกษา 2569)
+-- ยังไม่ยื่นสมัคร (profile_status NULL) มีเพียง key เอกสารสมมติ เพราะ load test ไม่อัปโหลดไฟล์จริง
+-- ข้อมูลคุณสมบัติ/ส่วนตัวที่เหลือ locustfile ส่งมาใน PUT /api/students/me เหมือนหน้า /student/profile
+INSERT INTO users (auth_provider, username, cognito_sub, role, th_name, en_name, email, phone)
+SELECT 'dev', '6799999' || lpad(n::text, 3, '0'), 'dev:lt:plan' || n, 'student',
+       'นักศึกษายื่นแผนโหลดเทสต์ ' || n, 'Load Test Plan Applicant ' || n,
+       'lt.plan' || lpad(n::text, 2, '0') || '@loadtest.example.test', '0890001' || lpad(n::text, 3, '0')
+FROM generate_series(1, 8) n;
+
+INSERT INTO students (user_id, transcript_s3_key, cv_s3_key, photo_s3_key)
+SELECT u.user_id, u.user_id || '/transcript-' || gen_random_uuid() || '.pdf',
+       u.user_id || '/cv-' || gen_random_uuid() || '.pdf', u.user_id || '/photo-' || gen_random_uuid() || '.jpg'
+FROM users u WHERE u.username LIKE '6799999%' AND u.email LIKE 'lt.plan%@loadtest.example.test';
 
 -- บริษัท 60 แห่ง ช่วงรับสมัครครอบวันนี้
 INSERT INTO companies (name, description, province, location, allowance, additional_info, application_start, application_end)
@@ -122,8 +142,8 @@ SELECT e.application_id, CASE WHEN e.event_status IN ('accepted', 'declined') TH
 FROM events e JOIN students s USING (student_id)
 CROSS JOIN users coordinator WHERE coordinator.username = 'lt.company';
 
-SELECT 'users' AS table_name, count(*) AS rows FROM users WHERE username LIKE 'lt.%'
-UNION ALL SELECT 'students', count(*) FROM students JOIN users USING (user_id) WHERE username LIKE 'lt.%'
+SELECT 'users' AS table_name, count(*) AS rows FROM users WHERE email LIKE '%@loadtest.example.test'
+UNION ALL SELECT 'students', count(*) FROM students JOIN users USING (user_id) WHERE email LIKE '%@loadtest.example.test'
 UNION ALL SELECT 'companies', count(*) FROM companies WHERE name LIKE '[LOADTEST]%'
 UNION ALL SELECT 'positions', count(*) FROM positions JOIN companies USING (company_id) WHERE companies.name LIKE '[LOADTEST]%'
 UNION ALL SELECT 'applications', count(*) FROM applications JOIN students USING (student_id) JOIN users USING (user_id) WHERE username LIKE 'lt.%'

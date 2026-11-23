@@ -1,0 +1,9 @@
+{
+  "name": "cs361-loadtest-sql-runner",
+  "private": true,
+  "type": "module",
+  "description": "Temporary Lambda that runs loadtest/seed.sql or cleanup.sql on a private RDS",
+  "dependencies": {
+    "pg": "8.23.1"
+  }
+}

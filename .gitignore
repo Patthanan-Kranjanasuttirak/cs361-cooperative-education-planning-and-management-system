@@ -35,3 +35,5 @@ backend/function.zip
 
 # Load test tokens (Cognito ID tokens)
 loadtest/tokens.json
+# Python cache
+__pycache__/

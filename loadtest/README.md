@@ -82,7 +82,12 @@ docker compose exec -T database sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_
 ## 4. วิธีใช้ (AWS Test Stack)
 
 1. ใช้ Stack ที่แยกจาก Production และมี RDS ของตัวเอง
-2. รัน `seed.sql` ด้วย `psql` ผ่านช่องทางที่เข้าถึง RDS ได้ (ใน Repository ยังไม่มีช่องทางรัน SQL ทั่วไปบน RDS เพราะ RDS อยู่ใน private subnet ต้องตรวจสอบวิธีเข้าถึงของ Stack นั้น)
+2. รัน `seed.sql` ผ่าน Lambda ชั่วคราว [`sql-runner/`](sql-runner/) (RDS อยู่ใน private subnet ไม่มี Internet จึงใช้ psql จาก CloudShell/EC2 ไม่สะดวก)
+   - สร้าง zip: `loadtest/sql-runner/build.sh` → ได้ `loadtest/sql-runner/build/sql-runner.zip`
+   - สร้าง Lambda ใหม่ Node.js 20+ handler `index.handler` อัปโหลด zip ตั้ง timeout 1 นาที
+   - VPC / subnet / security group เหมือน backend (`sg-lambda`) และ env `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` เหมือน backend
+   - Test event: `{"action":"seed","confirm":"non-production"}` และหลังทดสอบ `{"action":"cleanup"}`
+   - ลบ Lambda นี้ทิ้งเมื่อทดสอบเสร็จ (มีรหัสผ่าน DB อยู่ใน env)
 3. เพิ่มอีเมลบัญชีทดสอบลงใน `MOCK_LOGINS` ของทั้ง Cognito trigger และ backend Lambda
 4. ขอ token (ID token มีอายุประมาณ 1 ชั่วโมง ให้ขอใหม่ก่อนเริ่มแต่ละรอบ):
    ```sh

@@ -1,0 +1,933 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  CS361 Cooperative Education - separate NON-PRODUCTION copy of the Lambda stack for load
+  and scaling tests (same design as DEPLOY_AWS.md). API Gateway (REST, Cognito authorizer)
+  -> Lambda Express API (in VPC, via alias "live") -> RDS PostgreSQL (private), S3 via a
+  gateway endpoint. No NAT, no IGW. The frontend (Amplify) is not included: Locust calls the
+  API directly. Scaling knobs: Reserved concurrency (cap = max DB connections), Provisioned
+  concurrency with Application Auto Scaling, and API Gateway stage throttling.
+  Only this file is needed: CodeBuild clones the public GitHub repo and builds the zips, then
+  a helper Lambda runs the migration and loadtest/seed.sql. Deleting the stack removes everything.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: Code (built by CodeBuild from GitHub - nothing to upload) }
+        Parameters: [Prefix, RepoUrl, RepoBranch, CodeVersion, LambdaRoleArn]
+      - Label: { default: Database }
+        Parameters: [DBInstanceClass, DBEngineVersion, DBUsername, DBPassword, DBPoolMax, RunSeed]
+      - Label: { default: Login (mock accounts only - test data from loadtest/seed.sql) }
+        Parameters: [MockLogins, MockPassword, TuApiKey, CorsOrigin]
+      - Label: { default: Scaling }
+        Parameters: [ReservedConcurrency, ProvisionedMin, ProvisionedMax, ScalingTargetUtilization, ThrottleRate, ThrottleBurst]
+      - Label: { default: Logs }
+        Parameters: [LogRetentionDays]
+
+Parameters:
+  Prefix:
+    Type: String
+    Default: cs361-coop-lt
+    AllowedPattern: "^[a-z][a-z0-9-]{2,20}$"
+    Description: Name prefix for every resource. Keep it different from the real system (cs361-coop-).
+  RepoUrl:
+    Type: String
+    Default: https://github.com/Patthanan-Kranjanasuttirak/cs361-cooperative-education-planning-and-management-system.git
+    AllowedPattern: "^https://github\\.com/[A-Za-z0-9._/-]+$"
+    Description: PUBLIC GitHub repository (https). The branch must contain loadtest/seed.sql and loadtest/sql-runner/.
+  RepoBranch:
+    Type: String
+    Default: test/loadtest
+    AllowedPattern: "^[A-Za-z0-9._/-]+$"
+  CodeVersion:
+    Type: String
+    Default: "1"
+    Description: Change this (2, 3, ...) and update the stack to rebuild from the latest commit and run the migration again.
+  LambdaRoleArn:
+    Type: String
+    Default: ""
+    Description: Empty = create IAM roles. In AWS Academy Learner Lab (cannot create roles) put the LabRole ARN here (used for Lambda and CodeBuild).
+  RunSeed:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: true = run loadtest/seed.sql once after the stack is created (test data only).
+
+  DBInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+    AllowedValues: [db.t4g.micro, db.t3.micro, db.t4g.small, db.t3.small]
+  DBEngineVersion:
+    Type: String
+    Default: "16"
+    Description: PostgreSQL major version (RDS picks the default minor version).
+  DBUsername:
+    Type: String
+    Default: coopadmin
+    AllowedPattern: "^[a-z][a-z0-9_]{2,30}$"
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 12
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9!#$%^&*()_+=.,-]+$"
+    Description: New password for this test database only (no / @ " or spaces). Never reuse the production password.
+  DBPoolMax:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 5
+    Description: DB_POOL_MAX per Lambda instance. Total DB connections = Lambda concurrency x this value.
+
+  MockLogins:
+    Type: String
+    Default: >-
+      lt.student01@loadtest.example.test,lt.student02@loadtest.example.test,lt.student03@loadtest.example.test,lt.student04@loadtest.example.test,lt.student05@loadtest.example.test,lt.student06@loadtest.example.test,lt.student07@loadtest.example.test,lt.student08@loadtest.example.test,lt.plan01@loadtest.example.test,lt.plan02@loadtest.example.test,lt.plan03@loadtest.example.test,lt.plan04@loadtest.example.test,lt.plan05@loadtest.example.test,lt.plan06@loadtest.example.test,lt.plan07@loadtest.example.test,lt.plan08@loadtest.example.test,lt.staff@loadtest.example.test,lt.company@loadtest.example.test
+    Description: MOCK_LOGINS for both the backend and verify-auth-challenge (always identical, set once here).
+  MockPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 12
+    Description: MOCK_PASSWORD for the test accounts. Do not use DEV_AUTH_PASSWORD from .env.example or the production value.
+  TuApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Empty = TU login disabled on this test stack (only mock accounts can log in). Recommended.
+  CorsOrigin:
+    Type: String
+    Default: http://localhost:5173
+    Description: CORS_ORIGIN. Locust ignores CORS; set an Amplify URL only if a frontend uses this stack.
+
+  ReservedConcurrency:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    MaxValue: 200
+    Description: 0 = no reservation. Otherwise the maximum number of API Lambda instances (= max DB connections / DB_POOL_MAX). New accounts with a 10-concurrency limit cannot reserve; check Lambda > Account settings first.
+  ProvisionedMin:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    MaxValue: 50
+    Description: Provisioned concurrency kept warm on alias "live". Used only when ProvisionedMax > 0 (then must be >= 1). Billed per hour.
+  ProvisionedMax:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    MaxValue: 50
+    Description: 0 = no provisioned concurrency / no scalable target. > 0 registers an Application Auto Scaling target (Min..Max) for your scaling policy.
+  ScalingTargetUtilization:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    MaxValue: 0.9
+    Description: 0 = no policy (add your own in the scaling step). e.g. 0.7 = target tracking on LambdaProvisionedConcurrencyUtilization.
+  ThrottleRate:
+    Type: Number
+    Default: 20
+    MinValue: 1
+    Description: API Gateway stage steady rate (requests/second). Above it clients get 429.
+  ThrottleBurst:
+    Type: Number
+    Default: 40
+    MinValue: 1
+  LogRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues: [1, 3, 5, 7, 14, 30]
+
+Conditions:
+  CreateRoles: !Equals [!Ref LambdaRoleArn, ""]
+  HasReserved: !Not [!Equals [!Ref ReservedConcurrency, "0"]]
+  HasProvisioned: !Not [!Equals [!Ref ProvisionedMax, "0"]]
+  HasScalingPolicy: !And [!Condition HasProvisioned, !Not [!Equals [!Ref ScalingTargetUtilization, "0"]]]
+
+Resources:
+  # ---------------- Network: private subnets only (no NAT / IGW) ----------------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.60.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: !Sub "${Prefix}-vpc" }]
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.60.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags: [{ Key: Name, Value: !Sub "${Prefix}-private-a" }]
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.60.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags: [{ Key: Name, Value: !Sub "${Prefix}-private-b" }]
+  PrivateRt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub "${Prefix}-private-rt" }]
+  RtAssocA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref SubnetA, RouteTableId: !Ref PrivateRt }
+  RtAssocB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref SubnetB, RouteTableId: !Ref PrivateRt }
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      VpcEndpointType: Gateway
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      RouteTableIds: [!Ref PrivateRt]
+
+  LambdaSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: API Lambda - out to RDS 5432 and S3 443 only
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        # the only route out of the VPC is the S3 gateway endpoint, so 443 reaches S3 and nothing else
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: S3 via gateway endpoint }
+      Tags: [{ Key: Name, Value: !Sub "${Prefix}-sg-lambda" }]
+  RdsSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS - 5432 from the Lambda security group only
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub "${Prefix}-sg-rds" }]
+  LambdaToRds:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref LambdaSg
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      DestinationSecurityGroupId: !Ref RdsSg
+  RdsFromLambda:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RdsSg
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref LambdaSg
+
+  # ---------------- Database (not public) ----------------
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub "${Prefix} private subnets"
+      SubnetIds: [!Ref SubnetA, !Ref SubnetB]
+  Db:
+    Type: AWS::RDS::DBInstance
+    # test stack: deleting the stack deletes the test database (no real data here)
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: !Sub "${Prefix}-db"
+      Engine: postgres
+      EngineVersion: !Ref DBEngineVersion
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: "20"
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: coop
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups: [!Ref RdsSg]
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: 1
+      DeletionProtection: false
+      EnablePerformanceInsights: false
+
+  # ---------------- Files ----------------
+  FilesBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+
+  # ---------------- Build: CodeBuild clones GitHub and uploads the zips here ----------------
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+  BuildRole:
+    Type: AWS::IAM::Role
+    Condition: CreateRoles
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: codebuild.amazonaws.com }, Action: sts:AssumeRole }
+      Policies:
+        - PolicyName: build
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: [logs:CreateLogStream, logs:PutLogEvents], Resource: !GetAtt BuildLogs.Arn }
+              - { Effect: Allow, Action: s3:PutObject, Resource: !Sub "${ArtifactBucket.Arn}/*" }
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${Prefix}-build"
+      ServiceRole: !If [CreateRoles, !GetAtt BuildRole.Arn, !Ref LambdaRoleArn]
+      TimeoutInMinutes: 15
+      Artifacts: { Type: NO_ARTIFACTS }
+      LogsConfig:
+        CloudWatchLogs: { Status: ENABLED, GroupName: !Ref BuildLogs }
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        EnvironmentVariables:
+          - { Name: REPO_URL, Value: !Ref RepoUrl }
+          - { Name: REPO_BRANCH, Value: !Ref RepoBranch }
+          - { Name: ARTIFACT_BUCKET, Value: !Ref ArtifactBucket }
+      Source:
+        Type: NO_SOURCE
+        # same steps as DEPLOY_AWS.md section 5 + loadtest/sql-runner/build.sh
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                nodejs: 20
+            build:
+              commands:
+                - |
+                  set -e
+                  git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" repo
+                  cd repo
+                  git log -1 --oneline
+                  if [ ! -f loadtest/sql-runner/build.sh ]; then echo "branch $REPO_BRANCH has no loadtest/sql-runner - push it to GitHub first"; exit 1; fi
+                  mkdir -p backend/build/src/schema
+                  cp -r backend/src backend/cognito-triggers backend/package.json backend/package-lock.json backend/build/
+                  cp -r database/init database/migrations database/seeds backend/build/src/schema/
+                  (cd backend/build && npm ci --omit=dev --no-audit --no-fund && zip -qr ../function.zip src cognito-triggers node_modules package.json)
+                  unzip -l backend/function.zip | grep -q "src/lambda.js"
+                  unzip -l backend/function.zip | grep -q "src/schema/init/001_schema.sql"
+                  bash loadtest/sql-runner/build.sh
+                  aws s3 cp backend/function.zip "s3://$ARTIFACT_BUCKET/$KEY_PREFIX/function.zip"
+                  aws s3 cp loadtest/sql-runner/build/sql-runner.zip "s3://$ARTIFACT_BUCKET/$KEY_PREFIX/sql-runner.zip"
+
+  # Helper Lambda (outside the VPC) behind two custom resources:
+  #   BuildCode     run CodeBuild, return the zip keys; on stack delete, empty both buckets
+  #   InitDatabase  invoke the API Lambda {"action":"migrate"}, then sql-runner seed (create only)
+  HelperRole:
+    Type: AWS::IAM::Role
+    Condition: CreateRoles
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: sts:AssumeRole }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: helper
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: [codebuild:StartBuild, codebuild:BatchGetBuilds], Resource: !GetAtt BuildProject.Arn }
+              - Effect: Allow
+                Action: [lambda:InvokeFunction, lambda:GetFunction]
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Prefix}-*"
+              - { Effect: Allow, Action: s3:ListBucket, Resource: [!GetAtt ArtifactBucket.Arn, !GetAtt FilesBucket.Arn] }
+              - { Effect: Allow, Action: s3:DeleteObject, Resource: [!Sub "${ArtifactBucket.Arn}/*", !Sub "${FilesBucket.Arn}/*"] }
+  HelperFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: HelperLogs
+    Properties:
+      FunctionName: !Sub "${Prefix}-deploy-helper"
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 900
+      MemorySize: 256
+      Role: !If [CreateRoles, !GetAtt HelperRole.Arn, !Ref LambdaRoleArn]
+      Code:
+        ZipFile: |
+          import json, time, boto3, cfnresponse
+          from botocore.config import Config
+          lam = boto3.client('lambda', config=Config(read_timeout=600, retries={'max_attempts': 0}))
+          cb = boto3.client('codebuild')
+          s3 = boto3.resource('s3')
+
+          def build(p, ctx):
+              prefix = time.strftime('%Y%m%d-%H%M%S')
+              bid = cb.start_build(projectName=p['Project'],
+                                   environmentVariablesOverride=[{'name': 'KEY_PREFIX', 'value': prefix}])['build']['id']
+              while ctx.get_remaining_time_in_millis() > 30000:
+                  time.sleep(15)
+                  status = cb.batch_get_builds(ids=[bid])['builds'][0]['buildStatus']
+                  if status == 'SUCCEEDED':
+                      return {'FunctionKey': prefix + '/function.zip', 'SqlRunnerKey': prefix + '/sql-runner.zip'}
+                  if status != 'IN_PROGRESS':
+                      raise Exception('CodeBuild ' + status + ' - see CloudWatch log group ' + p['LogGroup'])
+              raise Exception('CodeBuild did not finish in time')
+
+          def invoke(name, payload):
+              lam.get_waiter('function_active_v2').wait(FunctionName=name)
+              res = lam.invoke(FunctionName=name, Payload=json.dumps(payload))
+              body = res['Payload'].read().decode()
+              if res.get('FunctionError'):
+                  raise Exception(name + ': ' + body[:600])
+              return body
+
+          def handler(event, ctx):
+              p, kind = event['ResourceProperties'], event['RequestType']
+              pid = event.get('PhysicalResourceId') or 'helper-' + p['Task']
+              data = {}
+              try:
+                  if p['Task'] == 'build' and kind == 'Delete':
+                      for name in p['EmptyBuckets']:
+                          try:
+                              s3.Bucket(name).objects.all().delete()
+                          except Exception as e:
+                              print('empty', name, repr(e))
+                  elif p['Task'] == 'build':
+                      data = build(p, ctx)
+                  elif kind != 'Delete':
+                      invoke(p['ApiFunction'], {'action': 'migrate'})
+                      summary = 'migrate ok'
+                      if kind == 'Create' and p['RunSeed'] == 'true':
+                          summary += '; seed ' + invoke(p['SqlRunner'], {'action': 'seed', 'confirm': 'non-production'})[:400]
+                      data = {'Summary': summary}
+                  cfnresponse.send(event, ctx, cfnresponse.SUCCESS, data, pid)
+              except Exception as e:
+                  print(repr(e))
+                  status = cfnresponse.SUCCESS if kind == 'Delete' else cfnresponse.FAILED
+                  cfnresponse.send(event, ctx, status, data, pid, reason=str(e)[:800])
+  BuildCode:
+    Type: Custom::BuildCode
+    Properties:
+      ServiceToken: !GetAtt HelperFunction.Arn
+      ServiceTimeout: 900
+      Task: build
+      Project: !Ref BuildProject
+      LogGroup: !Ref BuildLogs
+      EmptyBuckets: [!Ref ArtifactBucket, !Ref FilesBucket]
+      # changing any of these rebuilds
+      RepoUrl: !Ref RepoUrl
+      RepoBranch: !Ref RepoBranch
+      CodeVersion: !Ref CodeVersion
+  InitDatabase:
+    Type: Custom::InitDatabase
+    # the Lambdas reach RDS only after these network rules exist
+    DependsOn: [LambdaToRds, RdsFromLambda, S3Endpoint, RtAssocA, RtAssocB]
+    Properties:
+      ServiceToken: !GetAtt HelperFunction.Arn
+      ServiceTimeout: 900
+      Task: init
+      ApiFunction: !Ref ApiFunction
+      SqlRunner: !Ref SqlRunnerFunction
+      RunSeed: !Ref RunSeed
+      # a rebuild runs the migration again (seed runs only on create)
+      FunctionKey: !GetAtt BuildCode.FunctionKey
+
+  # ---------------- IAM (skipped when LambdaRoleArn is given) ----------------
+  ApiRole:
+    Type: AWS::IAM::Role
+    Condition: CreateRoles
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: sts:AssumeRole }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: files
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub "${FilesBucket.Arn}/*"
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt FilesBucket.Arn
+  TriggerRole:
+    Type: AWS::IAM::Role
+    Condition: CreateRoles
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: sts:AssumeRole }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  TriggerUpdateAttrs:
+    Type: AWS::IAM::Policy
+    Condition: CreateRoles
+    Properties:
+      PolicyName: update-attrs
+      Roles: [!Ref TriggerRole]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Action: cognito-idp:AdminUpdateUserAttributes, Resource: !GetAtt UserPool.Arn }
+
+  # ---------------- Logs ----------------
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: !Sub "/aws/lambda/${Prefix}-api", RetentionInDays: !Ref LogRetentionDays }
+  PreSignUpLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: !Sub "/aws/lambda/${Prefix}-pre-sign-up", RetentionInDays: !Ref LogRetentionDays }
+  DefineLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: !Sub "/aws/lambda/${Prefix}-define-auth-challenge", RetentionInDays: !Ref LogRetentionDays }
+  CreateLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: !Sub "/aws/lambda/${Prefix}-create-auth-challenge", RetentionInDays: !Ref LogRetentionDays }
+  VerifyLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: !Sub "/aws/lambda/${Prefix}-verify-auth-challenge", RetentionInDays: !Ref LogRetentionDays }
+  SqlRunnerLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: !Sub "/aws/lambda/${Prefix}-sql-runner", RetentionInDays: !Ref LogRetentionDays }
+  HelperLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: !Sub "/aws/lambda/${Prefix}-deploy-helper", RetentionInDays: !Ref LogRetentionDays }
+  BuildLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: !Sub "/aws/codebuild/${Prefix}-build", RetentionInDays: !Ref LogRetentionDays }
+
+  # ---------------- Backend Lambda + alias "live" ----------------
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ApiLogs
+    Properties:
+      FunctionName: !Sub "${Prefix}-api"
+      Runtime: nodejs22.x
+      Handler: src/lambda.handler
+      Code: { S3Bucket: !Ref ArtifactBucket, S3Key: !GetAtt BuildCode.FunctionKey }
+      MemorySize: 512
+      Timeout: 30
+      Role: !If [CreateRoles, !GetAtt ApiRole.Arn, !Ref LambdaRoleArn]
+      ReservedConcurrentExecutions: !If [HasReserved, !Ref ReservedConcurrency, !Ref "AWS::NoValue"]
+      VpcConfig:
+        SubnetIds: [!Ref SubnetA, !Ref SubnetB]
+        SecurityGroupIds: [!Ref LambdaSg]
+      Environment:
+        Variables:
+          AUTH_MODE: api-gateway
+          NODE_ENV: production
+          COGNITO_USER_POOL_ID: !Ref UserPool
+          COGNITO_CLIENT_ID: !Ref UserPoolClient
+          CORS_ORIGIN: !Ref CorsOrigin
+          FILE_BUCKET: !Ref FilesBucket
+          DB_HOST: !GetAtt Db.Endpoint.Address
+          DB_PORT: !GetAtt Db.Endpoint.Port
+          DB_NAME: coop
+          DB_USER: !Ref DBUsername
+          DB_PASSWORD: !Ref DBPassword
+          DB_POOL_MAX: !Ref DBPoolMax
+          MOCK_LOGINS: !Ref MockLogins
+          MOCK_PASSWORD: !Ref MockPassword
+  ApiVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref ApiFunction
+      # every property change replaces the version, so a rebuild (new key) publishes a new version
+      Description: !Sub "code ${BuildCode.FunctionKey}"
+  ApiAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      FunctionName: !Ref ApiFunction
+      FunctionVersion: !GetAtt ApiVersion.Version
+      Name: live
+      ProvisionedConcurrencyConfig: !If
+        - HasProvisioned
+        - { ProvisionedConcurrentExecutions: !Ref ProvisionedMin }
+        - !Ref "AWS::NoValue"
+
+  # Application Auto Scaling target for provisioned concurrency (only when ProvisionedMax > 0).
+  # Add your own target tracking policy to it, or set ScalingTargetUtilization.
+  ScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Condition: HasProvisioned
+    DependsOn: ApiAlias
+    Properties:
+      ServiceNamespace: lambda
+      ScalableDimension: lambda:function:ProvisionedConcurrency
+      ResourceId: !Sub "function:${ApiFunction}:live"
+      MinCapacity: !Ref ProvisionedMin
+      MaxCapacity: !Ref ProvisionedMax
+  ScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Condition: HasScalingPolicy
+    Properties:
+      PolicyName: !Sub "${Prefix}-pc-utilization"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: !Ref ScalingTargetUtilization
+        PredefinedMetricSpecification: { PredefinedMetricType: LambdaProvisionedConcurrencyUtilization }
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 120
+
+  # ---------------- Cognito triggers (outside the VPC, code from the same zip) ----------------
+  PreSignUpFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: PreSignUpLogs
+    Properties:
+      FunctionName: !Sub "${Prefix}-pre-sign-up"
+      Runtime: nodejs22.x
+      Handler: cognito-triggers/pre-sign-up/index.handler
+      Code: { S3Bucket: !Ref ArtifactBucket, S3Key: !GetAtt BuildCode.FunctionKey }
+      Timeout: 3
+      MemorySize: 128
+      Role: !If [CreateRoles, !GetAtt TriggerRole.Arn, !Ref LambdaRoleArn]
+  DefineAuthFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: DefineLogs
+    Properties:
+      FunctionName: !Sub "${Prefix}-define-auth-challenge"
+      Runtime: nodejs22.x
+      Handler: cognito-triggers/define-auth-challenge/index.handler
+      Code: { S3Bucket: !Ref ArtifactBucket, S3Key: !GetAtt BuildCode.FunctionKey }
+      Timeout: 3
+      MemorySize: 128
+      Role: !If [CreateRoles, !GetAtt TriggerRole.Arn, !Ref LambdaRoleArn]
+  CreateAuthFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: CreateLogs
+    Properties:
+      FunctionName: !Sub "${Prefix}-create-auth-challenge"
+      Runtime: nodejs22.x
+      Handler: cognito-triggers/create-auth-challenge/index.handler
+      Code: { S3Bucket: !Ref ArtifactBucket, S3Key: !GetAtt BuildCode.FunctionKey }
+      Timeout: 3
+      MemorySize: 128
+      Role: !If [CreateRoles, !GetAtt TriggerRole.Arn, !Ref LambdaRoleArn]
+  VerifyAuthFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: VerifyLogs
+    Properties:
+      FunctionName: !Sub "${Prefix}-verify-auth-challenge"
+      Runtime: nodejs22.x
+      Handler: cognito-triggers/verify-auth-challenge/index.handler
+      Code: { S3Bucket: !Ref ArtifactBucket, S3Key: !GetAtt BuildCode.FunctionKey }
+      Timeout: 5
+      MemorySize: 128
+      Role: !If [CreateRoles, !GetAtt TriggerRole.Arn, !Ref LambdaRoleArn]
+      Environment:
+        Variables:
+          TU_API_KEY: !Ref TuApiKey
+          MOCK_LOGINS: !Ref MockLogins
+          MOCK_PASSWORD: !Ref MockPassword
+
+  PreSignUpPermission:
+    Type: AWS::Lambda::Permission
+    Properties: { Action: lambda:InvokeFunction, FunctionName: !Ref PreSignUpFunction, Principal: cognito-idp.amazonaws.com, SourceArn: !GetAtt UserPool.Arn }
+  DefineAuthPermission:
+    Type: AWS::Lambda::Permission
+    Properties: { Action: lambda:InvokeFunction, FunctionName: !Ref DefineAuthFunction, Principal: cognito-idp.amazonaws.com, SourceArn: !GetAtt UserPool.Arn }
+  CreateAuthPermission:
+    Type: AWS::Lambda::Permission
+    Properties: { Action: lambda:InvokeFunction, FunctionName: !Ref CreateAuthFunction, Principal: cognito-idp.amazonaws.com, SourceArn: !GetAtt UserPool.Arn }
+  VerifyAuthPermission:
+    Type: AWS::Lambda::Permission
+    Properties: { Action: lambda:InvokeFunction, FunctionName: !Ref VerifyAuthFunction, Principal: cognito-idp.amazonaws.com, SourceArn: !GetAtt UserPool.Arn }
+
+  # ---------------- Cognito (DEPLOY_AWS.md section 7) ----------------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${Prefix}-users"
+      UsernameConfiguration: { CaseSensitive: false }
+      AdminCreateUserConfig: { AllowAdminCreateUserOnly: false }
+      AccountRecoverySetting:
+        RecoveryMechanisms: [{ Name: admin_only, Priority: 1 }]
+      Schema:
+        - { Name: en_name, AttributeDataType: String, Mutable: true }
+      LambdaConfig:
+        PreSignUp: !GetAtt PreSignUpFunction.Arn
+        DefineAuthChallenge: !GetAtt DefineAuthFunction.Arn
+        CreateAuthChallenge: !GetAtt CreateAuthFunction.Arn
+        VerifyAuthChallengeResponse: !GetAtt VerifyAuthFunction.Arn
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "${Prefix}-web"
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows: [ALLOW_CUSTOM_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      # frontend / locustfile catch UserNotFoundException and sign up first
+      PreventUserExistenceErrors: LEGACY
+
+  # ---------------- API Gateway REST (DEPLOY_AWS.md section 8) ----------------
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "${Prefix}-api"
+      BinaryMediaTypes: ["*/*"]
+      EndpointConfiguration: { Types: [REGIONAL] }
+  Authorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: !Sub "${Prefix}-cognito"
+      RestApiId: !Ref RestApi
+      Type: COGNITO_USER_POOLS
+      IdentitySource: method.request.header.Authorization
+      ProviderARNs: [!GetAtt UserPool.Arn]
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiAlias
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*"
+
+  ApiRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: { RestApiId: !Ref RestApi, ParentId: !GetAtt RestApi.RootResourceId, PathPart: api }
+  ProxyRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: { RestApiId: !Ref RestApi, ParentId: !Ref ApiRes, PathPart: "{proxy+}" }
+  HealthRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: { RestApiId: !Ref RestApi, ParentId: !Ref ApiRes, PathPart: health }
+  PublicRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: { RestApiId: !Ref RestApi, ParentId: !Ref ApiRes, PathPart: public }
+  PublicProxyRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: { RestApiId: !Ref RestApi, ParentId: !Ref PublicRes, PathPart: "{proxy+}" }
+  CompaniesRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: { RestApiId: !Ref RestApi, ParentId: !Ref ApiRes, PathPart: companies }
+  CompaniesProxyRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: { RestApiId: !Ref RestApi, ParentId: !Ref CompaniesRes, PathPart: "{proxy+}" }
+  LogosRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: { RestApiId: !Ref RestApi, ParentId: !Ref ApiRes, PathPart: company-logos }
+  LogosProxyRes:
+    Type: AWS::ApiGateway::Resource
+    Properties: { RestApiId: !Ref RestApi, ParentId: !Ref LogosRes, PathPart: "{proxy+}" }
+
+  # Every method is a Lambda proxy to alias "live". OPTIONS go to Lambda too (Mock + binary */* returns 500).
+  # Login required: ANY on /api/{proxy+}, /api/companies, /api/companies/{proxy+}
+  ProxyAny:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref ProxyRes
+      HttpMethod: ANY
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref Authorizer
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  ProxyOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref ProxyRes
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  HealthGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref HealthRes
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  HealthOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref HealthRes
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  PublicAny:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref PublicProxyRes
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  CompaniesGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref CompaniesRes
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  CompaniesOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref CompaniesRes
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  CompaniesAny:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref CompaniesRes
+      HttpMethod: ANY
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref Authorizer
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  CompaniesProxyGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref CompaniesProxyRes
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  CompaniesProxyOptions:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref CompaniesProxyRes
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  CompaniesProxyAny:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref CompaniesProxyRes
+      HttpMethod: ANY
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref Authorizer
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+  LogosGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref LogosProxyRes
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration: { Type: AWS_PROXY, IntegrationHttpMethod: POST, Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiAlias}/invocations" }
+
+  # CORS headers on API Gateway's own errors (401 from the authorizer, 429 throttling, 5xx)
+  Default4xx:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: DEFAULT_4XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: !Sub "'${CorsOrigin}'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
+  Default5xx:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      RestApiId: !Ref RestApi
+      ResponseType: DEFAULT_5XX
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: !Sub "'${CorsOrigin}'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+        gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
+
+  # A Deployment is created once. If you change methods later, use "Deploy API" in the console
+  # (or rename this logical id). Throttling below updates without a new deployment.
+  Deployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: [ProxyAny, ProxyOptions, HealthGet, HealthOptions, PublicAny, CompaniesGet, CompaniesOptions,
+                CompaniesAny, CompaniesProxyGet, CompaniesProxyOptions, CompaniesProxyAny, LogosGet, Default4xx, Default5xx]
+    Properties:
+      RestApiId: !Ref RestApi
+  Stage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref RestApi
+      DeploymentId: !Ref Deployment
+      StageName: prod
+      MethodSettings:
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          ThrottlingRateLimit: !Ref ThrottleRate
+          ThrottlingBurstLimit: !Ref ThrottleBurst
+          MetricsEnabled: true
+
+  # ---------------- Load-test seed/cleanup runner (in VPC, test events only) ----------------
+  SqlRunnerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: SqlRunnerLogs
+    Properties:
+      FunctionName: !Sub "${Prefix}-sql-runner"
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Code: { S3Bucket: !Ref ArtifactBucket, S3Key: !GetAtt BuildCode.SqlRunnerKey }
+      MemorySize: 256
+      Timeout: 60
+      Role: !If [CreateRoles, !GetAtt ApiRole.Arn, !Ref LambdaRoleArn]
+      VpcConfig:
+        SubnetIds: [!Ref SubnetA, !Ref SubnetB]
+        SecurityGroupIds: [!Ref LambdaSg]
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt Db.Endpoint.Address
+          DB_PORT: !GetAtt Db.Endpoint.Port
+          DB_NAME: coop
+          DB_USER: !Ref DBUsername
+          DB_PASSWORD: !Ref DBPassword
+
+Outputs:
+  LocustHost:
+    Description: locust -f loadtest/locustfile.py --host <this>
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  ApiBaseUrl:
+    Description: VITE_API_URL if a frontend uses this stack
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod/api"
+  CognitoRegion:
+    Description: COGNITO_REGION for locustfile.py
+    Value: !Ref AWS::Region
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Description: COGNITO_CLIENT_ID for locustfile.py
+    Value: !Ref UserPoolClient
+  ApiFunctionName:
+    Description: Backend Lambda (migration already ran automatically)
+    Value: !Ref ApiFunction
+  DatabaseInit:
+    Description: Result of the automatic migration and seed
+    Value: !GetAtt InitDatabase.Summary
+  BuildLogGroup:
+    Description: CodeBuild logs if the build step fails
+    Value: !Ref BuildLogs
+  ScalableTargetResourceId:
+    Description: ResourceId for your own scaling policy (service namespace lambda, dimension lambda:function:ProvisionedConcurrency)
+    Value: !Sub "function:${ApiFunction}:live"
+  SqlRunnerFunctionName:
+    Description: 'Test events {"action":"cleanup"} then {"action":"seed","confirm":"non-production"} to reset test data'
+    Value: !Ref SqlRunnerFunction
+  DbEndpoint:
+    Value: !GetAtt Db.Endpoint.Address
+  FilesBucketName:
+    Value: !Ref FilesBucket
